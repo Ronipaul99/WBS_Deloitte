@@ -1,0 +1,341 @@
+{
+  "projectId": "job_wbs_89412",
+  "projectName": "200 MW Solar Power Plant",
+  "version": "Draft v1.0",
+  "generatedDate": "12 Mar 2025",
+  "breadcrumbs": ["Projects", "Solar Plant", "Draft v1.0"],
+  "scopeCoverage": {
+    "overallScore": 94,
+    "totalRequirements": 142,
+    "mappedCount": 134,
+    "gapCount": 8,
+    "categories": [
+      { "category": "Civil Works", "coverage": 98, "total": 45 },
+      { "category": "Electrical & Grid Tie", "coverage": 95, "total": 52 },
+      { "category": "Mechanical / Mounting", "coverage": 91, "total": 28 },
+      { "category": "Commissioning & Safety", "coverage": 88, "total": 17 }
+    ]
+  },
+  "aiInsights": [
+    {
+      "id": "ins-1",
+      "type": "SCOPE_ADDITION",
+      "title": "BESS Storage Scope Added",
+      "impact": "High",
+      "description": "Battery Energy Storage System detected in RFP section 7.3 was not in the baseline template. Work package 4.4 was automatically synthesized."
+    },
+    {
+      "id": "ins-2",
+      "type": "RISK_WARNING",
+      "title": "Extended Lead-Time Equipment",
+      "impact": "Medium",
+      "description": "GSU Step-up transformers show a 42-week vendor procurement lead time in technical specs. Recommend early procurement milestone."
+    },
+    {
+      "id": "ins-3",
+      "type": "OPTIMIZATION",
+      "title": "Piling Foundation Redundancy",
+      "impact": "Low",
+      "description": "Geotechnical soil report suggests standard driven H-piles can replace poured concrete caissons in zones 2 and 4."
+    }
+  ],
+  "unmappedRequirements": [
+    {
+      "id": "unm-1",
+      "code": "REQ-089",
+      "title": "Wildlife Perimeter Fencing",
+      "sourceDoc": "Environmental_Assessment.pdf",
+      "reason": "Environmental boundary mitigation not mapped to Civil or Security templates."
+    },
+    {
+      "id": "unm-2",
+      "code": "REQ-104",
+      "title": "Archeological Artifact Monitoring",
+      "sourceDoc": "Permitting_Report.pdf",
+      "reason": "Specialized third-party monitoring scope during site preparation."
+    }
+  ],
+  "wbsTree": [
+    {
+      "id": "1.0",
+      "code": "1.0",
+      "name": "Project Management",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "RFP Section 1.2",
+      "template": "Standard Primavera EPC",
+      "confidence": 98,
+      "isAiAdded": false,
+      "description": "Overall project management, administration, site supervision, and milestone tracking.",
+      "evidence": {
+        "text": "The contractor shall provide full project oversight and dedicated scheduling staff throughout the lifecycle.",
+        "document": "RFP_Solar_Plant_Project.pdf",
+        "section": "Section 1.2"
+      },
+      "children": []
+    },
+    {
+      "id": "2.0",
+      "code": "2.0",
+      "name": "Engineering",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "Scope Document A",
+      "template": "Standard Primavera EPC",
+      "confidence": 95,
+      "isAiAdded": false,
+      "description": "Civil, electrical, and structural design engineering packages.",
+      "evidence": {
+        "text": "All engineering deliverables must be validated by certified PE engineers prior to procurement.",
+        "document": "Scope_Document_A.pdf",
+        "section": "Section 3.1"
+      },
+      "children": [
+        {
+          "id": "2.1",
+          "code": "2.1",
+          "name": "Civil Engineering",
+          "type": "Work Package",
+          "parent": "2.0 Engineering",
+          "source": "Scope Doc A",
+          "template": "Standard EPC",
+          "confidence": 94,
+          "isAiAdded": false,
+          "description": "Topographical surveys, grading, and drainage civil design.",
+          "evidence": {
+            "text": "Civil drawings including stormwater drainage plans.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 4.1"
+          }
+        },
+        {
+          "id": "2.2",
+          "code": "2.2",
+          "name": "Electrical Engineering",
+          "type": "Work Package",
+          "parent": "2.0 Engineering",
+          "source": "Scope Doc A",
+          "template": "Standard EPC",
+          "confidence": 97,
+          "isAiAdded": false,
+          "description": "DC collection systems, inverter layout, and substation grid tie design.",
+          "evidence": {
+            "text": "Detailed electrical single-line diagrams up to 230kV.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 4.3"
+          }
+        },
+        {
+          "id": "2.3",
+          "code": "2.3",
+          "name": "Structural Engineering",
+          "type": "Work Package",
+          "parent": "2.0 Engineering",
+          "source": "Scope Doc A",
+          "template": "Standard EPC",
+          "confidence": 92,
+          "isAiAdded": false,
+          "description": "Tracker mounting structural calculations and foundation design.",
+          "evidence": {
+            "text": "Structural engineering for ground-mount single axis trackers.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 4.5"
+          }
+        }
+      ]
+    },
+    {
+      "id": "3.0",
+      "code": "3.0",
+      "name": "Procurement",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "Procurement Schedule",
+      "template": "Standard Primavera EPC",
+      "confidence": 96,
+      "isAiAdded": false,
+      "description": "Procurement of major long-lead solar components and balance of system.",
+      "evidence": {
+        "text": "Vendor procurement must adhere to domestic content and supply chain guidelines.",
+        "document": "Procurement_Plan.pdf",
+        "section": "Section 2"
+      },
+      "children": [
+        {
+          "id": "3.1",
+          "code": "3.1",
+          "name": "PV Modules",
+          "type": "Work Package",
+          "parent": "3.0 Procurement",
+          "source": "Equipment List",
+          "template": "Standard EPC",
+          "confidence": 99,
+          "isAiAdded": false,
+          "description": "Supply and freight of Tier-1 bifacial photovoltaic panels.",
+          "evidence": {
+            "text": "Tier-1 550W+ bifacial modules certified under IEC 61215.",
+            "document": "Tech_Specs.pdf",
+            "section": "Spec 10.2"
+          }
+        },
+        {
+          "id": "3.2",
+          "code": "3.2",
+          "name": "Inverters",
+          "type": "Work Package",
+          "parent": "3.0 Procurement",
+          "source": "Equipment List",
+          "template": "Standard EPC",
+          "confidence": 98,
+          "isAiAdded": false,
+          "description": "Central inverters with skid integration and MV transformers.",
+          "evidence": {
+            "text": "Utility-scale central inverter skids with integrated switchgear.",
+            "document": "Tech_Specs.pdf",
+            "section": "Spec 11.0"
+          }
+        },
+        {
+          "id": "3.3",
+          "code": "3.3",
+          "name": "Transformers",
+          "type": "Work Package",
+          "parent": "3.0 Procurement",
+          "source": "Equipment List",
+          "template": "Standard EPC",
+          "confidence": 95,
+          "isAiAdded": false,
+          "description": "Main Step-Up (GSU) 34.5kV to 230kV transformers.",
+          "evidence": {
+            "text": "Generator step-up transformer with oil containment and fire barriers.",
+            "document": "Tech_Specs.pdf",
+            "section": "Spec 12.4"
+          }
+        }
+      ]
+    },
+    {
+      "id": "4.0",
+      "code": "4.0",
+      "name": "Construction",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "Construction Execution Plan",
+      "template": "Standard Primavera EPC",
+      "confidence": 93,
+      "isAiAdded": false,
+      "description": "Civil, mechanical, tracker, and electrical balance of plant construction.",
+      "evidence": {
+        "text": "Onsite mobilization, civil ground works, installation, and balance of plant erection.",
+        "document": "RFP_Solar_Plant_Project.pdf",
+        "section": "Section 6"
+      },
+      "children": [
+        {
+          "id": "4.1",
+          "code": "4.1",
+          "name": "Site Preparation",
+          "type": "Work Package",
+          "parent": "4.0 Construction",
+          "source": "Civil Package",
+          "template": "Standard EPC",
+          "confidence": 90,
+          "isAiAdded": false,
+          "description": "Clearing, grubbing, cut/fill balancing, and access road gravel compaction.",
+          "evidence": {
+            "text": "All access routes and laydown yards leveled and prepared.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 6.1"
+          }
+        },
+        {
+          "id": "4.2",
+          "code": "4.2",
+          "name": "Foundation Works",
+          "type": "Work Package",
+          "parent": "4.0 Construction",
+          "source": "Civil Package",
+          "template": "Standard EPC",
+          "confidence": 93,
+          "isAiAdded": false,
+          "description": "Driven pile foundations for tracker posts and inverter pad concrete pours.",
+          "evidence": {
+            "text": "Driven steel H-piles and pull-out load testing.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 6.3"
+          }
+        },
+        {
+          "id": "4.4",
+          "code": "4.4",
+          "name": "Battery Energy Storage System",
+          "type": "Work Package",
+          "parent": "4.0 Construction",
+          "source": "RFP Section 7.3",
+          "template": "No equivalent in template",
+          "confidence": 91,
+          "isAiAdded": true,
+          "description": "Installation and commissioning of battery energy storage system including civil works, electrical works and integration with solar plant.",
+          "evidence": {
+            "text": "The successful bidder shall design, supply, install and commission a battery energy storage system (BESS) with a minimum capacity of 50 MWh...",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 7.3"
+          }
+        },
+        {
+          "id": "4.5",
+          "code": "4.5",
+          "name": "Module Installation",
+          "type": "Work Package",
+          "parent": "4.0 Construction",
+          "source": "Mechanical Package",
+          "template": "Standard EPC",
+          "confidence": 96,
+          "isAiAdded": false,
+          "description": "Mounting and torque-tightening bifacial modules to tracker torque tubes.",
+          "evidence": {
+            "text": "Panel fixing with calibrated torque wrenches and ground bonding.",
+            "document": "RFP_Solar_Plant_Project.pdf",
+            "section": "Section 6.6"
+          }
+        }
+      ]
+    },
+    {
+      "id": "5.0",
+      "code": "5.0",
+      "name": "Testing & Commissioning",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "Commissioning Guidelines",
+      "template": "Standard EPC",
+      "confidence": 94,
+      "isAiAdded": false,
+      "description": "Cold and hot commissioning, SCADA checkout, and inter-tie energization.",
+      "evidence": {
+        "text": "Performance ratio verification and COD testing protocols.",
+        "document": "Commissioning_Manual.pdf",
+        "section": "Section 8"
+      },
+      "children": []
+    },
+    {
+      "id": "6.0",
+      "code": "6.0",
+      "name": "Handover",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "Contract Terms",
+      "template": "Standard EPC",
+      "confidence": 98,
+      "isAiAdded": false,
+      "description": "As-built documentation, O&M training, and final commercial handover.",
+      "evidence": {
+        "text": "Handover of warranty manuals, as-built CAD files, and spare parts inventory.",
+        "document": "Contract_Agreement.pdf",
+        "section": "Section 14"
+      },
+      "children": []
+    }
+  ]
+}

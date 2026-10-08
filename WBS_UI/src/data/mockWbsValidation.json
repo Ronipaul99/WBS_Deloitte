@@ -1,0 +1,81 @@
+{
+  "jobId": "job_wbs_89412",
+  "projectName": "200 MW Solar Power Plant",
+  "version": "Draft v1.0",
+  "breadcrumbs": ["Projects", "Solar Plant", "Draft v1.0"],
+  "summaryCards": {
+    "wbsItems": {
+      "count": 87,
+      "phasesCount": 6,
+      "workPackagesCount": 24
+    },
+    "scopeCoverage": {
+      "percentage": 91,
+      "mapped": 102,
+      "total": 112
+    },
+    "itemsAdded": {
+      "count": 5,
+      "subtext": "Not in template"
+    },
+    "potentialGaps": {
+      "count": 2,
+      "subtext": "Review recommended"
+    }
+  },
+  "validationChecks": [
+    {
+      "id": "chk-1",
+      "title": "Hierarchy consistency",
+      "description": "No issues found",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-2",
+      "title": "No duplicate work packages",
+      "description": "No duplicates found",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-3",
+      "title": "Source coverage",
+      "description": "91% of requirements mapped",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-4",
+      "title": "Template alignment",
+      "description": "Structure follows template pattern",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-5",
+      "title": "Activities may be too broad",
+      "description": "3 items require further decomposition",
+      "status": "WARNING",
+      "actionLabel": "View"
+    },
+    {
+      "id": "chk-6",
+      "title": "Requirements with no mapping",
+      "description": "2 requirements need attention",
+      "status": "WARNING",
+      "actionLabel": "View"
+    }
+  ],
+  "unmappedRequirements": [
+    {
+      "reference": "RFP §12.4",
+      "summary": "Environmental monitoring during construction phase"
+    },
+    {
+      "reference": "RFP §15.2",
+      "summary": "Temporary facilities for site workforce"
+    }
+  ],
+  "aiRecommendations": [
+    "Consider adding a dedicated work package for environmental compliance",
+    "Break down \"Site Preparation\" into more detailed activities",
+    "Review temporary facilities requirement and assign to relevant phase"
+  ]
+}

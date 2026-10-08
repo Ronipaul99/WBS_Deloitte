@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, ReactNode } from 'react';
 import { 
   Layers, 
   FolderKanban, 
@@ -12,7 +12,19 @@ import {
   X
 } from 'lucide-react';
 
-export default function AppLayout({ children, activeTab = 'create', onNavClick }) {
+interface AppLayoutProps {
+  children: ReactNode;
+  activeTab?: string;
+  onNavClick?: (tab: string) => void;
+  appTitle?: string;
+}
+
+export default function AppLayout({
+  children,
+  activeTab = 'create',
+  onNavClick,
+  appTitle = 'AI WBS Builder',
+}: AppLayoutProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
 
@@ -48,27 +60,17 @@ export default function AppLayout({ children, activeTab = 'create', onNavClick }
         <div style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
           
           <div style={{ display: 'flex', alignItems: 'center' }}>
-            <svg 
-              width="102" 
-              height="14" 
-              viewBox="0 0 1000 134" 
-              fill="#FFFFFF" 
-              xmlns="http://www.w3.org/2000/svg"
-              style={{ display: 'block', shapeRendering: 'geometricPrecision' }}
-            >
-              {/* O */}
-              <path d="M117.8 0C52.7 0 0 30 0 67s52.7 67 117.8 67 117.8-30 117.8-67S182.9 0 117.8 0zm0 106.8c-39.7 0-71.9-17.8-71.9-39.8s32.2-39.8 71.9-39.8 71.9 17.8 71.9 39.8-32.2 39.8-71.9 39.8z"/>
-              {/* R */}
-              <path d="M256.3 5v124h38.6V83.6h32.8l37 45.4h44.8l-43.5-51.8c23.9-5.6 39-21.1 39-39.2 0-22.6-21.2-33-53.2-33H256.3zm38.6 26h23.8c12.8 0 21.3 3.7 21.3 13.3 0 9.1-8.5 13.5-21.3 13.5h-23.8V31z"/>
-              {/* A */}
-              <path d="M500.5 5L441 129h40.2l11-23.8h57.1l11 23.8h40.2L541 5h-40.5zm4.7 33.8l19.3 41.3h-38.5l19.2-41.3z"/>
-              {/* C */}
-              <path d="M703.1 0c-59 0-106.8 30-106.8 67s47.8 67 106.8 67c43.5 0 80.7-16.2 96.4-40.5l-33.6-14.7c-11.1 15.3-35.7 26.6-62.8 26.6-37.6 0-68-17.8-68-39.8s30.4-39.8 68-39.8c27.1 0 51.7 11.3 62.8 26.6l33.6-14.7C783.8 16.2 746.6 0 703.1 0z"/>
-              {/* L */}
-              <path d="M822.4 5v124h84.5V99.7H861V5h-38.6z"/>
-              {/* E */}
-              <path d="M915.5 5v124H1000V99.7h-45.9V74.4h39.8V49.6h-39.8V29.8H1000V5h-84.5z"/>
-            </svg>
+            <img 
+              src="https://upload.wikimedia.org/wikipedia/commons/5/50/Oracle_logo.svg" 
+              alt="ORACLE" 
+              style={{
+                height: '14px',
+                width: 'auto',
+                display: 'block',
+                filter: 'brightness(0) invert(1)', // Converts standard red SVG to solid crisp white
+                userSelect: 'none',
+              }} 
+            />
           </div>
 
           {/* Thin vertical divider */}
@@ -80,7 +82,7 @@ export default function AppLayout({ children, activeTab = 'create', onNavClick }
             margin: '0 16px'
           }} />
 
-          {/* Clean title without subpixel fringing */}
+          {/* Application Title */}
           <span style={{ 
             fontWeight: 600, 
             fontSize: '13px', 
@@ -89,7 +91,7 @@ export default function AppLayout({ children, activeTab = 'create', onNavClick }
             lineHeight: 1,
             userSelect: 'none'
           }}>
-            AI WBS Builder
+            {appTitle}
           </span>
         </div>
 
@@ -229,8 +231,8 @@ export default function AppLayout({ children, activeTab = 'create', onNavClick }
           flex: 1, 
           padding: '36px 48px', 
           overflowY: 'auto',
-          display: 'flex',
-          justifyContent: 'center'
+          display: 'flex', 
+          justifyContent: 'center' 
         }}>
           <div style={{ width: '100%', maxWidth: '980px' }}>
             {children}
