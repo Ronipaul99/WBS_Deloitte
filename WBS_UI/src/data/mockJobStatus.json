@@ -1,0 +1,53 @@
+{
+  "jobId": "job_wbs_89412",
+  "title": "Analyzing Project",
+  "subtitle": "Please wait while the AI analyzes your documents and generates the WBS.",
+  "sideCard": {
+    "title": "Processing your documents...",
+    "description": "This may take a few minutes depending on the size of the files."
+  },
+  "steps": [
+    {
+      "id": "step-1",
+      "stepCode": "DOC_UPLOAD",
+      "title": "Document uploaded",
+      "description": "Files received successfully"
+    },
+    {
+      "id": "step-2",
+      "stepCode": "EXTRACT_SCOPE",
+      "title": "Extracting project scope",
+      "description": "Identifying key requirements and deliverables"
+    },
+    {
+      "id": "step-3",
+      "stepCode": "ANALYZE_TEMPLATE",
+      "title": "Analyzing reference template",
+      "description": "Understanding WBS structure and hierarchy"
+    },
+    {
+      "id": "step-4",
+      "stepCode": "MAP_SCOPE",
+      "title": "Mapping scope to template",
+      "description": "Aligning project requirements to WBS template"
+    },
+    {
+      "id": "step-5",
+      "stepCode": "IDENTIFY_GAPS",
+      "title": "Identifying gaps",
+      "description": "Detecting missing or additional scope items"
+    },
+    {
+      "id": "step-6",
+      "stepCode": "GENERATE_WBS",
+      "title": "Generating WBS",
+      "description": "Creating work breakdown structure"
+    },
+    {
+      "id": "step-7",
+      "stepCode": "FINALIZE_RESULTS",
+      "title": "Finalizing results",
+      "description": "Almost done..."
+    }
+  ]
+}
