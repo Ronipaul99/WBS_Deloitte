@@ -3,7 +3,7 @@ import rawWbsResult from '../data/mockWbsResult.json';
 import rawValidationResult from '../data/mockWbsValidation.json';
 
 /* ==========================================================================
-   Screen 2: Analyzing Project Pipeline Types
+   Type Definitions
    ========================================================================== */
 
 export type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'FAILED';
@@ -30,23 +30,6 @@ export interface JobStatusResponse {
   steps: AnalysisStep[];
   errorMessage?: string | null;
 }
-
-interface RawConfig {
-  jobId: string;
-  title: string;
-  subtitle: string;
-  sideCard: SideCardConfig;
-  steps: Array<{
-    id: string;
-    stepCode: string;
-    title: string;
-    description: string;
-  }>;
-}
-
-/* ==========================================================================
-   Screen 3: WBS Hierarchy & Scope Coverage Types
-   ========================================================================== */
 
 export interface WbsNode {
   id: string;
@@ -100,6 +83,7 @@ export interface UnmappedRequirement {
 export interface WbsResultPayload {
   projectId: string;
   projectName: string;
+  templateName: string;
   version: string;
   generatedDate: string;
   breadcrumbs: string[];
@@ -108,10 +92,6 @@ export interface WbsResultPayload {
   unmappedRequirements: UnmappedRequirement[];
   wbsTree: WbsNode[];
 }
-
-/* ==========================================================================
-   Screen 4: WBS Validation Payload Types
-   ========================================================================== */
 
 export interface ValidationSummaryCards {
   wbsItems: {
@@ -159,48 +139,109 @@ export interface WbsValidationPayload {
 }
 
 /* ==========================================================================
-   Simulation State & Service Functions
+   Stateful Pipeline & Singletons
    ========================================================================== */
 
-const jobConfig = rawJobConfig as unknown as RawConfig;
-let currentStepPointer = 0;
+const jobConfig = rawJobConfig as unknown as {
+  title: string;
+  subtitle: string;
+  sideCard: SideCardConfig;
+  steps: Array<{ id: string; stepCode: string; title: string; description: string }>;
+};
 
-/**
- * Screen 1 -> Screen 2:
- * Initiates the generation job when the user clicks 'Generate Draft WBS'.
- * SWAP POINT: When backend middleware is deployed:
- *   const formData = new FormData();
- *   if (projectFile) formData.append('projectDocument', projectFile);
- *   if (templateFile) formData.append('referenceTemplate', templateFile);
- *   const res = await fetch('/api/v1/jobs/generate', { method: 'POST', body: formData });
- *   return await res.json();
- */
-export async function createWbsGenerationJob(
-  _projectFile?: File,
-  _templateFile?: File
-): Promise<{ jobId: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  currentStepPointer = 0; // reset pointer for fresh simulation cycle
-  return { jobId: jobConfig.jobId || `job_wbs_${Date.now().toString().slice(-6)}` };
+const jobStepPointers: Record<string, number> = {};
+
+let activeProjectDocName = 'Uploaded_Scope_Document.pdf';
+let activeTemplateDocName = 'Domain_Baseline_Template.xlsx';
+let activeProjectTitle = rawWbsResult.projectName || 'Capital Engineering Project';
+
+let currentWbsResult: WbsResultPayload = JSON.parse(JSON.stringify(rawWbsResult));
+const currentValidation: WbsValidationPayload = JSON.parse(JSON.stringify(rawValidationResult));
+
+function formatFilenameToProjectName(fileName: string): string {
+  const withoutExt = fileName.replace(/\.[^/.]+$/, '');
+  return withoutExt
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-/**
- * Screen 2:
- * Fetches status for the active analysis pipeline.
- * Steps advance across consecutive poll cycles until completed.
- * SWAP POINT: When backend middleware is deployed:
- *   const res = await fetch(`/api/v1/jobs/${jobId}/status`);
- *   return (await res.json()) as JobStatusResponse;
- */
+function getCurrentFormattedDate(): string {
+  const now = new Date();
+  return now.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function rebindTreeMetadata(nodes: WbsNode[], documentName: string, templateName: string): WbsNode[] {
+  return nodes.map((node) => ({
+    ...node,
+    template: node.template.includes('Custom') ? 'Custom Scope Addition' : `Aligned with ${templateName}`,
+    evidence: node.evidence ? { ...node.evidence, document: documentName } : undefined,
+    children: node.children ? rebindTreeMetadata(node.children, documentName, templateName) : undefined,
+  }));
+}
+
+export async function createWbsGenerationJob(
+  projectFile?: File | null,
+  templateFile?: File | null
+): Promise<{ jobId: string }> {
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  const newJobId = `job_wbs_${Date.now().toString().slice(-6)}`;
+  jobStepPointers[newJobId] = 0;
+
+  currentWbsResult = JSON.parse(JSON.stringify(rawWbsResult));
+
+  if (projectFile) {
+    activeProjectDocName = projectFile.name;
+    activeProjectTitle = formatFilenameToProjectName(projectFile.name);
+  } else {
+    activeProjectTitle = currentWbsResult.projectName || 'Capital Project';
+  }
+
+  if (templateFile) {
+    activeTemplateDocName = templateFile.name;
+  }
+
+  currentWbsResult.projectId = newJobId;
+  currentWbsResult.projectName = activeProjectTitle;
+  currentWbsResult.templateName = activeTemplateDocName;
+  currentWbsResult.generatedDate = getCurrentFormattedDate();
+  currentWbsResult.wbsTree = rebindTreeMetadata(
+    currentWbsResult.wbsTree,
+    activeProjectDocName,
+    activeTemplateDocName
+  );
+
+  currentWbsResult.unmappedRequirements = currentWbsResult.unmappedRequirements.map((req) => ({
+    ...req,
+    sourceDoc: activeProjectDocName,
+  }));
+
+  return { jobId: newJobId };
+}
+
 export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
-  // Simulate network latency
   await new Promise((resolve) => setTimeout(resolve, 200));
+
+  if (!jobId) {
+    throw new Error('Valid Job ID is required to poll pipeline status.');
+  }
+
+  if (jobStepPointers[jobId] === undefined) {
+    jobStepPointers[jobId] = 0;
+  }
+
+  const currentPointer = jobStepPointers[jobId];
 
   const steps: AnalysisStep[] = jobConfig.steps.map((step, index: number) => {
     let status: StepStatus = 'PENDING';
-    if (index < currentStepPointer) {
+    if (index < currentPointer) {
       status = 'COMPLETED';
-    } else if (index === currentStepPointer) {
+    } else if (index === currentPointer) {
       status = 'IN_PROGRESS';
     }
     return {
@@ -212,91 +253,136 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
     };
   });
 
-  const isCompleted = currentStepPointer >= jobConfig.steps.length;
+  const isCompleted = currentPointer >= jobConfig.steps.length;
   if (!isCompleted) {
-    currentStepPointer++;
+    jobStepPointers[jobId] = currentPointer + 1;
   }
 
   return {
-    jobId: jobId || jobConfig.jobId,
+    jobId,
     overallStatus: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
     title: jobConfig.title,
-    subtitle: jobConfig.subtitle,
-    sideCard: jobConfig.sideCard,
+    subtitle: `Processing ${activeProjectDocName} against ${activeTemplateDocName}...`,
+    sideCard: {
+      title: 'Decomposing Requirements',
+      description: `Neural parser is aligning deliverables from ${activeProjectDocName} into ${activeTemplateDocName}.`,
+    },
     steps,
     errorMessage: null,
   };
 }
 
-/**
- * Screen 2:
- * Resets the in-memory simulation step pointer.
- */
-export function resetJobStatusSimulation(): void {
-  currentStepPointer = 0;
+export function resetJobStatusSimulation(jobId?: string): void {
+  if (jobId) {
+    jobStepPointers[jobId] = 0;
+  } else {
+    Object.keys(jobStepPointers).forEach((id) => {
+      jobStepPointers[id] = 0;
+    });
+  }
 }
 
-// Formats present date into standard enterprise representation (e.g., "8 Oct 2026")
-function getCurrentFormattedDate(): string {
-  const now = new Date();
-  return now.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-/**
- * Screen 3:
- * Fetches WBS tree results, AI insights, and scope coverage.
- * SWAP POINT: When backend middleware is deployed:
- *   const res = await fetch(`/api/v1/jobs/${jobId}/results`);
- *   return (await res.json()) as WbsResultPayload;
- */
 export async function getWbsResult(jobId: string): Promise<WbsResultPayload> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const payload = rawWbsResult as unknown as WbsResultPayload;
+  await new Promise((resolve) => setTimeout(resolve, 150));
   return {
-    ...payload,
-    projectId: jobId || payload.projectId,
+    ...currentWbsResult,
+    projectId: jobId || currentWbsResult.projectId,
     generatedDate: getCurrentFormattedDate(),
   };
 }
 
-/**
- * Screen 3:
- * Persists user edits, structural moves, and scope additions to the backend.
- * SWAP POINT: When backend middleware is deployed:
- *   const res = await fetch(`/api/v1/jobs/${jobId}/wbs`, {
- *     method: 'PUT',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({ wbsTree }),
- *   });
- *   return (await res.json());
- */
 export async function updateWbsTree(
   _jobId: string,
-  _wbsTree: WbsNode[]
+  _wbsTree: WbsNode[],
+  _updatedUnmapped?: UnmappedRequirement[],
+  _updatedScopeCoverage?: ScopeCoverageData
 ): Promise<{ success: boolean; updatedAt: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 350));
+  void _jobId;
+  await new Promise((resolve) => setTimeout(resolve, 200));
+
+  currentWbsResult.wbsTree = _wbsTree;
+  if (_updatedUnmapped) {
+    currentWbsResult.unmappedRequirements = _updatedUnmapped;
+  }
+  if (_updatedScopeCoverage) {
+    currentWbsResult.scopeCoverage = _updatedScopeCoverage;
+  }
+
   return {
     success: true,
     updatedAt: new Date().toISOString(),
   };
 }
 
-/**
- * Screen 4:
- * Fetches validation analysis, audit rule checks, and scope gap reports.
- * SWAP POINT: When backend middleware is deployed:
- *   const res = await fetch(`/api/v1/jobs/${jobId}/validation`);
- *   return (await res.json()) as WbsValidationPayload;
- */
 export async function getWbsValidation(jobId: string): Promise<WbsValidationPayload> {
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  const payload = rawValidationResult as unknown as WbsValidationPayload;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  const flat: WbsNode[] = [];
+  const walk = (nodes: WbsNode[]) => {
+    nodes.forEach((node) => {
+      flat.push(node);
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      }
+    });
+  };
+  walk(currentWbsResult.wbsTree);
+
+  const phases = flat.filter((n) => n.type === 'Phase').length;
+  const workPackages = flat.length - phases;
+  const sc = currentWbsResult.scopeCoverage || {
+    overallScore: 0,
+    mappedCount: 0,
+    totalRequirements: 0,
+    gapCount: 0,
+  };
+  const itemsAdded = flat.filter((n) => n.isAiAdded).length;
+  const unmapped = currentWbsResult.unmappedRequirements || [];
+
+  const dynamicRecommendations: string[] = [];
+  if (unmapped.length > 0) {
+    dynamicRecommendations.push(
+      `Evaluate ${unmapped.length} unmapped requirements (${unmapped.map((u) => u.code).join(', ')}) for insertion into engineering packages.`
+    );
+  }
+  const aiAddedNodes = flat.filter((n) => n.isAiAdded);
+  if (aiAddedNodes.length > 0) {
+    dynamicRecommendations.push(
+      `Cross-check scope addition "${aiAddedNodes[0].name}" (${aiAddedNodes[0].code}) with procurement milestones.`
+    );
+  }
+  dynamicRecommendations.push(
+    `Verify Primavera P6 activity ID syntax across all ${workPackages} terminal work packages prior to schedule baseline freeze.`
+  );
+
   return {
-    ...payload,
-    jobId: jobId || payload.jobId,
+    ...currentValidation,
+    jobId: jobId || currentWbsResult.projectId,
+    projectName: currentWbsResult.projectName,
+    summaryCards: {
+      wbsItems: {
+        count: flat.length,
+        phasesCount: phases,
+        workPackagesCount: workPackages,
+      },
+      scopeCoverage: {
+        percentage: sc.overallScore,
+        mapped: sc.mappedCount,
+        total: sc.totalRequirements,
+      },
+      itemsAdded: {
+        count: itemsAdded,
+        subtext: 'Not in template',
+      },
+      potentialGaps: {
+        count: unmapped.length,
+        subtext: 'Review recommended',
+      },
+    },
+    unmappedRequirements: unmapped.map((r) => ({
+      reference: `${r.code} (${activeProjectDocName})`,
+      summary: `${r.title} — ${r.reason}`,
+    })),
+    aiRecommendations: dynamicRecommendations,
   };
 }

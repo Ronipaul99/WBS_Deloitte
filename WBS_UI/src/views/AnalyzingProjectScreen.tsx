@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   Check, 
   Loader2, 
   FileText, 
   AlertTriangle, 
-  RefreshCw 
+  RefreshCw,
+  ArrowLeft
 } from 'lucide-react';
 import {
   getJobStatus,
@@ -16,14 +17,14 @@ const MAX_NETWORK_RETRIES = 4;
 const BASE_POLL_INTERVAL_MS = 1500;
 
 interface AnalyzingProjectScreenProps {
-  jobId?: string;
+  jobId: string;
   onAnalysisComplete?: () => void;
   onError?: (errorDetails: string) => void;
   onCancel?: () => void;
 }
 
 export default function AnalyzingProjectScreen({
-  jobId = 'job_wbs_89412',
+  jobId,
   onAnalysisComplete,
   onError,
   onCancel,
@@ -31,111 +32,113 @@ export default function AnalyzingProjectScreen({
   const [jobData, setJobData] = useState<JobStatusResponse | null>(null);
   const [isFatalError, setIsFatalError] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState<number>(0);
 
-  // References to eliminate memory leaks, closure lag, and duplicate in-flight requests
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isFetchingRef = useRef<boolean>(false);
-  const consecutiveErrorsRef = useRef<number>(0);
-  const isMountedRef = useRef<boolean>(true);
-  const isFatalErrorRef = useRef<boolean>(false);
+  const isMissingJobId = !jobId || jobId.trim() === '';
 
-  const clearActiveTimer = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  };
+  const onAnalysisCompleteRef = useRef(onAnalysisComplete);
+  const onErrorRef = useRef(onError);
 
-  const executePoll = useCallback(async () => {
-    // In-flight guard: prevent duplicate requests or executions after unmount/failure
-    if (!isMountedRef.current || isFetchingRef.current || isFatalErrorRef.current) {
+  useEffect(() => {
+    onAnalysisCompleteRef.current = onAnalysisComplete;
+  }, [onAnalysisComplete]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
+
+  useEffect(() => {
+    if (isMissingJobId) {
       return;
     }
 
-    isFetchingRef.current = true;
+    const currentJobId = jobId;
+    let isActive = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let consecutiveErrors = 0;
+    let isFetching = false;
 
-    try {
-      const response = await getJobStatus(jobId);
+    const clearTimer = () => {
+      if (timerId) {
+        clearTimeout(timerId);
+        timerId = null;
+      }
+    };
 
-      if (!isMountedRef.current) return;
-
-      consecutiveErrorsRef.current = 0;
-      setJobData(response);
-
-      // 1. Success Terminal Condition
-      if (response.overallStatus === 'COMPLETED') {
-        clearActiveTimer();
-        if (onAnalysisComplete) {
-          onAnalysisComplete();
-        }
+    const poll = async () => {
+      if (!isActive || currentJobId !== jobId || isFetching) {
         return;
       }
 
-      // 2. Failure Terminal Condition
-      if ((response.overallStatus as string) === 'FAILED') {
-        clearActiveTimer();
-        const failureReason = 
-          (response as { errorMessage?: string | null }).errorMessage || 
-          'AI analysis pipeline failed while decomposing project specifications.';
-        
-        isFatalErrorRef.current = true;
-        setIsFatalError(true);
-        setErrorMessage(failureReason);
-        if (onError) {
-          onError(failureReason);
+      isFetching = true;
+
+      try {
+        const response = await getJobStatus(currentJobId);
+
+        if (!isActive || currentJobId !== jobId) {
+          return;
         }
-        return;
-      }
 
-      // 3. Adaptive Schedule: only queues next check after current request successfully returns
-      timeoutRef.current = setTimeout(executePoll, BASE_POLL_INTERVAL_MS);
-    } catch (err: unknown) {
-      if (!isMountedRef.current) return;
+        consecutiveErrors = 0;
+        setJobData(response);
 
-      consecutiveErrorsRef.current += 1;
-      console.warn(`[WBS Poller] Request failed (${consecutiveErrorsRef.current}/${MAX_NETWORK_RETRIES})`, err);
-
-      if (consecutiveErrorsRef.current >= MAX_NETWORK_RETRIES) {
-        clearActiveTimer();
-        const networkFailure = 'Lost connectivity to analysis engine. Please verify network access and retry.';
-        isFatalErrorRef.current = true;
-        setIsFatalError(true);
-        setErrorMessage(networkFailure);
-        if (onError) {
-          onError(networkFailure);
+        if (response.overallStatus === 'COMPLETED') {
+          clearTimer();
+          if (onAnalysisCompleteRef.current) {
+            onAnalysisCompleteRef.current();
+          }
+          return;
         }
-        return;
+
+        if (response.overallStatus === 'FAILED') {
+          clearTimer();
+          const failureReason = response.errorMessage || 
+            'AI analysis pipeline failed while decomposing project specifications.';
+          setIsFatalError(true);
+          setErrorMessage(failureReason);
+          if (onErrorRef.current) {
+            onErrorRef.current(failureReason);
+          }
+          return;
+        }
+
+        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
+      } catch {
+        if (!isActive || currentJobId !== jobId) {
+          return;
+        }
+
+        consecutiveErrors += 1;
+
+        if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
+          clearTimer();
+          const networkFailure = 'Lost connectivity to analysis engine. Please verify network access and retry.';
+          setIsFatalError(true);
+          setErrorMessage(networkFailure);
+          if (onErrorRef.current) {
+            onErrorRef.current(networkFailure);
+          }
+          return;
+        }
+
+        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS * 1.5);
+      } finally {
+        isFetching = false;
       }
+    };
 
-      // Exponential backoff retry cadence on intermittent drops
-      timeoutRef.current = setTimeout(executePoll, BASE_POLL_INTERVAL_MS * 1.5);
-    } finally {
-      isFetchingRef.current = false;
-    }
-  }, [jobId, onAnalysisComplete, onError]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    consecutiveErrorsRef.current = 0;
-    isFatalErrorRef.current = false;
-    setIsFatalError(false);
-    setErrorMessage(null);
-
-    executePoll();
+    poll();
 
     return () => {
-      isMountedRef.current = false;
-      clearActiveTimer();
+      isActive = false;
+      clearTimer();
     };
-  }, [jobId, executePoll]);
+  }, [jobId, retryTrigger, isMissingJobId]);
 
   const handleManualRetry = () => {
-    clearActiveTimer();
-    consecutiveErrorsRef.current = 0;
-    isFatalErrorRef.current = false;
     setIsFatalError(false);
     setErrorMessage(null);
-    executePoll();
+    setRetryTrigger((prev) => prev + 1);
   };
 
   const renderIndicator = (status: StepStatus) => {
@@ -186,7 +189,6 @@ export default function AnalyzingProjectScreen({
       );
     }
 
-    // Default indicator for unstarted / pending steps
     return (
       <div
         style={{
@@ -201,53 +203,70 @@ export default function AnalyzingProjectScreen({
     );
   };
 
-  // Initial loading state
-  if (!jobData && !isFatalError) {
+  if (isMissingJobId) {
     return (
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '380px',
-          gap: '14px',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
+          padding: '40px 24px',
+          maxWidth: '600px',
+          margin: '40px auto',
+          backgroundColor: '#FFFFFF',
+          borderRadius: '10px',
+          border: '1px solid #E2E8F0',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+          textAlign: 'center',
+          boxSizing: 'border-box',
+          width: '100%',
         }}
       >
-        <style>{`
-          @keyframes wbsSpin {
-            from {
-              transform: rotate(0deg);
-            }
-            to {
-              transform: rotate(360deg);
-            }
-          }
-          .wbs-spinner {
-            animation: wbsSpin 0.9s linear infinite !important;
-            transform-origin: center center !important;
-            display: block !important;
-          }
-        `}</style>
-        <Loader2
-          size={36}
-          color="#0284C7"
-          className="wbs-spinner"
-        />
-        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0, fontWeight: 500 }}>
-          Initializing AI pipeline inspection...
+        <div
+          style={{
+            width: '48px',
+            height: '48px',
+            backgroundColor: '#FEF2F2',
+            color: '#DC2626',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 16px auto',
+          }}
+        >
+          <AlertTriangle size={24} />
+        </div>
+        <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: '0 0 8px 0' }}>
+          Missing Job ID
+        </h2>
+        <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+          No active analysis job ID was provided. Please return to Step 1 and upload your project files.
         </p>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{
+              padding: '8px 18px',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: 'none',
+              backgroundColor: '#0284C7',
+              color: '#FFFFFF',
+              cursor: 'pointer',
+            }}
+          >
+            Back to Document Upload
+          </button>
+        )}
       </div>
     );
   }
 
-  // Fatal / Interrupted Pipeline View
   if (isFatalError) {
     return (
       <div
         style={{
-          padding: '40px 32px',
+          padding: '40px 24px',
           maxWidth: '650px',
           margin: '40px auto',
           backgroundColor: '#FFFFFF',
@@ -255,7 +274,8 @@ export default function AnalyzingProjectScreen({
           border: '1px solid #FCA5A5',
           boxShadow: '0 4px 12px rgba(220, 38, 38, 0.06)',
           textAlign: 'center',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
+          boxSizing: 'border-box',
+          width: '100%',
         }}
       >
         <div
@@ -279,10 +299,10 @@ export default function AnalyzingProjectScreen({
         </h2>
 
         <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6', margin: '0 0 24px 0' }}>
-          {errorMessage || 'The automated WBS generation process encountered an unrecoverable server exception.'}
+          {errorMessage || 'The automated WBS generation process encountered an unrecoverable exception.'}
         </p>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
           {onCancel && (
             <button
               type="button"
@@ -327,32 +347,57 @@ export default function AnalyzingProjectScreen({
     );
   }
 
-  // Schema-safe fallbacks
-  const safeTitle = jobData?.title || 'Analyzing Project & Generating WBS';
-  const safeSubtitle = jobData?.subtitle || 'Processing contract documents, extracting scope items, and aligning with reference template...';
-  const safeSteps = jobData?.steps || [];
-  const safeSideCard = jobData?.sideCard || {
-    title: 'Decomposing Requirements',
-    description: 'The neural parser is correlating RFP deliverables with your standard WBS hierarchy.',
-  };
+  if (!jobData) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '380px',
+          gap: '14px',
+          width: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        <style>{`
+          @keyframes wbsSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          .wbs-spinner {
+            animation: wbsSpin 0.9s linear infinite !important;
+            transform-origin: center center !important;
+            display: block !important;
+          }
+        `}</style>
+        <Loader2
+          size={36}
+          color="#0284C7"
+          className="wbs-spinner"
+        />
+        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0, fontWeight: 500 }}>
+          Initializing AI pipeline inspection...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
-        padding: '36px 48px',
+        padding: '24px clamp(16px, 3vw, 36px)',
         maxWidth: '1150px',
         margin: '0 auto',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        width: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <style>{`
         @keyframes wbsSpin {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         .wbs-spinner {
           animation: wbsSpin 0.9s linear infinite !important;
@@ -361,42 +406,70 @@ export default function AnalyzingProjectScreen({
         }
       `}</style>
 
-      {/* Screen Header */}
-      <header style={{ marginBottom: '36px' }}>
-        <h1
-          style={{
-            fontSize: '24px',
-            fontWeight: 600,
-            color: '#0F172A',
-            margin: '0 0 6px 0',
-          }}
-        >
-          {safeTitle}
-        </h1>
-        <p style={{ fontSize: '14px', color: '#64748B', margin: 0 }}>
-          {safeSubtitle}
+      {/* Header with Cancel Button */}
+      <header style={{ marginBottom: '32px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '6px' }}>
+          <h1
+            style={{
+              fontSize: '22px',
+              fontWeight: 700,
+              color: '#0F172A',
+              margin: 0,
+              letterSpacing: '-0.3px',
+            }}
+          >
+            {jobData.title}
+          </h1>
+
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #CBD5E1',
+                backgroundColor: '#FFFFFF',
+                color: '#475569',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer'
+              }}
+            >
+              <ArrowLeft size={14} /> Cancel Analysis
+            </button>
+          )}
+        </div>
+        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0 }}>
+          {jobData.subtitle}
         </p>
       </header>
 
-      {/* 2-Column Responsive Layout */}
+      {/* Stepper Grid */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '48px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+          gap: '32px',
           alignItems: 'start',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        {/* Left Side: Pipeline Stepper */}
         <div
           style={{
             position: 'relative',
             display: 'flex',
             flexDirection: 'column',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
         >
-          {safeSteps.map((step, index) => {
-            const isLast = index === safeSteps.length - 1;
+          {jobData.steps.map((step, index) => {
+            const isLast = index === jobData.steps.length - 1;
             const isCompleted = step.status === 'COMPLETED';
             const isInactive = step.status !== 'COMPLETED' && step.status !== 'IN_PROGRESS';
 
@@ -457,34 +530,35 @@ export default function AnalyzingProjectScreen({
           })}
         </div>
 
-        {/* Right Side: Processing Info Card */}
         <div
           style={{
             backgroundColor: '#F8FAFC',
             borderRadius: '12px',
             border: '1px solid #E2E8F0',
-            padding: '48px 32px',
+            padding: '40px 24px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             textAlign: 'center',
-            minHeight: '340px',
+            minHeight: '320px',
+            boxSizing: 'border-box',
+            width: '100%',
           }}
         >
           <div
             style={{
-              width: '100px',
-              height: '120px',
+              width: '90px',
+              height: '110px',
               backgroundColor: '#EEF2F6',
               borderRadius: '8px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              marginBottom: '24px',
+              marginBottom: '20px',
             }}
           >
-            <FileText size={48} color="#3B82F6" strokeWidth={1.5} />
+            <FileText size={44} color="#3B82F6" strokeWidth={1.5} />
           </div>
 
           <h2
@@ -495,7 +569,7 @@ export default function AnalyzingProjectScreen({
               marginBottom: '8px',
             }}
           >
-            {safeSideCard.title}
+            {jobData.sideCard.title}
           </h2>
           <p
             style={{
@@ -506,7 +580,7 @@ export default function AnalyzingProjectScreen({
               margin: 0,
             }}
           >
-            {safeSideCard.description}
+            {jobData.sideCard.description}
           </p>
         </div>
       </div>

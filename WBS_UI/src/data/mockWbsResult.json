@@ -2,41 +2,34 @@
   "projectId": "job_wbs_89412",
   "projectName": "200 MW Solar Power Plant",
   "version": "Draft v1.0",
-  "generatedDate": "12 Mar 2025",
-  "breadcrumbs": ["Projects", "Solar Plant", "Draft v1.0"],
+  "generatedDate": "12 Oct 2026",
+  "breadcrumbs": ["Projects", "Solar Plant", "WBS Builder"],
   "scopeCoverage": {
     "overallScore": 94,
     "totalRequirements": 142,
     "mappedCount": 134,
-    "gapCount": 8,
+    "gapCount": 2,
     "categories": [
-      { "category": "Civil Works", "coverage": 98, "total": 45 },
-      { "category": "Electrical & Grid Tie", "coverage": 95, "total": 52 },
-      { "category": "Mechanical / Mounting", "coverage": 91, "total": 28 },
-      { "category": "Commissioning & Safety", "coverage": 88, "total": 17 }
+      { "category": "Civil & Earthworks", "coverage": 96, "total": 28 },
+      { "category": "Mechanical Mounting", "coverage": 95, "total": 34 },
+      { "category": "Electrical & Grid Tie", "coverage": 93, "total": 45 },
+      { "category": "Commissioning & Safety", "coverage": 91, "total": 35 }
     ]
   },
   "aiInsights": [
     {
       "id": "ins-1",
       "type": "SCOPE_ADDITION",
-      "title": "BESS Storage Scope Added",
+      "title": "Battery Energy Storage System Added",
       "impact": "High",
-      "description": "Battery Energy Storage System detected in RFP section 7.3 was not in the baseline template. Work package 4.4 was automatically synthesized."
+      "description": "RFP §4.2 stipulates rapid ramp-rate frequency smoothing, requiring a 10MW/20MWh BESS skid not found in the EPC template."
     },
     {
       "id": "ins-2",
       "type": "RISK_WARNING",
-      "title": "Extended Lead-Time Equipment",
+      "title": "Archeological Survey Requirement Detected",
       "impact": "Medium",
-      "description": "GSU Step-up transformers show a 42-week vendor procurement lead time in technical specs. Recommend early procurement milestone."
-    },
-    {
-      "id": "ins-3",
-      "type": "OPTIMIZATION",
-      "title": "Piling Foundation Redundancy",
-      "impact": "Low",
-      "description": "Geotechnical soil report suggests standard driven H-piles can replace poured concrete caissons in zones 2 and 4."
+      "description": "Statutory survey clause 15.2 demands independent ground exploration prior to grading."
     }
   ],
   "unmappedRequirements": [
@@ -44,298 +37,247 @@
       "id": "unm-1",
       "code": "REQ-089",
       "title": "Wildlife Perimeter Fencing",
-      "sourceDoc": "Environmental_Assessment.pdf",
-      "reason": "Environmental boundary mitigation not mapped to Civil or Security templates."
+      "sourceDoc": "Uploaded_Scope_Document.pdf",
+      "reason": "Environmental boundary mitigation clause §12.4 requires dual-aperture fencing."
     },
     {
       "id": "unm-2",
       "code": "REQ-104",
       "title": "Archeological Artifact Monitoring",
-      "sourceDoc": "Permitting_Report.pdf",
-      "reason": "Specialized third-party monitoring scope during site preparation."
+      "sourceDoc": "Uploaded_Scope_Document.pdf",
+      "reason": "Specialized third-party monitoring clause §15.2."
     }
   ],
   "wbsTree": [
     {
-      "id": "1.0",
+      "id": "node-1",
       "code": "1.0",
-      "name": "Project Management",
+      "name": "Project Management & Permitting",
       "type": "Phase",
       "parent": "Root",
-      "source": "RFP Section 1.2",
-      "template": "Standard Primavera EPC",
+      "source": "RFP §1.0",
+      "template": "1.0 Project Governance",
       "confidence": 98,
-      "isAiAdded": false,
-      "description": "Overall project management, administration, site supervision, and milestone tracking.",
-      "evidence": {
-        "text": "The contractor shall provide full project oversight and dedicated scheduling staff throughout the lifecycle.",
-        "document": "RFP_Solar_Plant_Project.pdf",
-        "section": "Section 1.2"
-      },
-      "children": []
-    },
-    {
-      "id": "2.0",
-      "code": "2.0",
-      "name": "Engineering",
-      "type": "Phase",
-      "parent": "Root",
-      "source": "Scope Document A",
-      "template": "Standard Primavera EPC",
-      "confidence": 95,
-      "isAiAdded": false,
-      "description": "Civil, electrical, and structural design engineering packages.",
-      "evidence": {
-        "text": "All engineering deliverables must be validated by certified PE engineers prior to procurement.",
-        "document": "Scope_Document_A.pdf",
-        "section": "Section 3.1"
-      },
+      "description": "Management, EPC administration, statutory filings, and interface coordination.",
       "children": [
         {
-          "id": "2.1",
-          "code": "2.1",
-          "name": "Civil Engineering",
+          "id": "node-1-1",
+          "code": "1.1",
+          "name": "Project Administration & Controls",
           "type": "Work Package",
-          "parent": "2.0 Engineering",
-          "source": "Scope Doc A",
-          "template": "Standard EPC",
-          "confidence": 94,
-          "isAiAdded": false,
-          "description": "Topographical surveys, grading, and drainage civil design.",
-          "evidence": {
-            "text": "Civil drawings including stormwater drainage plans.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 4.1"
-          }
-        },
-        {
-          "id": "2.2",
-          "code": "2.2",
-          "name": "Electrical Engineering",
-          "type": "Work Package",
-          "parent": "2.0 Engineering",
-          "source": "Scope Doc A",
-          "template": "Standard EPC",
-          "confidence": 97,
-          "isAiAdded": false,
-          "description": "DC collection systems, inverter layout, and substation grid tie design.",
-          "evidence": {
-            "text": "Detailed electrical single-line diagrams up to 230kV.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 4.3"
-          }
-        },
-        {
-          "id": "2.3",
-          "code": "2.3",
-          "name": "Structural Engineering",
-          "type": "Work Package",
-          "parent": "2.0 Engineering",
-          "source": "Scope Doc A",
-          "template": "Standard EPC",
-          "confidence": 92,
-          "isAiAdded": false,
-          "description": "Tracker mounting structural calculations and foundation design.",
-          "evidence": {
-            "text": "Structural engineering for ground-mount single axis trackers.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 4.5"
-          }
-        }
-      ]
-    },
-    {
-      "id": "3.0",
-      "code": "3.0",
-      "name": "Procurement",
-      "type": "Phase",
-      "parent": "Root",
-      "source": "Procurement Schedule",
-      "template": "Standard Primavera EPC",
-      "confidence": 96,
-      "isAiAdded": false,
-      "description": "Procurement of major long-lead solar components and balance of system.",
-      "evidence": {
-        "text": "Vendor procurement must adhere to domestic content and supply chain guidelines.",
-        "document": "Procurement_Plan.pdf",
-        "section": "Section 2"
-      },
-      "children": [
-        {
-          "id": "3.1",
-          "code": "3.1",
-          "name": "PV Modules",
-          "type": "Work Package",
-          "parent": "3.0 Procurement",
-          "source": "Equipment List",
-          "template": "Standard EPC",
-          "confidence": 99,
-          "isAiAdded": false,
-          "description": "Supply and freight of Tier-1 bifacial photovoltaic panels.",
-          "evidence": {
-            "text": "Tier-1 550W+ bifacial modules certified under IEC 61215.",
-            "document": "Tech_Specs.pdf",
-            "section": "Spec 10.2"
-          }
-        },
-        {
-          "id": "3.2",
-          "code": "3.2",
-          "name": "Inverters",
-          "type": "Work Package",
-          "parent": "3.0 Procurement",
-          "source": "Equipment List",
-          "template": "Standard EPC",
-          "confidence": 98,
-          "isAiAdded": false,
-          "description": "Central inverters with skid integration and MV transformers.",
-          "evidence": {
-            "text": "Utility-scale central inverter skids with integrated switchgear.",
-            "document": "Tech_Specs.pdf",
-            "section": "Spec 11.0"
-          }
-        },
-        {
-          "id": "3.3",
-          "code": "3.3",
-          "name": "Transformers",
-          "type": "Work Package",
-          "parent": "3.0 Procurement",
-          "source": "Equipment List",
-          "template": "Standard EPC",
+          "parent": "node-1",
+          "source": "RFP §1.1",
+          "template": "1.1 Controls",
           "confidence": 95,
-          "isAiAdded": false,
-          "description": "Main Step-Up (GSU) 34.5kV to 230kV transformers.",
-          "evidence": {
-            "text": "Generator step-up transformer with oil containment and fire barriers.",
-            "document": "Tech_Specs.pdf",
-            "section": "Spec 12.4"
-          }
+          "description": "Earned Value tracking, monthly Primavera scheduling, and audit oversight."
+        },
+        {
+          "id": "node-1-2",
+          "code": "1.2",
+          "name": "Environmental & Statutory Permits",
+          "type": "Work Package",
+          "parent": "node-1",
+          "source": "RFP §1.4",
+          "template": "Custom Scope Addition",
+          "confidence": 92,
+          "isAiAdded": true,
+          "description": "Ground clearance certification, wildlife clearances, and water extraction licenses."
         }
       ]
     },
     {
-      "id": "4.0",
-      "code": "4.0",
-      "name": "Construction",
+      "id": "node-2",
+      "code": "2.0",
+      "name": "Civil Engineering & Site Preparation",
       "type": "Phase",
       "parent": "Root",
-      "source": "Construction Execution Plan",
-      "template": "Standard Primavera EPC",
-      "confidence": 93,
-      "isAiAdded": false,
-      "description": "Civil, mechanical, tracker, and electrical balance of plant construction.",
-      "evidence": {
-        "text": "Onsite mobilization, civil ground works, installation, and balance of plant erection.",
-        "document": "RFP_Solar_Plant_Project.pdf",
-        "section": "Section 6"
-      },
+      "source": "RFP §2.0",
+      "template": "2.0 Civil Infrastructure",
+      "confidence": 96,
+      "description": "Grading, boundary fencing, foundation piling, and internal access roads.",
       "children": [
         {
-          "id": "4.1",
+          "id": "node-2-1",
+          "code": "2.1",
+          "name": "Grading & Drainage Canals",
+          "type": "Work Package",
+          "parent": "node-2",
+          "source": "RFP §2.2",
+          "template": "2.1 Earthworks",
+          "confidence": 94,
+          "description": "Earth balance leveling and concrete swale construction."
+        },
+        {
+          "id": "node-2-2",
+          "code": "2.2",
+          "name": "Pile Driving & Tracker Piles",
+          "type": "Work Package",
+          "parent": "node-2",
+          "source": "RFP §2.5",
+          "template": "2.3 Foundation",
+          "confidence": 92,
+          "description": "Vibratory pile driving for mounting tracker torque tubes."
+        }
+      ]
+    },
+    {
+      "id": "node-3",
+      "code": "3.0",
+      "name": "PV Module & Tracker Mechanical",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "RFP §3.0",
+      "template": "3.0 Mechanical Erection",
+      "confidence": 97,
+      "description": "Single-axis tracker motors, module clamping, and torque assembly.",
+      "children": [
+        {
+          "id": "node-3-1",
+          "code": "3.1",
+          "name": "Tracker Drive & Torque Tubes",
+          "type": "Work Package",
+          "parent": "node-3",
+          "source": "RFP §3.1",
+          "template": "3.1 Trackers",
+          "confidence": 96,
+          "description": "Slew drive mounting, motor controller integration, and bearing lubrication."
+        },
+        {
+          "id": "node-3-2",
+          "code": "3.2",
+          "name": "Bifacial Module Clamping",
+          "type": "Work Package",
+          "parent": "node-3",
+          "source": "RFP §3.4",
+          "template": "3.2 Solar Modules",
+          "confidence": 95,
+          "description": "Installation of 580W N-type TOPCon modules with torque verification."
+        }
+      ]
+    },
+    {
+      "id": "node-4",
+      "code": "4.0",
+      "name": "DC/AC Electrical Collection",
+      "type": "Phase",
+      "parent": "Root",
+      "source": "RFP §4.0",
+      "template": "4.0 Electrical Balance of System",
+      "confidence": 93,
+      "description": "String combiner cabling, central inverter skids, and underground MV reticulation.",
+      "children": [
+        {
+          "id": "node-4-1",
           "code": "4.1",
-          "name": "Site Preparation",
+          "name": "DC Harness & String Cabling",
           "type": "Work Package",
-          "parent": "4.0 Construction",
-          "source": "Civil Package",
-          "template": "Standard EPC",
-          "confidence": 90,
-          "isAiAdded": false,
-          "description": "Clearing, grubbing, cut/fill balancing, and access road gravel compaction.",
-          "evidence": {
-            "text": "All access routes and laydown yards leveled and prepared.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 6.1"
-          }
+          "parent": "node-4",
+          "source": "RFP §4.1",
+          "template": "4.1 DC Balance",
+          "confidence": 94,
+          "description": "Underground cable trenches and waterproof junction connections."
         },
         {
-          "id": "4.2",
+          "id": "node-4-2",
           "code": "4.2",
-          "name": "Foundation Works",
+          "name": "Battery Energy Storage System (BESS)",
           "type": "Work Package",
-          "parent": "4.0 Construction",
-          "source": "Civil Package",
-          "template": "Standard EPC",
-          "confidence": 93,
-          "isAiAdded": false,
-          "description": "Driven pile foundations for tracker posts and inverter pad concrete pours.",
-          "evidence": {
-            "text": "Driven steel H-piles and pull-out load testing.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 6.3"
-          }
-        },
-        {
-          "id": "4.4",
-          "code": "4.4",
-          "name": "Battery Energy Storage System",
-          "type": "Work Package",
-          "parent": "4.0 Construction",
-          "source": "RFP Section 7.3",
-          "template": "No equivalent in template",
+          "parent": "node-4",
+          "source": "RFP §4.2",
+          "template": "Custom Scope Addition",
           "confidence": 91,
           "isAiAdded": true,
-          "description": "Installation and commissioning of battery energy storage system including civil works, electrical works and integration with solar plant.",
+          "description": "10MW / 20MWh containerized liquid-cooled battery skids with integrated HVAC.",
           "evidence": {
-            "text": "The successful bidder shall design, supply, install and commission a battery energy storage system (BESS) with a minimum capacity of 50 MWh...",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 7.3"
+            "document": "Uploaded_Scope_Document.pdf",
+            "section": "Section 4.2",
+            "text": "Contractor shall supply and integrate a containerized battery energy storage facility designed for 4-hour discharge to stabilize local grid tie."
           }
         },
         {
-          "id": "4.5",
-          "code": "4.5",
-          "name": "Module Installation",
+          "id": "node-4-3",
+          "code": "4.3",
+          "name": "SCADA Telemetry & Remote Terminal Units",
           "type": "Work Package",
-          "parent": "4.0 Construction",
-          "source": "Mechanical Package",
-          "template": "Standard EPC",
-          "confidence": 96,
-          "isAiAdded": false,
-          "description": "Mounting and torque-tightening bifacial modules to tracker torque tubes.",
-          "evidence": {
-            "text": "Panel fixing with calibrated torque wrenches and ground bonding.",
-            "document": "RFP_Solar_Plant_Project.pdf",
-            "section": "Section 6.6"
-          }
+          "parent": "node-4",
+          "source": "RFP §4.6",
+          "template": "Custom Scope Addition",
+          "confidence": 90,
+          "isAiAdded": true,
+          "description": "Substation optical fiber loop and redundant telemetry integration."
         }
       ]
     },
     {
-      "id": "5.0",
+      "id": "node-5",
       "code": "5.0",
-      "name": "Testing & Commissioning",
+      "name": "High Voltage Substation & Interconnect",
       "type": "Phase",
       "parent": "Root",
-      "source": "Commissioning Guidelines",
-      "template": "Standard EPC",
-      "confidence": 94,
-      "isAiAdded": false,
-      "description": "Cold and hot commissioning, SCADA checkout, and inter-tie energization.",
-      "evidence": {
-        "text": "Performance ratio verification and COD testing protocols.",
-        "document": "Commissioning_Manual.pdf",
-        "section": "Section 8"
-      },
-      "children": []
+      "source": "RFP §5.0",
+      "template": "5.0 Interconnection",
+      "confidence": 96,
+      "description": "33kV/230kV step-up transformer, switchyard, and transmission line bay.",
+      "children": [
+        {
+          "id": "node-5-1",
+          "code": "5.1",
+          "name": "Step-Up Transformer & Breakers",
+          "type": "Work Package",
+          "parent": "node-5",
+          "source": "RFP §5.2",
+          "template": "5.2 Transformers",
+          "confidence": 95,
+          "description": "Installation of 250MVA oil-immersed power transformer."
+        },
+        {
+          "id": "node-5-2",
+          "code": "5.2",
+          "name": "Dead-End Transmission Bay",
+          "type": "Work Package",
+          "parent": "node-5",
+          "source": "RFP §5.5",
+          "template": "5.4 Gantry",
+          "confidence": 93,
+          "description": "Transmission line gantry and revenue metering instrument transformers."
+        }
+      ]
     },
     {
-      "id": "6.0",
+      "id": "node-6",
       "code": "6.0",
-      "name": "Handover",
+      "name": "Commissioning, Testing & COD",
       "type": "Phase",
       "parent": "Root",
-      "source": "Contract Terms",
-      "template": "Standard EPC",
-      "confidence": 98,
-      "isAiAdded": false,
-      "description": "As-built documentation, O&M training, and final commercial handover.",
-      "evidence": {
-        "text": "Handover of warranty manuals, as-built CAD files, and spare parts inventory.",
-        "document": "Contract_Agreement.pdf",
-        "section": "Section 14"
-      },
-      "children": []
+      "source": "RFP §6.0",
+      "template": "6.0 Commissioning & Handover",
+      "confidence": 94,
+      "description": "Cold/hot commissioning, performance ratio testing, and commercial operation declaration.",
+      "children": [
+        {
+          "id": "node-6-1",
+          "code": "6.1",
+          "name": "Inverter Skid Dry-Testing & Polarity",
+          "type": "Work Package",
+          "parent": "node-6",
+          "source": "RFP §6.1",
+          "template": "Custom Scope Addition",
+          "confidence": 92,
+          "isAiAdded": true,
+          "description": "Open-circuit voltage verification and inverter firmware parametrization."
+        },
+        {
+          "id": "node-6-2",
+          "code": "6.2",
+          "name": "Performance Ratio (PR) Trial Run",
+          "type": "Work Package",
+          "parent": "node-6",
+          "source": "RFP §6.4",
+          "template": "6.3 Trial Run",
+          "confidence": 95,
+          "description": "72-hour continuous export run complying with grid operator dispatch orders."
+        }
+      ]
     }
   ]
 }

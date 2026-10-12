@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Check,
   RotateCw,
@@ -8,6 +8,8 @@ import {
   AlertCircle,
   X,
   RefreshCw,
+  ArrowLeft,
+  PlusCircle,
 } from 'lucide-react';
 import {
   getWbsValidation,
@@ -19,12 +21,14 @@ interface WbsValidationScreenProps {
   jobId: string;
   onBackToResults?: () => void;
   onViewUnmapped?: () => void;
+  onCreateNew?: () => void;
 }
 
 export default function WbsValidationScreen({
   jobId,
   onBackToResults,
   onViewUnmapped,
+  onCreateNew,
 }: WbsValidationScreenProps) {
   const [data, setData] = useState<WbsValidationPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -32,40 +36,106 @@ export default function WbsValidationScreen({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<ValidationCheckItem | null>(null);
 
-  const fetchValidationData = useCallback(async (isManualRefresh = false) => {
-    if (!jobId) {
-      setErrorMessage('No valid Job ID was provided for validation.');
-      setIsLoading(false);
-      return;
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const lastActiveElementRef = useRef<HTMLElement | null>(null);
+  const modalBoxRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadData() {
+      if (!jobId) {
+        if (isMounted) {
+          setErrorMessage('No valid Job ID was provided for validation.');
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const res = await getWbsValidation(jobId);
+        if (isMounted) {
+          setData(res);
+        }
+      } catch (err: unknown) {
+        if (isMounted) {
+          setErrorMessage(err instanceof Error ? err.message : 'Failed to execute WBS validation analysis.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
     }
 
-    if (isManualRefresh) setIsReRunning(true);
-    else setIsLoading(true);
+    loadData();
 
+    return () => {
+      isMounted = false;
+    };
+  }, [jobId]);
+
+  const handleManualRefresh = async () => {
+    setIsReRunning(true);
     setErrorMessage(null);
 
     try {
       const res = await getWbsValidation(jobId);
       setData(res);
     } catch (err: unknown) {
-      setErrorMessage(err instanceof Error ? err.message : 'Failed to execute WBS validation analysis.');
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to re-run WBS validation analysis.');
     } finally {
-      setIsLoading(false);
       setIsReRunning(false);
     }
-  }, [jobId]);
+  };
 
   useEffect(() => {
-    fetchValidationData();
-  }, [fetchValidationData]);
+    if (selectedIssue) {
+      lastActiveElementRef.current = document.activeElement as HTMLElement;
+      setTimeout(() => {
+        closeButtonRef.current?.focus();
+      }, 50);
+    } else if (lastActiveElementRef.current) {
+      lastActiveElementRef.current.focus();
+    }
+  }, [selectedIssue]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelectedIssue(null);
+      if (!selectedIssue) return;
+
+      if (e.key === 'Escape') {
+        setSelectedIssue(null);
+        return;
+      }
+
+      if (e.key === 'Tab' && modalBoxRef.current) {
+        const focusableElements = modalBoxRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement?.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement?.focus();
+          }
+        }
+      }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [selectedIssue]);
 
   if (isLoading) {
     return (
@@ -98,13 +168,16 @@ export default function WbsValidationScreen({
           borderRadius: '8px',
           border: '1px solid #FCA5A5',
           fontFamily: 'system-ui, -apple-system, sans-serif',
+          boxSizing: 'border-box',
+          width: '100%',
         }}
       >
         <AlertTriangle size={32} color="#DC2626" style={{ margin: '0 auto 12px auto' }} />
         <h2 style={{ fontSize: '17px', fontWeight: 600, color: '#0F172A', margin: '0 0 8px 0' }}>Validation Failed</h2>
         <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 20px 0' }}>{errorMessage || 'Unable to retrieve validation records.'}</p>
         <button
-          onClick={() => fetchValidationData()}
+          type="button"
+          onClick={handleManualRefresh}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -130,24 +203,76 @@ export default function WbsValidationScreen({
   const validationChecks = data.validationChecks ?? [];
   const aiRecommendations = data.aiRecommendations ?? [];
   const summaryCards = data.summaryCards ?? {
-    wbsItems: { count: 87, phasesCount: 6, workPackagesCount: 24 },
-    scopeCoverage: { percentage: 91, mapped: 102, total: 112 },
-    itemsAdded: { count: 5, subtext: 'Not in template' },
-    potentialGaps: { count: 2, subtext: 'Review recommended' },
+    wbsItems: { count: 0, phasesCount: 0, workPackagesCount: 0 },
+    scopeCoverage: { percentage: 0, mapped: 0, total: 0 },
+    itemsAdded: { count: 0, subtext: 'Not in template' },
+    potentialGaps: { count: 0, subtext: 'Review recommended' },
   };
 
   return (
     <div
       style={{
-        padding: '24px 32px',
+        padding: '24px clamp(16px, 3vw, 32px)',
         maxWidth: '1440px',
         margin: '0 auto',
         fontFamily: 'system-ui, -apple-system, sans-serif',
         backgroundColor: '#F8FAFC',
         minHeight: '100%',
+        boxSizing: 'border-box',
+        width: '100%',
       }}
     >
-      {/* Header & Re-run Button */}
+      <style>{`
+        .kpi-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 16px;
+          margin-bottom: 24px;
+          width: 100%;
+          box-sizing: border-box;
+        }
+        @media (max-width: 900px) {
+          .kpi-cards-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .kpi-cards-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
+      {/* Top Left Navigation */}
+      {onBackToResults && (
+        <div style={{ marginBottom: '14px' }}>
+          <button
+            type="button"
+            onClick={onBackToResults}
+            title="Back to WBS Structure"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'none',
+              border: 'none',
+              color: '#64748B',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              padding: 0,
+              transition: 'color 0.15s ease'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#1E293B')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#64748B')}
+          >
+            <ArrowLeft size={16} />
+            <span>Back to WBS Structure</span>
+          </button>
+        </div>
+      )}
+
+      {/* Header Row */}
       <div
         style={{
           display: 'flex',
@@ -163,43 +288,62 @@ export default function WbsValidationScreen({
             WBS Validation
           </h1>
           <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
-            AI-powered checks to ensure completeness, consistency and alignment with your template.
+            Automated checks verifying scope alignment against {data.projectName}.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => fetchValidationData(true)}
-          disabled={isReRunning}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '7px 16px',
-            fontSize: '12.5px',
-            border: '1px solid #CBD5E1',
-            borderRadius: '6px',
-            backgroundColor: '#FFFFFF',
-            color: '#1E293B',
-            cursor: isReRunning ? 'not-allowed' : 'pointer',
-            fontWeight: 500,
-          }}
-        >
-          <RotateCw size={13} style={{ animation: isReRunning ? 'spin 1s linear infinite' : 'none' }} />
-          <span>{isReRunning ? 'Validating...' : 'Re-run Validation'}</span>
-        </button>
+        {/* Header Actions */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={isReRunning}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 14px',
+              fontSize: '12.5px',
+              border: '1px solid #CBD5E1',
+              borderRadius: '6px',
+              backgroundColor: '#FFFFFF',
+              color: '#1E293B',
+              cursor: isReRunning ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            <RotateCw size={13} style={{ animation: isReRunning ? 'spin 1s linear infinite' : 'none' }} />
+            <span>{isReRunning ? 'Validating...' : 'Re-run Validation'}</span>
+          </button>
+
+          {onCreateNew && (
+            <button
+              type="button"
+              onClick={onCreateNew}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 16px',
+                fontSize: '12.5px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: '#1A73E8',
+                color: '#FFFFFF',
+                cursor: 'pointer',
+                fontWeight: 600,
+                boxShadow: '0 1px 2px rgba(0,0,0,0.06)'
+              }}
+            >
+              <PlusCircle size={14} />
+              <span>Create New WBS</span>
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* All 4 Summary KPI Cards in ONE Line */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '16px',
-          marginBottom: '24px',
-        }}
-      >
-        {/* Card 1: WBS Items */}
+      {/* 4 Summary Cards */}
+      <div className="kpi-cards-grid">
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -210,6 +354,7 @@ export default function WbsValidationScreen({
             alignItems: 'flex-start',
             gap: '14px',
             minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
           <div
@@ -240,7 +385,6 @@ export default function WbsValidationScreen({
           </div>
         </div>
 
-        {/* Card 2: Scope Coverage */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -251,6 +395,7 @@ export default function WbsValidationScreen({
             alignItems: 'flex-start',
             gap: '14px',
             minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
           <div
@@ -281,7 +426,6 @@ export default function WbsValidationScreen({
           </div>
         </div>
 
-        {/* Card 3: Items Added */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -292,6 +436,7 @@ export default function WbsValidationScreen({
             alignItems: 'flex-start',
             gap: '14px',
             minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
           <div
@@ -322,7 +467,6 @@ export default function WbsValidationScreen({
           </div>
         </div>
 
-        {/* Card 4: Potential Gaps */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
@@ -333,6 +477,7 @@ export default function WbsValidationScreen({
             alignItems: 'flex-start',
             gap: '14px',
             minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
           <div
@@ -364,22 +509,25 @@ export default function WbsValidationScreen({
         </div>
       </div>
 
-      {/* Lower Two-Column Grid */}
+      {/* Two-Column Responsive Grid */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(380px, 1fr) minmax(420px, 1.2fr)',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))',
           gap: '24px',
           alignItems: 'start',
+          width: '100%',
+          boxSizing: 'border-box',
         }}
       >
-        {/* Left Column: Validation Results */}
+        {/* Left Column: Validation Checks */}
         <div
           style={{
             backgroundColor: '#FFFFFF',
             border: '1px solid #E2E8F0',
             borderRadius: '8px',
             padding: '24px',
+            boxSizing: 'border-box',
           }}
         >
           <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: '0 0 16px 0' }}>
@@ -397,6 +545,7 @@ export default function WbsValidationScreen({
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '8px 0',
+                    borderBottom: '1px solid #F1F5F9',
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
@@ -450,16 +599,15 @@ export default function WbsValidationScreen({
           </div>
         </div>
 
-        {/* Right Column: Unmapped Requirements & AI Recommendations */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Top Card: Unmapped Requirements */}
+        {/* Right Column: Unmapped Requirements & Recommendations */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
           <div
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #E2E8F0',
               borderRadius: '8px',
               padding: '24px',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -494,7 +642,7 @@ export default function WbsValidationScreen({
                 <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '130px 1fr',
+                    gridTemplateColumns: '150px 1fr',
                     padding: '8px 14px',
                     backgroundColor: '#F8FAFC',
                     borderBottom: '1px solid #E2E8F0',
@@ -511,7 +659,7 @@ export default function WbsValidationScreen({
                     key={idx}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '130px 1fr',
+                      gridTemplateColumns: '150px 1fr',
                       padding: '10px 14px',
                       fontSize: '12.5px',
                       borderBottom: idx === unmappedCount - 1 ? 'none' : '1px solid #F1F5F9',
@@ -526,13 +674,13 @@ export default function WbsValidationScreen({
             )}
           </div>
 
-          {/* Bottom Card: AI Recommendations */}
           <div
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #E2E8F0',
               borderRadius: '8px',
               padding: '24px',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
@@ -558,13 +706,16 @@ export default function WbsValidationScreen({
               ))}
             </ul>
           </div>
-
         </div>
       </div>
 
-      {/* Issue Modal */}
+      {/* Accessible Dialog with Focus Trap */}
       {selectedIssue && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="issue-modal-title"
+          aria-describedby="issue-modal-desc"
           onClick={() => setSelectedIssue(null)}
           style={{
             position: 'fixed',
@@ -574,22 +725,31 @@ export default function WbsValidationScreen({
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 100,
+            padding: '16px',
+            boxSizing: 'border-box',
           }}
         >
           <div
+            ref={modalBoxRef}
             onClick={(e) => e.stopPropagation()}
             style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '8px',
-              width: '460px',
+              width: '100%',
+              maxWidth: '460px',
               padding: '22px',
               boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+              boxSizing: 'border-box',
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>{selectedIssue.title}</h3>
+              <h3 id="issue-modal-title" style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>
+                {selectedIssue.title}
+              </h3>
               <button
+                ref={closeButtonRef}
                 type="button"
+                aria-label="Close dialog"
                 onClick={() => setSelectedIssue(null)}
                 style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8' }}
               >
@@ -597,7 +757,7 @@ export default function WbsValidationScreen({
               </button>
             </div>
 
-            <p style={{ fontSize: '13px', color: '#475569', marginBottom: '20px', lineHeight: '1.6' }}>
+            <p id="issue-modal-desc" style={{ fontSize: '13px', color: '#475569', marginBottom: '20px', lineHeight: '1.6' }}>
               {selectedIssue.description}
             </p>
 

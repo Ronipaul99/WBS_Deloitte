@@ -1,553 +1,316 @@
-import { useState, useRef, DragEvent, ChangeEvent, MouseEvent, ReactNode } from 'react';
+import { useState, useRef, ChangeEvent, DragEvent } from 'react';
 import { 
-  FileText, 
-  FileSpreadsheet, 
+  FileUp, 
+  CheckCircle, 
+  AlertCircle, 
   X, 
   ArrowRight, 
-  Info,
-  AlertCircle,
-  Loader2
+  ShieldAlert, 
+  FileSpreadsheet 
 } from 'lucide-react';
-
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
-const ALLOWED_PROJECT_EXTS = ['pdf', 'doc', 'docx', 'txt'];
-const ALLOWED_TEMPLATE_EXTS = ['xlsx', 'xls', 'csv', 'xml'];
-
-export interface FileBadge {
-  label: string;
-  bg: string;
-}
-
-export interface UploadedFileState {
-  name: string;
-  size: string;
-  sizeBytes: number;
-  badge: FileBadge;
-  raw: File;
-}
+import { createWbsGenerationJob } from '../services/wbsService';
 
 interface CreateWbsScreenProps {
-  isLoading?: boolean;
-  onGenerateWbs?: (projectFile: UploadedFileState, templateFile: UploadedFileState) => void;
+  onGenerateWbs?: (jobId: string) => void;
 }
 
-interface FileUploadCardProps {
-  stepNumber: number;
-  title: string;
-  description: string;
-  inputId: string;
-  allowedExtensions: string[];
-  acceptedMimeTypes: string;
-  icon: ReactNode;
-  iconBgColor: string;
-  iconColor: string;
-  activeBorderColor: string;
-  activeBgColor: string;
-  fileState: UploadedFileState | null;
-  errorMessage: string | null;
-  onFileSelect: (file: File) => void;
-  onFileRemove: () => void;
-}
+const ALLOWED_PROJECT_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv'
+];
 
-function formatFileSize(bytes: number): string {
-  if (!bytes || bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+const ALLOWED_TEMPLATE_MIMES = [
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'text/csv',
+  'application/xml',
+  'text/xml'
+];
 
-function getBadge(name: string): FileBadge {
-  const ext = name.split('.').pop()?.toUpperCase() || 'FILE';
-  if (ext === 'PDF') return { label: 'PDF', bg: '#D93025' };
-  if (['XLS', 'XLSX', 'CSV'].includes(ext)) return { label: 'XLS', bg: '#188038' };
-  if (['DOC', 'DOCX'].includes(ext)) return { label: 'DOC', bg: '#1A73E8' };
-  if (ext === 'XML') return { label: 'XML', bg: '#007064' };
-  return { label: ext, bg: '#5F6368' };
-}
+export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps) {
+  const [projectFile, setProjectFile] = useState<File | null>(null);
+  const [templateFile, setTemplateFile] = useState<File | null>(null);
 
-function FileUploadCard({
-  stepNumber,
-  title,
-  description,
-  inputId,
-  allowedExtensions,
-  acceptedMimeTypes,
-  icon,
-  iconBgColor,
-  iconColor,
-  activeBorderColor,
-  activeBgColor,
-  fileState,
-  errorMessage,
-  onFileSelect,
-  onFileRemove,
-}: FileUploadCardProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [projectFileError, setProjectFileError] = useState<string | null>(null);
+  const [templateFileError, setTemplateFileError] = useState<string | null>(null);
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
+  const projectInputRef = useRef<HTMLInputElement | null>(null);
+  const templateInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      onFileSelect(e.dataTransfer.files[0]);
+  const validateFile = (file: File, allowedTypes: string[], maxMb: number = 25): string | null => {
+    if (file.size > maxMb * 1024 * 1024) {
+      return `File exceeds maximum upload size of ${maxMb}MB.`;
     }
-  };
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+    const isMimeValid = allowedTypes.includes(file.type);
+    const isExtValid = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.csv', '.xml'].includes(ext);
 
-  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      onFileSelect(e.target.files[0]);
-      e.target.value = ''; // Clears browser cache so re-uploading the same file works
+    if (!isMimeValid && !isExtValid) {
+      return 'Unsupported file format. Please upload an accepted document type.';
     }
-  };
-
-  const handleRemove = () => {
-    if (inputRef.current) {
-      inputRef.current.value = '';
-    }
-    onFileRemove();
-  };
-
-  return (
-    <div
-      style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '8px',
-        border: '1px solid #E2E8F0',
-        padding: '20px 22px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        minHeight: '270px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-      }}
-    >
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-          <span
-            style={{
-              width: '18px',
-              height: '18px',
-              borderRadius: '50%',
-              backgroundColor: '#1A73E8',
-              color: '#FFFFFF',
-              fontSize: '10.5px',
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            {stepNumber}
-          </span>
-          <h2 style={{ fontSize: '13px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
-            {title}
-          </h2>
-        </div>
-        <p style={{ fontSize: '11.5px', color: '#64748B', marginBottom: '14px', marginTop: '1px' }}>
-          {description}
-        </p>
-
-        {/* Drop Zone */}
-        <div
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          style={{
-            border: `1.5px dashed ${isDragging ? activeBorderColor : '#CBD5E1'}`,
-            backgroundColor: isDragging ? activeBgColor : '#FAFCFE',
-            borderRadius: '6px',
-            padding: '24px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            transition: 'border-color 0.15s ease, background-color 0.15s ease',
-          }}
-        >
-          {/* pointerEvents: 'none' stops child elements from triggering dragleave flickering */}
-          <div
-            style={{
-              pointerEvents: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-            }}
-          >
-            <div
-              style={{
-                width: '36px',
-                height: '36px',
-                backgroundColor: iconBgColor,
-                color: iconColor,
-                borderRadius: '50%',
-                marginBottom: '8px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              {icon}
-            </div>
-            <p style={{ fontSize: '11.5px', fontWeight: 500, color: '#334155', margin: 0 }}>
-              Drag and drop your file here
-            </p>
-            <span style={{ fontSize: '10.5px', color: '#94A3B8', margin: '3px 0' }}>or</span>
-          </div>
-
-          <label
-            htmlFor={inputId}
-            style={{
-              padding: '5px 14px',
-              border: '1px solid #1A73E8',
-              color: '#1A73E8',
-              fontSize: '11px',
-              fontWeight: 600,
-              borderRadius: '4px',
-              cursor: 'pointer',
-              backgroundColor: '#FFFFFF',
-              display: 'inline-block',
-            }}
-          >
-            Browse Files
-          </label>
-          <input
-            id={inputId}
-            ref={inputRef}
-            type="file"
-            accept={acceptedMimeTypes}
-            onChange={handleInputChange}
-            style={{ display: 'none' }}
-          />
-
-          <span style={{ fontSize: '10px', color: '#94A3B8', marginTop: '8px', pointerEvents: 'none' }}>
-            Supported formats: {allowedExtensions.map((e) => `.${e}`).join(', ')} (up to 25 MB)
-          </span>
-        </div>
-
-        {/* Validation Error Banner */}
-        {errorMessage && (
-          <div
-            style={{
-              marginTop: '10px',
-              padding: '8px 10px',
-              backgroundColor: '#FEF2F2',
-              border: '1px solid #FCA5A5',
-              borderRadius: '5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '11px',
-              color: '#B91C1C',
-            }}
-          >
-            <AlertCircle size={14} style={{ flexShrink: 0 }} />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Selected File Card */}
-      {fileState && (
-        <div
-          style={{
-            marginTop: '12px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            backgroundColor: '#F8FAFC',
-            border: '1px solid #E2E8F0',
-            borderRadius: '5px',
-            fontSize: '11.5px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
-            <span
-              style={{
-                backgroundColor: fileState.badge.bg,
-                color: '#FFFFFF',
-                fontWeight: 700,
-                padding: '2.5px 5px',
-                borderRadius: '3px',
-                fontSize: '8.5px',
-                flexShrink: 0,
-              }}
-            >
-              {fileState.badge.label}
-            </span>
-            <div style={{ overflow: 'hidden' }}>
-              <p
-                style={{
-                  fontWeight: 600,
-                  color: '#1E293B',
-                  margin: 0,
-                  fontSize: '11.5px',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {fileState.name}
-              </p>
-              <p style={{ fontSize: '10px', color: '#94A3B8', margin: 0 }}>
-                {fileState.size}
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleRemove}
-            aria-label={`Remove file ${fileState.name}`}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#94A3B8',
-              cursor: 'pointer',
-              display: 'flex',
-              padding: '2px',
-            }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function CreateWbsScreen({ isLoading = false, onGenerateWbs }: CreateWbsScreenProps) {
-  const [projectFile, setProjectFile] = useState<UploadedFileState | null>(null);
-  const [templateFile, setTemplateFile] = useState<UploadedFileState | null>(null);
-  const [projectError, setProjectError] = useState<string | null>(null);
-  const [templateError, setTemplateError] = useState<string | null>(null);
-
-  const validateFile = (file: File, allowedExts: string[]): string | null => {
-    // 1. Explicitly check and block image files (both by MIME type and common image extensions)
-    const isImageMime = file.type && file.type.startsWith('image/');
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tiff', 'heic'];
-
-    if (isImageMime || imageExtensions.includes(ext)) {
-      return 'Image files (.png, .jpg, etc.) are not allowed. Please upload a project document.';
-    }
-
-    // 2. Strict allowed extension check
-    if (!allowedExts.includes(ext)) {
-      return `Invalid format (.${ext || 'unknown'}). Allowed: ${allowedExts.map((e) => `.${e}`).join(', ')}`;
-    }
-
-    // 3. Strict size limit check
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return `File exceeds 25 MB limit (${formatFileSize(file.size)}).`;
-    }
-
     return null;
   };
 
   const handleProjectSelect = (file: File) => {
-    const error = validateFile(file, ALLOWED_PROJECT_EXTS);
+    const error = validateFile(file, ALLOWED_PROJECT_MIMES);
     if (error) {
-      setProjectError(error);
-      return;
+      setProjectFile(null);
+      setProjectFileError(error);
+      if (projectInputRef.current) projectInputRef.current.value = '';
+    } else {
+      setProjectFile(file);
+      setProjectFileError(null);
     }
-    setProjectError(null);
-    setProjectFile({
-      name: file.name,
-      size: formatFileSize(file.size),
-      sizeBytes: file.size,
-      badge: getBadge(file.name),
-      raw: file,
-    });
   };
 
   const handleTemplateSelect = (file: File) => {
-    const error = validateFile(file, ALLOWED_TEMPLATE_EXTS);
+    const error = validateFile(file, ALLOWED_TEMPLATE_MIMES);
     if (error) {
-      setTemplateError(error);
-      return;
-    }
-    setTemplateError(null);
-    setTemplateFile({
-      name: file.name,
-      size: formatFileSize(file.size),
-      sizeBytes: file.size,
-      badge: getBadge(file.name),
-      raw: file,
-    });
-  };
-
-  const isReady = Boolean(projectFile && templateFile && !isLoading);
-
-  const handleGenerateClick = (e: MouseEvent<HTMLButtonElement>) => {
-    if (!isReady || !projectFile || !templateFile) {
-      e.preventDefault();
-      return;
-    }
-    if (onGenerateWbs) {
-      onGenerateWbs(projectFile, templateFile);
+      setTemplateFile(null);
+      setTemplateFileError(error);
+      if (templateInputRef.current) templateInputRef.current.value = '';
+    } else {
+      setTemplateFile(file);
+      setTemplateFileError(null);
     }
   };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      if (type === 'project') handleProjectSelect(file);
+      else handleTemplateSelect(file);
+    }
+  };
+
+  const handleGenerateClick = async () => {
+    if (!projectFile || !templateFile) return;
+
+    setIsSubmitting(true);
+    setSubmissionError(null);
+
+    try {
+      const { jobId } = await createWbsGenerationJob(projectFile, templateFile);
+      if (onGenerateWbs) {
+        onGenerateWbs(jobId);
+      }
+    } catch (err: unknown) {
+      setSubmissionError(err instanceof Error ? err.message : 'Failed to initialize AI analysis job.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const isFormValid = Boolean(projectFile && templateFile && !projectFileError && !templateFileError);
 
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '22px' }}>
-      
-      {/* Header */}
-      <div>
-        <h1
-          style={{
-            fontSize: '19px',
-            fontWeight: 700,
-            color: '#0F172A',
-            letterSpacing: '-0.3px',
-            margin: 0,
-          }}
-        >
-          Create a New WBS
+    <div style={{ width: '100%', boxSizing: 'border-box' }}>
+      <header style={{ marginBottom: '28px' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', margin: '0 0 6px 0', letterSpacing: '-0.3px' }}>
+          Create Work Breakdown Structure
         </h1>
-        <p style={{ fontSize: '12px', color: '#64748B', marginTop: '4px' }}>
-          Upload your project document and a reference WBS template. The AI will analyze the content and generate a planner-ready WBS.
+        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0 }}>
+          Ingest project requirements, cross-reference your industry template, and generate a Primavera P6-ready WBS.
         </p>
-      </div>
+      </header>
 
-      {/* Dual Upload Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+      {submissionError && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: '8px', color: '#DC2626', marginBottom: '24px', fontSize: '13px' }}>
+          <ShieldAlert size={18} />
+          <span>{submissionError}</span>
+        </div>
+      )}
+
+      {/* Upload Columns */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '24px', marginBottom: '32px' }}>
         
-        {/* Step 1: Project Document */}
-        <FileUploadCard
-          stepNumber={1}
-          title="Project Document"
-          description="Upload RFP, RFQ, RFI, BOQ, SOW or similar document."
-          inputId="project-document-input"
-          allowedExtensions={ALLOWED_PROJECT_EXTS}
-          acceptedMimeTypes=".pdf,.doc,.docx,.txt,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
-          icon={<FileText size={18} strokeWidth={2.2} />}
-          iconBgColor="#E8F0FE"
-          iconColor="#1A73E8"
-          activeBorderColor="#1A73E8"
-          activeBgColor="#EFF6FF"
-          fileState={projectFile}
-          errorMessage={projectError}
-          onFileSelect={handleProjectSelect}
-          onFileRemove={() => {
-            setProjectFile(null);
-            setProjectError(null);
-          }}
-        />
+        {/* Step 1: Project Scope */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '24px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#FFFFFF', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              1
+            </span>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              Project Scope Document
+            </h2>
+          </div>
+          <p style={{ fontSize: '12.5px', color: '#64748B', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            Upload your RFP, Scope of Work, Technical Specification, or BOQ document.
+          </p>
 
-        {/* Step 2: Reference Template */}
-        <FileUploadCard
-          stepNumber={2}
-          title="WBS Reference Template"
-          description="Upload your domain-specific WBS template (Excel, XML, CSV)."
-          inputId="template-document-input"
-          allowedExtensions={ALLOWED_TEMPLATE_EXTS}
-          acceptedMimeTypes=".xlsx,.xls,.csv,.xml,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/xml,application/xml"
-          icon={<FileSpreadsheet size={18} strokeWidth={2.2} />}
-          iconBgColor="#E6F4EA"
-          iconColor="#188038"
-          activeBorderColor="#188038"
-          activeBgColor="#E6F4EA"
-          fileState={templateFile}
-          errorMessage={templateError}
-          onFileSelect={handleTemplateSelect}
-          onFileRemove={() => {
-            setTemplateFile(null);
-            setTemplateError(null);
-          }}
-        />
-
-      </div>
-
-      {/* Info Banner & CTA */}
-      <div
-        style={{
-          backgroundColor: '#E8F0FE',
-          border: '1px solid #D2E3FC',
-          borderRadius: '6px',
-          padding: '12px 18px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '14px',
-          flexWrap: 'wrap',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
+          <div 
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleDrop(e, 'project')}
+            onClick={() => projectInputRef.current?.click()}
             style={{
-              width: '18px',
-              height: '18px',
-              backgroundColor: '#1A73E8',
-              borderRadius: '50%',
-              color: '#FFFFFF',
+              flex: 1,
+              border: '2px dashed #CBD5E1',
+              borderRadius: '8px',
+              padding: '28px 16px',
+              textAlign: 'center',
+              backgroundColor: '#F8FAFC',
+              cursor: 'pointer',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              flexShrink: 0,
+              transition: 'border-color 0.2s ease',
             }}
           >
-            <Info size={12} strokeWidth={2.4} />
+            <FileUp size={34} color="#3B82F6" style={{ marginBottom: '10px' }} />
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', margin: '0 0 4px 0' }}>
+              Click to upload or drag & drop
+            </p>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>
+              PDF, DOCX, XLSX up to 25MB
+            </span>
+            <input 
+              ref={projectInputRef} 
+              type="file" 
+              accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" 
+              style={{ display: 'none' }}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                if (e.target.files && e.target.files[0]) handleProjectSelect(e.target.files[0]);
+              }}
+            />
           </div>
-          <p style={{ fontSize: '11.5px', color: '#174EA6', fontWeight: 500, margin: 0 }}>
-            The AI will extract project scope, map it to your template, identify gaps, and generate a traceable first-draft WBS.
-          </p>
+
+          {projectFile && (
+            <div style={{ marginTop: '14px', padding: '10px 12px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                <CheckCircle size={16} color="#16A34A" />
+                <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#166534', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {projectFile.name}
+                </span>
+              </div>
+              <button 
+                type="button" 
+                aria-label="Remove project file"
+                onClick={() => { setProjectFile(null); if (projectInputRef.current) projectInputRef.current.value = ''; }} 
+                style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
+
+          {projectFileError && (
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontSize: '12px' }}>
+              <AlertCircle size={15} /> {projectFileError}
+            </div>
+          )}
         </div>
 
-        {/* CTA Button */}
+        {/* Step 2: Reference Template */}
+        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '24px', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+            <span style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: '#2563EB', color: '#FFFFFF', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              2
+            </span>
+            <h2 style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+              Reference WBS Template
+            </h2>
+          </div>
+          <p style={{ fontSize: '12.5px', color: '#64748B', margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            Upload your organization or domain baseline WBS hierarchy.
+          </p>
+
+          <div 
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleDrop(e, 'template')}
+            onClick={() => templateInputRef.current?.click()}
+            style={{
+              flex: 1,
+              border: '2px dashed #CBD5E1',
+              borderRadius: '8px',
+              padding: '28px 16px',
+              textAlign: 'center',
+              backgroundColor: '#F8FAFC',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'border-color 0.2s ease',
+            }}
+          >
+            <FileSpreadsheet size={34} color="#10B981" style={{ marginBottom: '10px' }} />
+            <p style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', margin: '0 0 4px 0' }}>
+              Click to upload or drag & drop
+            </p>
+            <span style={{ fontSize: '11px', color: '#64748B' }}>
+              XLSX, CSV, XML (Primavera P6) up to 25MB
+            </span>
+            <input 
+              ref={templateInputRef} 
+              type="file" 
+              accept=".xlsx,.xls,.csv,.xml" 
+              style={{ display: 'none' }}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                if (e.target.files && e.target.files[0]) handleTemplateSelect(e.target.files[0]);
+              }}
+            />
+          </div>
+
+          {templateFile && (
+            <div style={{ marginTop: '14px', padding: '10px 12px', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+                <CheckCircle size={16} color="#16A34A" />
+                <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#166534', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                  {templateFile.name}
+                </span>
+              </div>
+              <button 
+                type="button" 
+                aria-label="Remove template file"
+                onClick={() => { setTemplateFile(null); if (templateInputRef.current) templateInputRef.current.value = ''; }} 
+                style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
+
+          {templateFileError && (
+            <div style={{ marginTop: '12px', display: 'flex', alignItems: 'center', gap: '6px', color: '#DC2626', fontSize: '12px' }}>
+              <AlertCircle size={15} /> {templateFileError}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Primary Action Button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '10px' }}>
         <button
           type="button"
+          disabled={!isFormValid || isSubmitting}
           onClick={handleGenerateClick}
-          disabled={!isReady}
-          title={!isReady ? 'Please upload valid documents for both steps to enable generation' : 'Generate Draft WBS'}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: '6px',
-            padding: '7px 16px',
-            backgroundColor: isReady ? '#1A73E8' : '#A0C5F8',
+            gap: '8px',
+            padding: '10px 22px',
+            backgroundColor: isFormValid && !isSubmitting ? '#2563EB' : '#94A3B8',
             color: '#FFFFFF',
-            fontSize: '11.5px',
-            fontWeight: 600,
-            borderRadius: '4px',
+            borderRadius: '6px',
             border: 'none',
-            cursor: isReady ? 'pointer' : 'not-allowed',
-            opacity: isReady ? 1 : 0.8,
-            boxShadow: isReady ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-            flexShrink: 0,
-            transition: 'all 0.15s ease',
-            userSelect: 'none',
+            fontSize: '13.5px',
+            fontWeight: 600,
+            cursor: isFormValid && !isSubmitting ? 'pointer' : 'not-allowed',
+            transition: 'background-color 0.15s ease'
           }}
         >
-          {isLoading ? (
-            <>
-              <Loader2 size={13} className="animate-spin" />
-              <span>Analyzing Documents...</span>
-            </>
-          ) : (
-            <>
-              <span>Generate Draft WBS</span>
-              <ArrowRight size={12} strokeWidth={2.2} />
-            </>
-          )}
+          <span>{isSubmitting ? 'Initializing Job...' : 'Generate Draft WBS'}</span>
+          <ArrowRight size={16} />
         </button>
       </div>
-
     </div>
   );
 }

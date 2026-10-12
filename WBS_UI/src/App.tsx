@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import AppLayout from './components/AppLayout';
 import CreateWbsScreen from './views/CreateWbsScreen';
 import AnalyzingProjectScreen from './views/AnalyzingProjectScreen';
@@ -8,42 +8,83 @@ import { resetJobStatusSimulation } from './services/wbsService';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('create');
-  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('create');
-  const [activeJobId, setActiveJobId] = useState<string>('job_wbs_89412');
   
-  // Controls which sub-tab opens when switching to Screen 3
+  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('create');
+  const [activeJobId, setActiveJobId] = useState<string>('');
+  
   const [targetResultTab, setTargetResultTab] = useState<'structure' | 'coverage' | 'insights' | 'unmapped'>('structure');
 
-  const handleGenerateWbs = () => {
-    resetJobStatusSimulation();
-    setActiveJobId('job_wbs_89412');
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearPendingNavigation = () => {
+    if (advanceTimerRef.current) {
+      clearTimeout(advanceTimerRef.current);
+      advanceTimerRef.current = null;
+    }
+  };
+
+  const handleGenerateWbs = (newJobId: string) => {
+    clearPendingNavigation();
+    setActiveJobId(newJobId);
+    resetJobStatusSimulation(newJobId);
     setTargetResultTab('structure');
     setCurrentScreen('analyzing');
   };
 
   const handleAnalysisComplete = () => {
-    setTimeout(() => {
+    clearPendingNavigation();
+    advanceTimerRef.current = setTimeout(() => {
       setTargetResultTab('structure');
       setCurrentScreen('results');
-    }, 1000);
+      advanceTimerRef.current = null;
+    }, 800);
+  };
+
+  const handleCancelAnalysis = () => {
+    clearPendingNavigation();
+    setCurrentScreen('create');
   };
 
   const handleRegenerate = () => {
-    resetJobStatusSimulation();
-    setCurrentScreen('analyzing');
-  };
-
-  const handleNavClick = (tab: string) => {
-    setActiveTab(tab);
-    if (tab === 'create' && currentScreen === 'results') {
+    clearPendingNavigation();
+    if (activeJobId) {
+      resetJobStatusSimulation(activeJobId);
+      setCurrentScreen('analyzing');
+    } else {
       setCurrentScreen('create');
     }
   };
 
-  // Navigates directly from Screen 4 to the Unmapped Requirements tab in Screen 3
+  const handleNavigateToValidation = () => {
+    clearPendingNavigation();
+    setCurrentScreen('validation');
+  };
+
+  const handleBackToResults = () => {
+    clearPendingNavigation();
+    setTargetResultTab('structure');
+    setCurrentScreen('results');
+  };
+
+  const handleCreateNewWbs = () => {
+    clearPendingNavigation();
+    resetJobStatusSimulation();
+    setActiveJobId('');
+    setCurrentScreen('create');
+  };
+
   const handleViewAllUnmapped = () => {
+    clearPendingNavigation();
     setTargetResultTab('unmapped');
     setCurrentScreen('results');
+  };
+
+  const handleNavClick = (tab: string) => {
+    clearPendingNavigation();
+    setActiveTab(tab);
+    if (tab === 'create') {
+      setCurrentScreen('create');
+    }
   };
 
   const renderContent = () => {
@@ -51,27 +92,34 @@ export default function App() {
       if (currentScreen === 'create') {
         return <CreateWbsScreen onGenerateWbs={handleGenerateWbs} />;
       }
+
       if (currentScreen === 'analyzing') {
-        return <AnalyzingProjectScreen jobId={activeJobId} onAnalysisComplete={handleAnalysisComplete} />;
+        return (
+          <AnalyzingProjectScreen
+            jobId={activeJobId}
+            onAnalysisComplete={handleAnalysisComplete}
+            onCancel={handleCancelAnalysis}
+          />
+        );
       }
+
       if (currentScreen === 'validation') {
         return (
           <WbsValidationScreen
             jobId={activeJobId}
-            onBackToResults={() => {
-              setTargetResultTab('structure');
-              setCurrentScreen('results');
-            }}
+            onBackToResults={handleBackToResults}
             onViewUnmapped={handleViewAllUnmapped}
+            onCreateNew={handleCreateNewWbs}
           />
         );
       }
+
       return (
         <WbsResultScreen
           jobId={activeJobId}
           initialTab={targetResultTab}
           onRegenerate={handleRegenerate}
-          onNavigateToValidation={() => setCurrentScreen('validation')}
+          onNavigateToValidation={handleNavigateToValidation}
         />
       );
     }
@@ -96,7 +144,15 @@ export default function App() {
   };
 
   return (
-    <AppLayout activeTab={activeTab} onNavClick={handleNavClick}>
+    <AppLayout 
+      activeTab={activeTab} 
+      onNavClick={handleNavClick}
+      currentUser={{
+        name: 'John Doe',
+        role: 'Lead Planner',
+        initials: 'JD'
+      }}
+    >
       {renderContent()}
     </AppLayout>
   );
