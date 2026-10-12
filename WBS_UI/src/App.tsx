@@ -1,140 +1,110 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import AppLayout from './components/AppLayout';
 import CreateWbsScreen from './views/CreateWbsScreen';
-import AnalyzingProjectScreen from './views/AnalyzingProjectScreen';
-import WbsResultScreen from './views/WbsResultScreen';
-import WbsValidationScreen from './views/WbsValidationScreen';
-import { resetJobStatusSimulation } from './services/wbsService';
+import { Loader2, ArrowRight } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('create');
-  
-  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('create');
   const [activeJobId, setActiveJobId] = useState<string>('');
-  
-  const [targetResultTab, setTargetResultTab] = useState<'structure' | 'coverage' | 'insights' | 'unmapped'>('structure');
-
-  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearPendingNavigation = () => {
-    if (advanceTimerRef.current) {
-      clearTimeout(advanceTimerRef.current);
-      advanceTimerRef.current = null;
-    }
-  };
 
   const handleGenerateWbs = (newJobId: string) => {
-    clearPendingNavigation();
     setActiveJobId(newJobId);
-    resetJobStatusSimulation(newJobId);
-    setTargetResultTab('structure');
-    setCurrentScreen('analyzing');
-  };
-
-  const handleAnalysisComplete = () => {
-    clearPendingNavigation();
-    advanceTimerRef.current = setTimeout(() => {
-      setTargetResultTab('structure');
-      setCurrentScreen('results');
-      advanceTimerRef.current = null;
-    }, 800);
-  };
-
-  const handleCancelAnalysis = () => {
-    clearPendingNavigation();
-    setCurrentScreen('create');
-  };
-
-  const handleRegenerate = () => {
-    clearPendingNavigation();
-    if (activeJobId) {
-      resetJobStatusSimulation(activeJobId);
-      setCurrentScreen('analyzing');
-    } else {
-      setCurrentScreen('create');
-    }
-  };
-
-  const handleNavigateToValidation = () => {
-    clearPendingNavigation();
-    setCurrentScreen('validation');
-  };
-
-  const handleBackToResults = () => {
-    clearPendingNavigation();
-    setTargetResultTab('structure');
-    setCurrentScreen('results');
-  };
-
-  const handleCreateNewWbs = () => {
-    clearPendingNavigation();
-    resetJobStatusSimulation();
-    setActiveJobId('');
-    setCurrentScreen('create');
-  };
-
-  const handleViewAllUnmapped = () => {
-    clearPendingNavigation();
-    setTargetResultTab('unmapped');
-    setCurrentScreen('results');
   };
 
   const handleNavClick = (tab: string) => {
-    clearPendingNavigation();
     setActiveTab(tab);
-    if (tab === 'create') {
-      setCurrentScreen('create');
-    }
   };
 
   const renderContent = () => {
     if (activeTab === 'create') {
-      if (currentScreen === 'create') {
-        return <CreateWbsScreen onGenerateWbs={handleGenerateWbs} />;
-      }
-
-      if (currentScreen === 'analyzing') {
+      if (activeJobId) {
         return (
-          <AnalyzingProjectScreen
-            jobId={activeJobId}
-            onAnalysisComplete={handleAnalysisComplete}
-            onCancel={handleCancelAnalysis}
-          />
+          <div
+            style={{
+              padding: '48px 32px',
+              textAlign: 'center',
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid #E2E8F0',
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+              maxWidth: '600px',
+              margin: '20px auto',
+            }}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                backgroundColor: '#EFF6FF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px auto',
+              }}
+            >
+              <Loader2 size={24} color="#2563EB" style={{ animation: 'spin 1s linear infinite' }} />
+            </div>
+
+            <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', margin: '0 0 8px 0' }}>
+              Project Intake Accepted & Verified
+            </h2>
+
+            <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6', margin: '0 0 16px 0' }}>
+              Both scope and baseline template documents passed validation gates. Analysis pipeline initialized with ID:
+            </p>
+
+            <div
+              style={{
+                display: 'inline-block',
+                padding: '6px 14px',
+                backgroundColor: '#F1F5F9',
+                borderRadius: '6px',
+                fontFamily: 'monospace',
+                fontSize: '13px',
+                fontWeight: 600,
+                color: '#1E293B',
+                marginBottom: '24px',
+              }}
+            >
+              {activeJobId}
+            </div>
+
+            <p style={{ fontSize: '12px', color: '#94A3B8', margin: '0 0 24px 0' }}>
+              (Screen 2 Pipeline Visualizer connects here on <code>feature/screen-2-analysis</code>)
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setActiveJobId('')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 18px',
+                backgroundColor: '#F8FAFC',
+                border: '1px solid #CBD5E1',
+                color: '#334155',
+                borderRadius: '6px',
+                fontSize: '13px',
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              <span>Upload New Documents</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
         );
       }
 
-      if (currentScreen === 'validation') {
-        return (
-          <WbsValidationScreen
-            jobId={activeJobId}
-            onBackToResults={handleBackToResults}
-            onViewUnmapped={handleViewAllUnmapped}
-            onCreateNew={handleCreateNewWbs}
-          />
-        );
-      }
-
-      return (
-        <WbsResultScreen
-          jobId={activeJobId}
-          initialTab={targetResultTab}
-          onRegenerate={handleRegenerate}
-          onNavigateToValidation={handleNavigateToValidation}
-        />
-      );
+      return <CreateWbsScreen onGenerateWbs={handleGenerateWbs} />;
     }
-
-    const titles: Record<string, string> = {
-      projects: 'My Projects',
-      templates: 'Templates',
-      exports: 'Exports',
-      settings: 'Settings',
-    };
 
     return (
       <div style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
         <h2 style={{ fontSize: '20px', color: '#0F172A', marginBottom: '8px' }}>
-          {titles[activeTab] || 'Section Under Development'}
+          Section Under Development
         </h2>
         <p style={{ fontSize: '14px', margin: 0 }}>
           This section is currently being configured and will be available soon.
