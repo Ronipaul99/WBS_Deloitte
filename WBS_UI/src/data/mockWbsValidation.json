@@ -1,0 +1,68 @@
+{
+  "jobId": "job_wbs_89412",
+  "projectName": "200 MW Solar Power Plant",
+  "version": "Draft v1.0",
+  "breadcrumbs": ["Projects", "Solar Plant", "Validation"],
+  "summaryCards": {
+    "wbsItems": {
+      "count": 16,
+      "phasesCount": 6,
+      "workPackagesCount": 10
+    },
+    "scopeCoverage": {
+      "percentage": 94,
+      "mapped": 134,
+      "total": 142
+    },
+    "itemsAdded": {
+      "count": 4,
+      "subtext": "Not in template"
+    },
+    "potentialGaps": {
+      "count": 2,
+      "subtext": "Review recommended"
+    }
+  },
+  "validationChecks": [
+    {
+      "id": "chk-1",
+      "title": "Hierarchy consistency",
+      "description": "Standard Primavera P6 numeric structure validated without orphan branches.",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-2",
+      "title": "No duplicate work packages",
+      "description": "No redundant package deliverables detected in active tree.",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-3",
+      "title": "Source coverage",
+      "description": "Over 90% of contract clauses are mapped to deliverable packages.",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-4",
+      "title": "Template alignment",
+      "description": "Project structure follows domain baseline pattern.",
+      "status": "PASSED"
+    },
+    {
+      "id": "chk-5",
+      "title": "Activities may be too broad",
+      "description": "3 terminal work packages exceed standard duration guidelines.",
+      "status": "WARNING",
+      "actionLabel": "View"
+    },
+    {
+      "id": "chk-6",
+      "title": "Requirements with no mapping",
+      "description": "Contract clauses pending terminal package assignment.",
+      "status": "WARNING",
+      "actionLabel": "View"
+    }
+  ],
+  "unmappedRequirements": [],
+  "aiRecommendations": []
+}
