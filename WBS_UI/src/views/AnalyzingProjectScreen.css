@@ -1,0 +1,353 @@
+/* Animation Keyframes */
+@keyframes wbsSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wbs-spinner {
+  animation: wbsSpin 0.9s linear infinite !important;
+  transform-origin: center center !important;
+  display: block !important;
+}
+
+/* Base View Layout */
+.wbs-analysis-container {
+  padding: 24px clamp(16px, 3vw, 36px);
+  max-width: 1150px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-analysis-header {
+  margin-bottom: 32px;
+}
+
+.wbs-analysis-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.wbs-analysis-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.wbs-analysis-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.wbs-cancel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.wbs-cancel-btn:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* Stepper & Side Card Grid */
+.wbs-stepper-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 32px;
+  align-items: start;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-stepper-track {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-step-row {
+  display: flex;
+  align-items: flex-start;
+  min-height: 62px;
+  position: relative;
+}
+
+.wbs-step-line {
+  position: absolute;
+  top: 28px;
+  left: 13px;
+  bottom: 0px;
+  width: 2px;
+  z-index: 1;
+  transition: background-color 0.4s ease;
+}
+
+.wbs-step-line-completed {
+  background-color: #16a34a;
+}
+
+.wbs-step-line-pending {
+  background-color: #e2e8f0;
+}
+
+.wbs-step-indicator-wrapper {
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.wbs-step-body {
+  padding-bottom: 18px;
+}
+
+.wbs-step-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  transition: color 0.3s ease;
+}
+
+.wbs-step-title-active {
+  color: #1e293b;
+}
+
+.wbs-step-title-inactive {
+  color: #94a3b8;
+}
+
+.wbs-step-desc {
+  font-size: 13px;
+  margin-top: 2px;
+  transition: color 0.3s ease;
+}
+
+.wbs-step-desc-active {
+  color: #64748b;
+}
+
+.wbs-step-desc-inactive {
+  color: #cbd5e1;
+}
+
+/* Step Indicators */
+.wbs-indicator-completed {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #16a34a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  z-index: 2;
+  transition: all 0.35s ease-in-out;
+  box-shadow: 0 0 0 3px #dcfce7;
+}
+
+.wbs-indicator-in-progress {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2.5px solid #2563eb;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  box-shadow: 0 0 0 3px #dbeafe;
+}
+
+.wbs-indicator-pending {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #cbd5e1;
+  z-index: 2;
+  transition: all 0.3s ease;
+}
+
+/* Side Info Card */
+.wbs-side-card {
+  background-color: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 40px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 320px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.wbs-side-card-icon-box {
+  width: 90px;
+  height: 110px;
+  background-color: #eef2f6;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.wbs-side-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.wbs-side-card-desc {
+  font-size: 13px;
+  color: #64748b;
+  max-width: 280px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Initial Loading View */
+.wbs-init-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 380px;
+  gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-init-loading-text {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* Error Cards (Missing ID / Pipeline Fatal) */
+.wbs-missing-id-card {
+  padding: 40px 24px;
+  max-width: 600px;
+  margin: 40px auto;
+  background-color: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  text-align: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.wbs-fatal-error-card {
+  padding: 40px 24px;
+  max-width: 650px;
+  margin: 40px auto;
+  background-color: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #fca5a5;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.06);
+  text-align: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.wbs-error-icon-box {
+  width: 48px;
+  height: 48px;
+  background-color: #fee2e2;
+  color: #dc2626;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+}
+
+.wbs-card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.wbs-card-description {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 20px 0;
+}
+
+.wbs-fatal-description {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+}
+
+.wbs-error-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wbs-btn-primary {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background-color: #0284c7;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.wbs-btn-primary:hover {
+  background-color: #0369a1;
+}
+
+.wbs-btn-secondary {
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.wbs-btn-secondary:hover {
+  background-color: #f8fafc;
+}

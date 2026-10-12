@@ -25,6 +25,7 @@ import {
   WbsNode,
   UnmappedRequirement,
 } from '../services/wbsService';
+import './WbsResultScreen.css';
 
 export type WbsScreenTab = 'structure' | 'coverage' | 'insights' | 'unmapped' | 'hierarchy' | 'scope';
 
@@ -193,16 +194,22 @@ const AccessibleModal: FC<AccessibleModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-heading"
-      style={modalBackdrop}
+      className="wbs-modal-backdrop"
       onClick={onClose}
     >
       <div
         ref={modalRef}
-        style={{ ...modalBox, maxWidth }}
+        className="wbs-modal-box"
+        style={{ maxWidth }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={modalHeader}>
-          <h3 id="modal-heading" style={{ fontSize: '15px', fontWeight: 600, color: isDestructive ? '#DC2626' : '#0F172A', margin: 0 }}>
+        <div className="wbs-modal-header">
+          <h3
+            id="modal-heading"
+            className={`wbs-modal-title ${
+              isDestructive ? 'wbs-modal-title-destructive' : 'wbs-modal-title-standard'
+            }`}
+          >
             {title}
           </h3>
           <button
@@ -210,7 +217,7 @@ const AccessibleModal: FC<AccessibleModalProps> = ({
             type="button"
             aria-label="Close dialog"
             onClick={onClose}
-            style={closeBtn}
+            className="wbs-modal-close-btn"
           >
             <X size={16} />
           </button>
@@ -615,69 +622,39 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       const isSelected = selectedNodeId === node.id;
 
       return (
-        <div key={node.id} style={{ display: 'flex', flexDirection: 'column' }}>
+        <div key={node.id} className="wbs-tree-row-wrapper">
           <div
             onClick={() => setSelectedNodeId(node.id)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '8px 12px',
-              paddingLeft: `${depth * 18 + 12}px`,
-              borderBottom: '1px solid #F1F5F9',
-              backgroundColor: isSelected ? '#EFF6FF' : '#FFFFFF',
-              cursor: 'pointer',
-              userSelect: 'none',
-              transition: 'background 0.1s ease',
-            }}
+            className={`wbs-tree-row ${isSelected ? 'wbs-tree-row-selected' : 'wbs-tree-row-unselected'}`}
+            style={{ paddingLeft: `${depth * 18 + 12}px` }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+            <div className="wbs-tree-row-left">
               <div
                 onClick={(e) => hasChildren && toggleExpand(node.id, e)}
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: hasChildren ? 'pointer' : 'default',
-                  color: '#64748B',
-                }}
+                className="wbs-tree-toggle-btn"
+                style={{ cursor: hasChildren ? 'pointer' : 'default' }}
               >
                 {hasChildren ? (
                   isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
                 ) : (
-                  <span style={{ width: '14px' }} />
+                  <span className="wbs-tree-toggle-spacer" />
                 )}
               </div>
 
-              <span style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', flexShrink: 0 }}>
+              <span className="wbs-tree-node-code">
                 {node.code}
               </span>
 
               <span
-                style={{
-                  fontSize: '13px',
-                  fontWeight: isSelected ? 600 : 400,
-                  color: isSelected ? '#1A73E8' : '#334155',
-                  whiteSpace: 'nowrap',
-                  textOverflow: 'ellipsis',
-                  overflow: 'hidden',
-                }}
+                className={`wbs-tree-node-name ${
+                  isSelected ? 'wbs-tree-node-name-selected' : 'wbs-tree-node-name-unselected'
+                }`}
               >
                 {node.name}
               </span>
             </div>
 
-            <div
-              style={{
-                fontSize: '12px',
-                color: '#64748B',
-                textAlign: 'right',
-                flexShrink: 0,
-                paddingLeft: '12px',
-              }}
-            >
+            <div className="wbs-tree-node-type">
               {node.type}
             </div>
           </div>
@@ -690,56 +667,26 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
   if (isLoading) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '460px',
-          gap: '12px',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-        }}
-      >
-        <RefreshCw size={30} color="#1A73E8" style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontSize: '13px', color: '#64748B' }}>Loading WBS hierarchy & contracts...</span>
+      <div className="wbs-state-loading">
+        <RefreshCw size={30} color="#1A73E8" className="wbs-spin-icon" />
+        <span className="wbs-state-loading-text">Loading WBS hierarchy & contracts...</span>
       </div>
     );
   }
 
   if (loadError || !data) {
     return (
-      <div
-        style={{
-          maxWidth: '520px',
-          margin: '60px auto',
-          padding: '32px',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '8px',
-          border: '1px solid #FCA5A5',
-          textAlign: 'center',
-          fontFamily: 'system-ui, -apple-system, sans-serif',
-        }}
-      >
-        <AlertTriangle size={32} color="#DC2626" style={{ margin: '0 auto 12px auto' }} />
-        <h2 style={{ fontSize: '17px', fontWeight: 600, color: '#0F172A', margin: '0 0 6px 0' }}>
+      <div className="wbs-state-error-card">
+        <AlertTriangle size={32} color="#DC2626" className="wbs-error-icon-top" />
+        <h2 className="wbs-error-heading">
           Unable to Load WBS
         </h2>
-        <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 20px 0' }}>
+        <p className="wbs-error-text">
           {loadError || 'The WBS results could not be retrieved.'}
         </p>
         <button
           onClick={() => window.location.reload()}
-          style={{
-            padding: '6px 16px',
-            fontSize: '12.5px',
-            borderRadius: '6px',
-            border: 'none',
-            backgroundColor: '#1A73E8',
-            color: '#FFFFFF',
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
+          className="wbs-retry-btn"
         >
           Retry
         </button>
@@ -751,38 +698,14 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
   const unmappedCount = data.unmappedRequirements?.length ?? 0;
 
   return (
-    <div
-      style={{
-        padding: '24px clamp(16px, 3vw, 32px)',
-        maxWidth: '1440px',
-        margin: '0 auto',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-        backgroundColor: '#F8FAFC',
-        minHeight: '100%',
-        boxSizing: 'border-box',
-        width: '100%',
-      }}
-    >
+    <div className="wbs-result-container">
       {actionError && (
-        <div
-          style={{
-            backgroundColor: '#FEF2F2',
-            border: '1px solid #FCA5A5',
-            borderRadius: '6px',
-            padding: '10px 14px',
-            color: '#DC2626',
-            fontSize: '13px',
-            marginBottom: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
+        <div className="wbs-action-error-banner">
           <span>{actionError}</span>
           <button
             type="button"
             onClick={() => setActionError(null)}
-            style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer' }}
+            className="wbs-banner-close-btn"
           >
             <X size={15} />
           </button>
@@ -790,21 +713,12 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       )}
 
       {/* Header Row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '16px',
-        }}
-      >
+      <div className="wbs-result-header-row">
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' }}>
+          <h1 className="wbs-header-title">
             AI WBS Builder
           </h1>
-          <div style={{ fontSize: '12.5px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          <div className="wbs-header-meta">
             <span>Project: <strong>{data.projectName}</strong></span>
             <span>|</span>
             <span>{data.version || 'Draft v1.0'}</span>
@@ -814,26 +728,13 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="wbs-header-actions">
           {onRegenerate && (
             <button
               type="button"
               disabled={isSaving}
               onClick={onRegenerate}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                fontSize: '12.5px',
-                fontWeight: 500,
-                color: '#1E293B',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #CBD5E1',
-                borderRadius: '6px',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                opacity: isSaving ? 0.6 : 1,
-              }}
+              className="wbs-btn-regenerate"
             >
               <RotateCcw size={13} />
               <span>Regenerate</span>
@@ -845,20 +746,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
               type="button"
               disabled={isSaving}
               onClick={handleValidate}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                fontSize: '12.5px',
-                fontWeight: 600,
-                color: '#FFFFFF',
-                backgroundColor: '#2563EB',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                opacity: isSaving ? 0.6 : 1,
-              }}
+              className="wbs-btn-validate"
             >
               <CheckSquare size={13} color="#FFFFFF" />
               <span>Validate & Proceed</span>
@@ -866,25 +754,12 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
           )}
 
           {/* Export Dropdown */}
-          <div style={{ position: 'relative' }} ref={exportMenuRef}>
+          <div className="wbs-export-dropdown-wrapper" ref={exportMenuRef}>
             <button
               type="button"
               disabled={isSaving}
               onClick={() => setShowExportMenu(!showExportMenu)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                fontSize: '12.5px',
-                fontWeight: 500,
-                color: '#FFFFFF',
-                backgroundColor: '#1E293B',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                opacity: isSaving ? 0.6 : 1,
-              }}
+              className="wbs-btn-export"
             >
               <Download size={13} />
               <span>Export</span>
@@ -892,27 +767,11 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
             </button>
 
             {showExportMenu && (
-              <div
-                style={{
-                  position: 'absolute',
-                  right: 0,
-                  top: '100%',
-                  marginTop: '6px',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: '6px',
-                  border: '1px solid #E2E8F0',
-                  boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                  width: '210px',
-                  zIndex: 50,
-                  overflow: 'hidden',
-                }}
-              >
+              <div className="wbs-export-menu">
                 <button
                   type="button"
                   onClick={handleExportExcel}
-                  style={dropdownItemStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  className="wbs-export-item"
                 >
                   <FileSpreadsheet size={15} color="#16A34A" />
                   <span>Export as Excel (.csv)</span>
@@ -921,9 +780,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 <button
                   type="button"
                   onClick={handleExportJson}
-                  style={dropdownItemStyle}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  className="wbs-export-item"
                 >
                   <FileCode size={15} color="#1A73E8" />
                   <span>Export as JSON</span>
@@ -932,9 +789,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 <button
                   type="button"
                   onClick={handleExportP6Xml}
-                  style={{ ...dropdownItemStyle, borderTop: '1px solid #F1F5F9' }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F8FAFC')}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  className="wbs-export-item wbs-export-item-divider"
                 >
                   <Share2 size={15} color="#059669" />
                   <span>Export as Primavera P6 (XML)</span>
@@ -946,7 +801,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '28px', borderBottom: '1px solid #E2E8F0', marginBottom: '20px', overflowX: 'auto' }}>
+      <div className="wbs-tabs-container">
         {[
           { key: 'structure', label: 'WBS Structure' },
           { key: 'coverage', label: 'Scope Coverage' },
@@ -960,17 +815,9 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
             type="button"
             key={tab.key}
             onClick={() => setActiveTab(tab.key as typeof activeTab)}
-            style={{
-              background: 'none',
-              border: 'none',
-              padding: '10px 0',
-              fontSize: '13px',
-              fontWeight: activeTab === tab.key ? 700 : 500,
-              color: activeTab === tab.key ? '#1A73E8' : '#64748B',
-              borderBottom: activeTab === tab.key ? '2.5px solid #1A73E8' : '2.5px solid transparent',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
+            className={`wbs-tab-btn ${
+              activeTab === tab.key ? 'wbs-tab-btn-active' : 'wbs-tab-btn-inactive'
+            }`}
           >
             {tab.label}
           </button>
@@ -979,195 +826,100 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
       {/* TAB 1: STRUCTURE */}
       {activeTab === 'structure' && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
-            gap: '20px',
-            alignItems: 'start',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
+        <div className="wbs-structure-grid">
           {/* Tree View */}
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #E2E8F0',
-              borderRadius: '8px',
-              overflow: 'hidden',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-              boxSizing: 'border-box',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                padding: '10px 16px',
-                backgroundColor: '#F8FAFC',
-                borderBottom: '1px solid #E2E8F0',
-                fontSize: '12px',
-                fontWeight: 600,
-                color: '#64748B',
-              }}
-            >
+          <div className="wbs-tree-card">
+            <div className="wbs-tree-card-header">
               <span>WBS</span>
               <span>Type</span>
             </div>
 
-            <div style={{ maxHeight: '720px', overflowY: 'auto' }}>
+            <div className="wbs-tree-scroll-area">
               {renderTreeRows(data.wbsTree)}
             </div>
           </div>
 
           {/* Node Inspector */}
           {selectedNode ? (
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+            <div className="wbs-inspector-card">
+              <div className="wbs-inspector-header">
+                <h2 className="wbs-inspector-title">
                   {selectedNode.code} {selectedNode.name}
                 </h2>
 
                 {selectedNode.isAiAdded && (
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      backgroundColor: '#FEF3C7',
-                      color: '#B45309',
-                      padding: '3px 8px',
-                      borderRadius: '12px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
+                  <span className="wbs-ai-badge">
                     <Sparkles size={11} /> AI Added
                   </span>
                 )}
               </div>
 
               {/* Node Details Grid */}
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))',
-                  rowGap: '14px',
-                  columnGap: '20px',
-                  fontSize: '13px',
-                }}
-              >
+              <div className="wbs-node-details-grid">
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    WBS Code
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{selectedNode.code}</span>
+                  <span className="wbs-field-label">WBS Code</span>
+                  <span className="wbs-field-val">{selectedNode.code}</span>
                 </div>
 
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    Type
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{selectedNode.type}</span>
+                  <span className="wbs-field-label">Type</span>
+                  <span className="wbs-field-val">{selectedNode.type}</span>
                 </div>
 
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    Parent
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>
-                    {parentDisplayLabel}
-                  </span>
+                  <span className="wbs-field-label">Parent</span>
+                  <span className="wbs-field-val">{parentDisplayLabel}</span>
                 </div>
 
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    Confidence
-                  </span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 600, color: '#059669' }}>
+                  <span className="wbs-field-label">Confidence</span>
+                  <div className="wbs-confidence-row">
+                    <span className="wbs-confidence-val">
                       {confidenceScore}%
                     </span>
-                    <div
-                      style={{
-                        width: '80px',
-                        height: '6px',
-                        backgroundColor: '#E2E8F0',
-                        borderRadius: '3px',
-                        overflow: 'hidden',
-                      }}
-                    >
+                    <div className="wbs-confidence-track">
                       <div
-                        style={{
-                          width: `${confidenceScore}%`,
-                          height: '100%',
-                          backgroundColor: '#10B981',
-                        }}
+                        className="wbs-confidence-fill"
+                        style={{ width: `${confidenceScore}%` }}
                       />
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    Source
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{selectedNode.source || 'RFP Scope Clause'}</span>
+                  <span className="wbs-field-label">Source</span>
+                  <span className="wbs-field-val">{selectedNode.source || 'RFP Scope Clause'}</span>
                 </div>
 
                 <div>
-                  <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '2px' }}>
-                    Template
-                  </span>
-                  <span style={{ fontWeight: 600, color: '#0F172A' }}>{selectedNode.template || 'Custom Scope Addition'}</span>
+                  <span className="wbs-field-label">Template</span>
+                  <span className="wbs-field-val">{selectedNode.template || 'Custom Scope Addition'}</span>
                 </div>
               </div>
 
               {/* Description */}
               <div>
-                <span style={{ color: '#64748B', display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-                  Description
-                </span>
-                <p style={{ fontSize: '13px', color: '#334155', lineHeight: '1.5', margin: 0 }}>
+                <span className="wbs-desc-label">Description</span>
+                <p className="wbs-desc-body">
                   {selectedNode.description}
                 </p>
               </div>
 
               {/* Source Evidence Box */}
               <div>
-                <h3 style={{ fontSize: '13.5px', fontWeight: 600, color: '#0F172A', margin: '0 0 8px 0' }}>
+                <h3 className="wbs-evidence-title">
                   Source Evidence
                 </h3>
                 {selectedNode.evidence ? (
-                  <div
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '6px',
-                      padding: '14px 16px',
-                    }}
-                  >
-                    <p style={{ fontSize: '12.5px', color: '#334155', fontStyle: 'italic', margin: '0 0 12px 0', lineHeight: '1.5' }}>
+                  <div className="wbs-evidence-box">
+                    <p className="wbs-evidence-quote">
                       "{selectedNode.evidence.text}"
                     </p>
 
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#64748B' }}>
+                    <div className="wbs-evidence-footer">
+                      <div className="wbs-evidence-meta">
                         <FileText size={15} color="#DC2626" />
-                        <span style={{ fontWeight: 500, color: '#1E293B' }}>
+                        <span className="wbs-evidence-doc-name">
                           {selectedNode.evidence.document}
                         </span>
                         <span>|</span>
@@ -1177,57 +929,26 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                       <button
                         type="button"
                         onClick={() => setViewEvidenceModal(true)}
-                        style={{
-                          padding: '4px 10px',
-                          fontSize: '11.5px',
-                          fontWeight: 600,
-                          backgroundColor: '#FFFFFF',
-                          border: '1px solid #CBD5E1',
-                          borderRadius: '4px',
-                          color: '#1E293B',
-                          cursor: 'pointer',
-                        }}
+                        className="wbs-view-doc-btn"
                       >
                         View in Document
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div
-                    style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px dashed #CBD5E1',
-                      borderRadius: '6px',
-                      padding: '12px 14px',
-                      fontSize: '12.5px',
-                      color: '#64748B',
-                    }}
-                  >
+                  <div className="wbs-evidence-empty-box">
                     No source evidence recorded for this deliverable.
                   </div>
                 )}
               </div>
 
               {/* Node Operations */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingTop: '8px', flexWrap: 'wrap' }}>
+              <div className="wbs-node-ops-row">
                 <button
                   type="button"
                   disabled={isSaving}
                   onClick={() => setEditingNode(selectedNode)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
-                    fontSize: '12.5px',
-                    fontWeight: 500,
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '5px',
-                    backgroundColor: '#FFFFFF',
-                    color: '#1E293B',
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                    opacity: isSaving ? 0.6 : 1,
-                  }}
+                  className="wbs-node-op-btn"
                 >
                   <Edit2 size={13} /> Edit
                 </button>
@@ -1242,20 +963,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                     );
                     setTargetParentId(options.find((c) => c.id === selectedNode.parent)?.id ?? options[0]?.id ?? 'Root');
                   }}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
-                    fontSize: '12.5px',
-                    fontWeight: 500,
-                    border: '1px solid #CBD5E1',
-                    borderRadius: '5px',
-                    backgroundColor: '#FFFFFF',
-                    color: '#1E293B',
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                    opacity: isSaving ? 0.6 : 1,
-                  }}
+                  className="wbs-node-op-btn"
                 >
                   <Move size={13} /> Move
                 </button>
@@ -1264,38 +972,14 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                   type="button"
                   disabled={isSaving}
                   onClick={() => setNodePendingDelete(selectedNode)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '6px 14px',
-                    fontSize: '12.5px',
-                    fontWeight: 500,
-                    border: '1px solid #FCA5A5',
-                    borderRadius: '5px',
-                    backgroundColor: '#FEF2F2',
-                    color: '#DC2626',
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                    opacity: isSaving ? 0.6 : 1,
-                  }}
+                  className="wbs-node-delete-btn"
                 >
                   <Trash2 size={13} /> Remove
                 </button>
               </div>
             </div>
           ) : (
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px dashed #CBD5E1',
-                borderRadius: '8px',
-                padding: '40px',
-                textAlign: 'center',
-                color: '#64748B',
-                fontSize: '13px',
-                boxSizing: 'border-box',
-              }}
-            >
+            <div className="wbs-inspector-placeholder">
               Select any WBS node to view and configure properties.
             </div>
           )}
@@ -1304,29 +988,29 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
       {/* TAB 2: COVERAGE */}
       {activeTab === 'coverage' && (
-        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '24px', boxSizing: 'border-box' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>Overall Score</span>
-              <div style={{ fontSize: '24px', fontWeight: 700, color: '#16A34A', marginTop: '4px' }}>
+        <div className="wbs-coverage-card">
+          <div className="wbs-coverage-grid">
+            <div className="wbs-coverage-kpi-box">
+              <span className="wbs-coverage-kpi-label">Overall Score</span>
+              <div className="wbs-kpi-val-score">
                 {data.scopeCoverage?.overallScore ?? 0}%
               </div>
             </div>
-            <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>Total Requirements</span>
-              <div style={{ fontSize: '24px', fontWeight: 700, color: '#0F172A', marginTop: '4px' }}>
+            <div className="wbs-coverage-kpi-box">
+              <span className="wbs-coverage-kpi-label">Total Requirements</span>
+              <div className="wbs-kpi-val-total">
                 {data.scopeCoverage?.totalRequirements ?? 0}
               </div>
             </div>
-            <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>Mapped to WBS</span>
-              <div style={{ fontSize: '24px', fontWeight: 700, color: '#2563EB', marginTop: '4px' }}>
+            <div className="wbs-coverage-kpi-box">
+              <span className="wbs-coverage-kpi-label">Mapped to WBS</span>
+              <div className="wbs-kpi-val-mapped">
                 {data.scopeCoverage?.mappedCount ?? 0}
               </div>
             </div>
-            <div style={{ padding: '16px', backgroundColor: '#F8FAFC', borderRadius: '6px' }}>
-              <span style={{ fontSize: '12px', color: '#64748B' }}>Potential Gaps</span>
-              <div style={{ fontSize: '24px', fontWeight: 700, color: '#DC2626', marginTop: '4px' }}>
+            <div className="wbs-coverage-kpi-box">
+              <span className="wbs-coverage-kpi-label">Potential Gaps</span>
+              <div className="wbs-kpi-val-gaps">
                 {data.scopeCoverage?.gapCount ?? 0}
               </div>
             </div>
@@ -1336,45 +1020,28 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
       {/* TAB 3: INSIGHTS */}
       {activeTab === 'insights' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="wbs-insights-container">
           {data.aiInsights?.map((insight) => (
-            <div
-              key={insight.id}
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
-                padding: '16px 20px',
-                display: 'flex',
-                gap: '12px',
-                alignItems: 'flex-start',
-                boxSizing: 'border-box',
-              }}
-            >
-              <div style={{ marginTop: '2px' }}>
+            <div key={insight.id} className="wbs-insight-card">
+              <div className="wbs-insight-icon-box">
                 {insight.type === 'RISK_WARNING' && <AlertTriangle size={18} color="#DC2626" />}
                 {insight.type === 'SCOPE_ADDITION' && <Sparkles size={18} color="#D97706" />}
                 {insight.type === 'OPTIMIZATION' && <Info size={18} color="#1A73E8" />}
               </div>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A', margin: 0 }}>
+                <div className="wbs-insight-title-row">
+                  <h4 className="wbs-insight-title">
                     {insight.title}
                   </h4>
                   <span
-                    style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
-                      padding: '2px 6px',
-                      borderRadius: '4px',
-                      backgroundColor: insight.impact === 'High' ? '#FEE2E2' : '#EFF6FF',
-                      color: insight.impact === 'High' ? '#DC2626' : '#1A73E8',
-                    }}
+                    className={`wbs-priority-badge ${
+                      insight.impact === 'High' ? 'wbs-priority-high' : 'wbs-priority-standard'
+                    }`}
                   >
                     {insight.impact} Priority
                   </span>
                 </div>
-                <p style={{ fontSize: '13px', color: '#475569', margin: '4px 0 0 0', lineHeight: '1.4' }}>
+                <p className="wbs-insight-desc">
                   {insight.description}
                 </p>
               </div>
@@ -1385,36 +1052,22 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
       {/* TAB 4: UNMAPPED REQUIREMENTS */}
       {activeTab === 'unmapped' && (
-        <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '24px', boxSizing: 'border-box' }}>
-          <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', margin: '0 0 16px 0' }}>
+        <div className="wbs-unmapped-card">
+          <h2 className="wbs-unmapped-title">
             Unmapped Requirements ({unmappedCount})
           </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div className="wbs-unmapped-list">
             {data.unmappedRequirements?.map((req) => (
-              <div
-                key={req.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '12px 16px',
-                  backgroundColor: '#FFFBEB',
-                  border: '1px solid #FDE68A',
-                  borderRadius: '6px',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                  boxSizing: 'border-box',
-                }}
-              >
+              <div key={req.id} className="wbs-unmapped-item">
                 <div>
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400E', marginRight: '8px' }}>
+                  <span className="wbs-unmapped-code">
                     {req.code}
                   </span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B' }}>
+                  <span className="wbs-unmapped-item-title">
                     {req.title}
                   </span>
-                  <p style={{ fontSize: '12px', color: '#78350F', margin: '2px 0 0 0' }}>
+                  <p className="wbs-unmapped-desc">
                     {req.reason} (Source: {req.sourceDoc})
                   </p>
                 </div>
@@ -1426,17 +1079,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                     setMappingReq(req);
                     setTargetParentId(data.wbsTree[0]?.id || 'Root');
                   }}
-                  style={{
-                    padding: '6px 12px',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    backgroundColor: '#D97706',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: isSaving ? 'not-allowed' : 'pointer',
-                    opacity: isSaving ? 0.6 : 1,
-                  }}
+                  className="wbs-map-btn"
                 >
                   Map to WBS
                 </button>
@@ -1456,29 +1099,29 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
           <>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
               <div>
-                <label htmlFor="edit-deliverable-name" style={labelStyle}>Deliverable Name</label>
+                <label htmlFor="edit-deliverable-name" className="wbs-form-label">Deliverable Name</label>
                 <input
                   id="edit-deliverable-name"
                   type="text"
                   value={editingNode.name}
                   onChange={(e) => setEditingNode({ ...editingNode, name: e.target.value })}
-                  style={inputStyle}
+                  className="wbs-form-input"
                 />
               </div>
               <div>
-                <label htmlFor="edit-deliverable-desc" style={labelStyle}>Description</label>
+                <label htmlFor="edit-deliverable-desc" className="wbs-form-label">Description</label>
                 <textarea
                   id="edit-deliverable-desc"
                   rows={4}
                   value={editingNode.description}
                   onChange={(e) => setEditingNode({ ...editingNode, description: e.target.value })}
-                  style={{ ...inputStyle, resize: 'vertical' }}
+                  className="wbs-form-textarea"
                 />
               </div>
             </div>
-            <div style={modalFooter}>
-              <button type="button" disabled={isSaving} onClick={() => setEditingNode(null)} style={cancelBtn}>Cancel</button>
-              <button type="button" disabled={isSaving} onClick={handleSaveEdit} style={submitBtn}>
+            <div className="wbs-modal-footer">
+              <button type="button" disabled={isSaving} onClick={() => setEditingNode(null)} className="wbs-modal-cancel-btn">Cancel</button>
+              <button type="button" disabled={isSaving} onClick={handleSaveEdit} className="wbs-modal-submit-btn">
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
@@ -1494,21 +1137,21 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
         {movingNode && (
           <>
             <div style={{ marginTop: '12px' }}>
-              <label htmlFor="relocate-target-parent" style={labelStyle}>Select Target Parent Node</label>
+              <label htmlFor="relocate-target-parent" className="wbs-form-label">Select Target Parent Node</label>
               <select
                 id="relocate-target-parent"
                 value={targetParentId}
                 onChange={(e) => setTargetParentId(e.target.value)}
-                style={inputStyle}
+                className="wbs-form-input"
               >
                 {moveOptions.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
             </div>
-            <div style={modalFooter}>
-              <button type="button" disabled={isSaving} onClick={() => setMovingNode(null)} style={cancelBtn}>Cancel</button>
-              <button type="button" disabled={isSaving} onClick={handleExecuteMove} style={submitBtn}>
+            <div className="wbs-modal-footer">
+              <button type="button" disabled={isSaving} onClick={() => setMovingNode(null)} className="wbs-modal-cancel-btn">Cancel</button>
+              <button type="button" disabled={isSaving} onClick={handleExecuteMove} className="wbs-modal-submit-btn">
                 {isSaving ? 'Moving...' : 'Move Deliverable'}
               </button>
             </div>
@@ -1528,13 +1171,13 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
             <p style={{ fontSize: '13px', color: '#475569', margin: '12px 0 16px 0', lineHeight: '1.5' }}>
               Are you sure you want to remove <strong>{nodePendingDelete.code} {nodePendingDelete.name}</strong>? Any child packages will also be removed.
             </p>
-            <div style={modalFooter}>
-              <button type="button" disabled={isSaving} onClick={() => setNodePendingDelete(null)} style={cancelBtn}>Cancel</button>
+            <div className="wbs-modal-footer">
+              <button type="button" disabled={isSaving} onClick={() => setNodePendingDelete(null)} className="wbs-modal-cancel-btn">Cancel</button>
               <button
                 type="button"
                 disabled={isSaving}
                 onClick={handleConfirmDelete}
-                style={{ ...submitBtn, backgroundColor: '#DC2626' }}
+                className="wbs-modal-submit-btn wbs-modal-submit-btn-danger"
               >
                 {isSaving ? 'Removing...' : 'Confirm Remove'}
               </button>
@@ -1551,16 +1194,16 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       >
         {selectedNode?.evidence && (
           <>
-            <div style={{ marginTop: '14px', backgroundColor: '#F8FAFC', padding: '16px', borderRadius: '6px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '4px' }}>
+            <div className="wbs-evidence-preview-box">
+              <div className="wbs-evidence-section-header">
                 {selectedNode.evidence.section}
               </div>
-              <p style={{ fontSize: '13px', color: '#1E293B', lineHeight: '1.6', margin: 0 }}>
+              <p className="wbs-evidence-dialog-text">
                 "{selectedNode.evidence.text}"
               </p>
             </div>
-            <div style={modalFooter}>
-              <button type="button" onClick={() => setViewEvidenceModal(false)} style={submitBtn}>Done</button>
+            <div className="wbs-modal-footer">
+              <button type="button" onClick={() => setViewEvidenceModal(false)} className="wbs-modal-submit-btn">Done</button>
             </div>
           </>
         )}
@@ -1578,12 +1221,12 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 <strong>{mappingReq.code}:</strong> {mappingReq.title}
               </div>
               <div>
-                <label htmlFor="map-target-parent" style={labelStyle}>Assign Under Parent Node</label>
+                <label htmlFor="map-target-parent" className="wbs-form-label">Assign Under Parent Node</label>
                 <select
                   id="map-target-parent"
                   value={targetParentId}
                   onChange={(e) => setTargetParentId(e.target.value)}
-                  style={inputStyle}
+                  className="wbs-form-input"
                 >
                   {candidateParents.map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
@@ -1591,9 +1234,9 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 </select>
               </div>
             </div>
-            <div style={modalFooter}>
-              <button type="button" disabled={isSaving} onClick={() => setMappingReq(null)} style={cancelBtn}>Cancel</button>
-              <button type="button" disabled={isSaving} onClick={handleMapRequirementToNode} style={submitBtn}>
+            <div className="wbs-modal-footer">
+              <button type="button" disabled={isSaving} onClick={() => setMappingReq(null)} className="wbs-modal-cancel-btn">Cancel</button>
+              <button type="button" disabled={isSaving} onClick={handleMapRequirementToNode} className="wbs-modal-submit-btn">
                 {isSaving ? 'Assigning...' : 'Assign Deliverable'}
               </button>
             </div>
@@ -1605,102 +1248,3 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 };
 
 export default WbsResultScreen;
-
-const modalBackdrop: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: 'rgba(15, 23, 42, 0.4)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: '16px',
-};
-
-const modalBox: React.CSSProperties = {
-  backgroundColor: '#FFFFFF',
-  borderRadius: '8px',
-  width: '100%',
-  padding: '20px',
-  boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-  fontFamily: 'system-ui, -apple-system, sans-serif',
-  boxSizing: 'border-box',
-};
-
-const modalHeader: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingBottom: '10px',
-  borderBottom: '1px solid #E2E8F0',
-};
-
-const closeBtn: React.CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: '#94A3B8',
-  cursor: 'pointer',
-};
-
-const modalFooter: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: '8px',
-  marginTop: '18px',
-};
-
-const labelStyle: React.CSSProperties = {
-  fontSize: '12px',
-  fontWeight: 600,
-  color: '#475569',
-  marginBottom: '4px',
-  display: 'block',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '8px 10px',
-  borderRadius: '5px',
-  border: '1px solid #CBD5E1',
-  fontSize: '12.5px',
-  boxSizing: 'border-box',
-};
-
-const submitBtn: React.CSSProperties = {
-  padding: '7px 14px',
-  fontSize: '12.5px',
-  fontWeight: 600,
-  backgroundColor: '#1A73E8',
-  color: '#FFFFFF',
-  border: 'none',
-  borderRadius: '5px',
-  cursor: 'pointer',
-};
-
-const cancelBtn: React.CSSProperties = {
-  padding: '7px 14px',
-  fontSize: '12.5px',
-  fontWeight: 500,
-  backgroundColor: '#FFFFFF',
-  color: '#475569',
-  border: '1px solid #CBD5E1',
-  borderRadius: '5px',
-  cursor: 'pointer',
-};
-
-const dropdownItemStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '8px',
-  width: '100%',
-  padding: '10px 14px',
-  fontSize: '12.5px',
-  color: '#1E293B',
-  border: 'none',
-  background: 'none',
-  cursor: 'pointer',
-  textAlign: 'left',
-};

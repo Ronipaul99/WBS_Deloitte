@@ -1,10 +1,12 @@
 import { useState, useRef } from 'react';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import AppLayout from './components/AppLayout';
 import CreateWbsScreen from './views/CreateWbsScreen';
 import AnalyzingProjectScreen from './views/AnalyzingProjectScreen';
 import WbsResultScreen from './views/WbsResultScreen';
 import WbsValidationScreen from './views/WbsValidationScreen';
 import { resetJobStatusSimulation } from './services/wbsService';
+import './App.css';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('create');
@@ -47,7 +49,7 @@ export default function App() {
 
   const handleRegenerate = () => {
     clearPendingNavigation();
-    if (activeJobId) {
+    if (activeJobId && activeJobId.trim().length > 0) {
       resetJobStatusSimulation(activeJobId);
       setCurrentScreen('analyzing');
     } else {
@@ -87,10 +89,37 @@ export default function App() {
     }
   };
 
+  const renderMissingJobIdError = () => (
+    <div className="app-missing-job-card">
+      <div className="app-missing-job-icon-box">
+        <AlertTriangle size={24} />
+      </div>
+      <h2 className="app-missing-job-title">
+        Missing Job ID
+      </h2>
+      <p className="app-missing-job-desc">
+        No active analysis job ID was provided for this page. Please start from Step 1 and upload your project files.
+      </p>
+      <button
+        type="button"
+        onClick={handleCreateNewWbs}
+        className="app-missing-job-btn"
+      >
+        <ArrowLeft size={15} />
+        Back to Document Upload
+      </button>
+    </div>
+  );
+
   const renderContent = () => {
     if (activeTab === 'create') {
       if (currentScreen === 'create') {
         return <CreateWbsScreen onGenerateWbs={handleGenerateWbs} />;
+      }
+
+      const hasValidJobId = Boolean(activeJobId && activeJobId.trim().length > 0);
+      if (!hasValidJobId) {
+        return renderMissingJobIdError();
       }
 
       if (currentScreen === 'analyzing') {
@@ -132,11 +161,11 @@ export default function App() {
     };
 
     return (
-      <div style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
-        <h2 style={{ fontSize: '20px', color: '#0F172A', marginBottom: '8px' }}>
+      <div className="app-placeholder-box">
+        <h2 className="app-placeholder-title">
           {titles[activeTab] || 'Section Under Development'}
         </h2>
-        <p style={{ fontSize: '14px', margin: 0 }}>
+        <p className="app-placeholder-desc">
           This section is currently being configured and will be available soon.
         </p>
       </div>
