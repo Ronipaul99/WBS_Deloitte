@@ -1,0 +1,105 @@
+/* ==========================================================================
+   Root Application Global Styles & Shared Screen Boundaries
+   ========================================================================== */
+
+/* Missing Job ID Card */
+.app-missing-job-card {
+  padding: 40px 24px;
+  max-width: 540px;
+  margin: 60px auto;
+  background-color: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  text-align: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.app-missing-job-icon-box {
+  width: 48px;
+  height: 48px;
+  background-color: #fef3c7;
+  color: #d97706;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+  flex-shrink: 0;
+}
+
+.app-missing-job-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.2px;
+}
+
+.app-missing-job-desc {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+  margin: 0 0 24px 0;
+}
+
+.app-missing-job-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: none;
+  background-color: #0284c7;
+  color: #ffffff;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.app-missing-job-btn svg {
+  flex-shrink: 0;
+}
+
+.app-missing-job-btn:hover {
+  background-color: #0369a1;
+}
+
+.app-missing-job-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4);
+}
+
+.app-missing-job-btn:active {
+  transform: translateY(1px);
+}
+
+/* Placeholder for Inactive / Under Construction Tabs */
+.app-placeholder-box {
+  max-width: 680px;
+  margin: 40px auto;
+  padding: 56px 28px;
+  text-align: center;
+  background-color: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  box-sizing: border-box;
+}
+
+.app-placeholder-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.2px;
+}
+
+.app-placeholder-desc {
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}

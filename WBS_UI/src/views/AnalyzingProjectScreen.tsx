@@ -12,9 +12,11 @@ import {
   JobStatusResponse,
   StepStatus,
 } from '../services/wbsService';
+import './AnalyzingProjectScreen.css';
 
 const MAX_NETWORK_RETRIES = 4;
 const BASE_POLL_INTERVAL_MS = 1500;
+const MAX_BACKOFF_INTERVAL_MS = 5000;
 
 interface AnalyzingProjectScreenProps {
   jobId: string;
@@ -84,6 +86,7 @@ export default function AnalyzingProjectScreen({
 
         if (response.overallStatus === 'COMPLETED') {
           clearTimer();
+          isActive = false;
           if (onAnalysisCompleteRef.current) {
             onAnalysisCompleteRef.current();
           }
@@ -92,6 +95,7 @@ export default function AnalyzingProjectScreen({
 
         if (response.overallStatus === 'FAILED') {
           clearTimer();
+          isActive = false;
           const failureReason = response.errorMessage || 
             'AI analysis pipeline failed while decomposing project specifications.';
           setIsFatalError(true);
@@ -103,7 +107,7 @@ export default function AnalyzingProjectScreen({
         }
 
         timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
-      } catch {
+      } catch (err: unknown) {
         if (!isActive || currentJobId !== jobId) {
           return;
         }
@@ -112,7 +116,10 @@ export default function AnalyzingProjectScreen({
 
         if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
           clearTimer();
-          const networkFailure = 'Lost connectivity to analysis engine. Please verify network access and retry.';
+          isActive = false;
+          const networkFailure = err instanceof Error 
+            ? err.message 
+            : 'Lost connectivity to analysis engine. Please verify network access and retry.';
           setIsFatalError(true);
           setErrorMessage(networkFailure);
           if (onErrorRef.current) {
@@ -121,7 +128,11 @@ export default function AnalyzingProjectScreen({
           return;
         }
 
-        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS * 1.5);
+        const backoffMs = Math.min(
+          BASE_POLL_INTERVAL_MS * Math.pow(1.5, consecutiveErrors), 
+          MAX_BACKOFF_INTERVAL_MS
+        );
+        timerId = setTimeout(poll, backoffMs);
       } finally {
         isFetching = false;
       }
@@ -144,21 +155,7 @@ export default function AnalyzingProjectScreen({
   const renderIndicator = (status: StepStatus) => {
     if (status === 'COMPLETED') {
       return (
-        <div
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            backgroundColor: '#16A34A',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#FFFFFF',
-            zIndex: 2,
-            transition: 'all 0.35s ease-in-out',
-            boxShadow: '0 0 0 3px #DCFCE7',
-          }}
-        >
+        <div className="wbs-indicator-completed" aria-label="Step completed">
           <Check size={16} strokeWidth={2.6} />
         </div>
       );
@@ -166,20 +163,7 @@ export default function AnalyzingProjectScreen({
 
     if (status === 'IN_PROGRESS') {
       return (
-        <div
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            border: '2.5px solid #2563EB',
-            backgroundColor: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 2,
-            boxShadow: '0 0 0 3px #DBEAFE',
-          }}
-        >
+        <div className="wbs-indicator-in-progress" aria-label="Step in progress">
           <Loader2
             size={16}
             color="#2563EB"
@@ -189,71 +173,32 @@ export default function AnalyzingProjectScreen({
       );
     }
 
-    return (
-      <div
-        style={{
-          width: '28px',
-          height: '28px',
-          borderRadius: '50%',
-          backgroundColor: '#CBD5E1',
-          zIndex: 2,
-          transition: 'all 0.3s ease',
-        }}
-      />
-    );
+    if (status === 'FAILED') {
+      return (
+        <div className="wbs-indicator-failed" aria-label="Step failed">
+          <AlertTriangle size={15} color="#DC2626" />
+        </div>
+      );
+    }
+
+    return <div className="wbs-indicator-pending" aria-label="Step pending" />;
   };
 
   if (isMissingJobId) {
     return (
-      <div
-        style={{
-          padding: '40px 24px',
-          maxWidth: '600px',
-          margin: '40px auto',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '10px',
-          border: '1px solid #E2E8F0',
-          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-          textAlign: 'center',
-          boxSizing: 'border-box',
-          width: '100%',
-        }}
-      >
-        <div
-          style={{
-            width: '48px',
-            height: '48px',
-            backgroundColor: '#FEF2F2',
-            color: '#DC2626',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 16px auto',
-          }}
-        >
+      <div className="wbs-missing-id-card">
+        <div className="wbs-error-icon-box">
           <AlertTriangle size={24} />
         </div>
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: '0 0 8px 0' }}>
-          Missing Job ID
-        </h2>
-        <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6', margin: '0 0 20px 0' }}>
+        <h2 className="wbs-card-title">Missing Job ID</h2>
+        <p className="wbs-card-description">
           No active analysis job ID was provided. Please return to Step 1 and upload your project files.
         </p>
         {onCancel && (
           <button
             type="button"
             onClick={onCancel}
-            style={{
-              padding: '8px 18px',
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: '#0284C7',
-              color: '#FFFFFF',
-              cursor: 'pointer',
-            }}
+            className="wbs-btn-primary"
           >
             Back to Document Upload
           </button>
@@ -264,59 +209,23 @@ export default function AnalyzingProjectScreen({
 
   if (isFatalError) {
     return (
-      <div
-        style={{
-          padding: '40px 24px',
-          maxWidth: '650px',
-          margin: '40px auto',
-          backgroundColor: '#FFFFFF',
-          borderRadius: '10px',
-          border: '1px solid #FCA5A5',
-          boxShadow: '0 4px 12px rgba(220, 38, 38, 0.06)',
-          textAlign: 'center',
-          boxSizing: 'border-box',
-          width: '100%',
-        }}
-      >
-        <div
-          style={{
-            width: '48px',
-            height: '48px',
-            backgroundColor: '#FEE2E2',
-            color: '#DC2626',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto 16px auto',
-          }}
-        >
+      <div className="wbs-fatal-error-card">
+        <div className="wbs-error-icon-box">
           <AlertTriangle size={24} strokeWidth={2.2} />
         </div>
 
-        <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: '0 0 8px 0' }}>
-          Analysis Pipeline Interrupted
-        </h2>
+        <h2 className="wbs-card-title">Analysis Pipeline Interrupted</h2>
 
-        <p style={{ fontSize: '13px', color: '#64748B', lineHeight: '1.6', margin: '0 0 24px 0' }}>
+        <p className="wbs-fatal-description">
           {errorMessage || 'The automated WBS generation process encountered an unrecoverable exception.'}
         </p>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div className="wbs-error-actions">
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              style={{
-                padding: '8px 18px',
-                fontSize: '13px',
-                fontWeight: 500,
-                borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: '#FFFFFF',
-                color: '#475569',
-                cursor: 'pointer',
-              }}
+              className="wbs-btn-secondary"
             >
               Cancel & Return
             </button>
@@ -325,22 +234,9 @@ export default function AnalyzingProjectScreen({
           <button
             type="button"
             onClick={handleManualRetry}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 18px',
-              fontSize: '13px',
-              fontWeight: 600,
-              borderRadius: '6px',
-              border: 'none',
-              backgroundColor: '#0284C7',
-              color: '#FFFFFF',
-              cursor: 'pointer',
-            }}
+            className="wbs-btn-primary"
           >
-            <RefreshCw size={14} />
-            Retry Connection
+            <RefreshCw size={14} /> Retry Connection
           </button>
         </div>
       </div>
@@ -349,239 +245,110 @@ export default function AnalyzingProjectScreen({
 
   if (!jobData) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '380px',
-          gap: '14px',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}
-      >
-        <style>{`
-          @keyframes wbsSpin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-          .wbs-spinner {
-            animation: wbsSpin 0.9s linear infinite !important;
-            transform-origin: center center !important;
-            display: block !important;
-          }
-        `}</style>
+      <div className="wbs-init-loading">
         <Loader2
           size={36}
           color="#0284C7"
           className="wbs-spinner"
         />
-        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0, fontWeight: 500 }}>
+        <p className="wbs-init-loading-text">
           Initializing AI pipeline inspection...
         </p>
       </div>
     );
   }
 
-  return (
-    <div
-      style={{
-        padding: '24px clamp(16px, 3vw, 36px)',
-        maxWidth: '1150px',
-        margin: '0 auto',
-        width: '100%',
-        boxSizing: 'border-box',
-      }}
-    >
-      <style>{`
-        @keyframes wbsSpin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        .wbs-spinner {
-          animation: wbsSpin 0.9s linear infinite !important;
-          transform-origin: center center !important;
-          display: block !important;
-        }
-      `}</style>
+  const sideCardTitle = jobData.sideCard?.title || 'Decomposing Requirements';
+  const sideCardDescription =
+    jobData.sideCard?.description ||
+    'Aligning project deliverables with WBS hierarchy standard.';
 
+  return (
+    <div className="wbs-analysis-container">
       {/* Header with Cancel Button */}
-      <header style={{ marginBottom: '32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '6px' }}>
-          <h1
-            style={{
-              fontSize: '22px',
-              fontWeight: 700,
-              color: '#0F172A',
-              margin: 0,
-              letterSpacing: '-0.3px',
-            }}
-          >
-            {jobData.title}
-          </h1>
+      <header className="wbs-analysis-header">
+        <div className="wbs-analysis-header-row">
+          <h1 className="wbs-analysis-title">{jobData.title}</h1>
 
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: '1px solid #CBD5E1',
-                backgroundColor: '#FFFFFF',
-                color: '#475569',
-                fontSize: '12px',
-                fontWeight: 500,
-                cursor: 'pointer'
-              }}
+              className="wbs-cancel-btn"
             >
               <ArrowLeft size={14} /> Cancel Analysis
             </button>
           )}
         </div>
-        <p style={{ fontSize: '13.5px', color: '#64748B', margin: 0 }}>
-          {jobData.subtitle}
-        </p>
+        <p className="wbs-analysis-subtitle">{jobData.subtitle}</p>
       </header>
 
       {/* Stepper Grid */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
-          gap: '32px',
-          alignItems: 'start',
-          width: '100%',
-          boxSizing: 'border-box',
-        }}
-      >
-        <div
-          style={{
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            width: '100%',
-            boxSizing: 'border-box',
-          }}
-        >
+      <div className="wbs-stepper-grid">
+        <div className="wbs-stepper-track" aria-live="polite">
           {jobData.steps.map((step, index) => {
             const isLast = index === jobData.steps.length - 1;
             const isCompleted = step.status === 'COMPLETED';
-            const isInactive = step.status !== 'COMPLETED' && step.status !== 'IN_PROGRESS';
+            const isInProgress = step.status === 'IN_PROGRESS';
+            const isFailed = step.status === 'FAILED';
+            const isInactive = !isCompleted && !isInProgress && !isFailed;
+            const progressVal = (step as { progress?: number }).progress;
 
             return (
-              <div
-                key={step.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  minHeight: '62px',
-                  position: 'relative',
-                }}
-              >
+              <div key={step.id} className="wbs-step-row">
                 {!isLast && (
                   <div
-                    style={{
-                      position: 'absolute',
-                      top: '28px',
-                      left: '13px',
-                      bottom: '0px',
-                      width: '2px',
-                      backgroundColor: isCompleted ? '#16A34A' : '#E2E8F0',
-                      transition: 'background-color 0.4s ease',
-                      zIndex: 1,
-                    }}
+                    className={`wbs-step-line ${
+                      isCompleted
+                        ? 'wbs-step-line-completed'
+                        : isFailed
+                        ? 'wbs-step-line-failed'
+                        : 'wbs-step-line-pending'
+                    }`}
                   />
                 )}
 
-                <div style={{ marginRight: '16px', flexShrink: 0 }}>
+                <div className="wbs-step-indicator-wrapper">
                   {renderIndicator(step.status)}
                 </div>
 
-                <div style={{ paddingBottom: '18px' }}>
+                <div className="wbs-step-body">
                   <div
-                    style={{
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      color: isInactive ? '#94A3B8' : '#1E293B',
-                      lineHeight: '20px',
-                      transition: 'color 0.3s ease',
-                    }}
+                    className={`wbs-step-title ${
+                      isInactive ? 'wbs-step-title-inactive' : 'wbs-step-title-active'
+                    }`}
                   >
                     {step.title}
                   </div>
                   <div
-                    style={{
-                      fontSize: '13px',
-                      color: isInactive ? '#CBD5E1' : '#64748B',
-                      marginTop: '2px',
-                      transition: 'color 0.3s ease',
-                    }}
+                    className={`wbs-step-desc ${
+                      isInactive ? 'wbs-step-desc-inactive' : 'wbs-step-desc-active'
+                    }`}
                   >
                     {step.description}
                   </div>
+
+                  {isInProgress && typeof progressVal === 'number' && (
+                    <div className="wbs-step-progress-track">
+                      <div
+                        className="wbs-step-progress-fill"
+                        style={{ width: `${progressVal}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
 
-        <div
-          style={{
-            backgroundColor: '#F8FAFC',
-            borderRadius: '12px',
-            border: '1px solid #E2E8F0',
-            padding: '40px 24px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center',
-            minHeight: '320px',
-            boxSizing: 'border-box',
-            width: '100%',
-          }}
-        >
-          <div
-            style={{
-              width: '90px',
-              height: '110px',
-              backgroundColor: '#EEF2F6',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              marginBottom: '20px',
-            }}
-          >
+        <div className="wbs-side-card">
+          <div className="wbs-side-card-icon-box">
             <FileText size={44} color="#3B82F6" strokeWidth={1.5} />
           </div>
 
-          <h2
-            style={{
-              fontSize: '15px',
-              fontWeight: 600,
-              color: '#0F172A',
-              marginBottom: '8px',
-            }}
-          >
-            {jobData.sideCard.title}
-          </h2>
-          <p
-            style={{
-              fontSize: '13px',
-              color: '#64748B',
-              maxWidth: '280px',
-              lineHeight: '1.5',
-              margin: 0,
-            }}
-          >
-            {jobData.sideCard.description}
-          </p>
+          <h2 className="wbs-side-card-title">{sideCardTitle}</h2>
+          <p className="wbs-side-card-desc">{sideCardDescription}</p>
         </div>
       </div>
     </div>

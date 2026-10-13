@@ -1,21 +1,21 @@
 {
   "jobId": "job_wbs_89412",
-  "projectName": "200 MW Solar Power Plant",
+  "projectName": "Solar Plant",
   "version": "Draft v1.0",
-  "breadcrumbs": ["Projects", "Solar Plant", "Validation"],
+  "breadcrumbs": ["Projects", "Solar Plant", "Draft v1.0"],
   "summaryCards": {
     "wbsItems": {
-      "count": 16,
+      "count": 87,
       "phasesCount": 6,
-      "workPackagesCount": 10
+      "workPackagesCount": 24
     },
     "scopeCoverage": {
-      "percentage": 94,
-      "mapped": 134,
-      "total": 142
+      "percentage": 91,
+      "mapped": 102,
+      "total": 112
     },
     "itemsAdded": {
-      "count": 4,
+      "count": 5,
       "subtext": "Not in template"
     },
     "potentialGaps": {
@@ -27,42 +27,55 @@
     {
       "id": "chk-1",
       "title": "Hierarchy consistency",
-      "description": "Standard Primavera P6 numeric structure validated without orphan branches.",
+      "description": "No issues found",
       "status": "PASSED"
     },
     {
       "id": "chk-2",
       "title": "No duplicate work packages",
-      "description": "No redundant package deliverables detected in active tree.",
+      "description": "No duplicates found",
       "status": "PASSED"
     },
     {
       "id": "chk-3",
       "title": "Source coverage",
-      "description": "Over 90% of contract clauses are mapped to deliverable packages.",
+      "description": "91% of requirements mapped",
       "status": "PASSED"
     },
     {
       "id": "chk-4",
       "title": "Template alignment",
-      "description": "Project structure follows domain baseline pattern.",
+      "description": "Structure follows template pattern",
       "status": "PASSED"
     },
     {
       "id": "chk-5",
       "title": "Activities may be too broad",
-      "description": "3 terminal work packages exceed standard duration guidelines.",
+      "description": "3 items require further decomposition",
       "status": "WARNING",
       "actionLabel": "View"
     },
     {
       "id": "chk-6",
       "title": "Requirements with no mapping",
-      "description": "Contract clauses pending terminal package assignment.",
+      "description": "2 requirements need attention",
       "status": "WARNING",
       "actionLabel": "View"
     }
   ],
-  "unmappedRequirements": [],
-  "aiRecommendations": []
+  "unmappedRequirements": [
+    {
+      "reference": "RFP §12.4",
+      "summary": "Environmental monitoring during construction phase"
+    },
+    {
+      "reference": "RFP §15.2",
+      "summary": "Temporary facilities for site workforce"
+    }
+  ],
+  "aiRecommendations": [
+    "Consider adding a dedicated work package for environmental compliance",
+    "Break down \"Site Preparation\" into more detailed activities",
+    "Review temporary facilities requirement and assign to relevant phase"
+  ]
 }

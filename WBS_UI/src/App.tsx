@@ -1,18 +1,29 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import AppLayout from './components/AppLayout';
 import CreateWbsScreen from './views/CreateWbsScreen';
+import ProcessingProjectDocumentScreen from './views/ProcessingProjectDocumentScreen';
+import ReviewProjectSummaryScreen from './views/ReviewProjectSummaryScreen';
 import AnalyzingProjectScreen from './views/AnalyzingProjectScreen';
 import WbsResultScreen from './views/WbsResultScreen';
 import WbsValidationScreen from './views/WbsValidationScreen';
-import { resetJobStatusSimulation } from './services/wbsService';
+import './App.css';
+
+export type ScreenType =
+  | 'create'
+  | 'doc_processing'
+  | 'doc_summary'
+  | 'analyzing'
+  | 'results'
+  | 'validation';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('create');
-  
-  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('validation');
+  const [currentScreen, setCurrentScreen] = useState<ScreenType>('create');
   const [activeJobId, setActiveJobId] = useState<string>('');
-  
-  const [targetResultTab, setTargetResultTab] = useState<'structure' | 'coverage' | 'insights' | 'unmapped'>('structure');
+  const [targetResultTab, setTargetResultTab] = useState<
+    'structure' | 'coverage' | 'insights' | 'unmapped'
+  >('structure');
 
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -23,32 +34,51 @@ export default function App() {
     }
   };
 
+  // Ensure timer teardown if App unmounts
+  useEffect(() => {
+    return () => {
+      clearPendingNavigation();
+    };
+  }, []);
+
+  // 1. Step 1 (Upload) -> Step 2 (Document Processing Stepper)
   const handleGenerateWbs = (newJobId: string) => {
     clearPendingNavigation();
     setActiveJobId(newJobId);
-    resetJobStatusSimulation(newJobId);
-    setTargetResultTab('structure');
+    setCurrentScreen('doc_processing');
+  };
+
+  // 2. Step 2 (Document Processing) -> Step 3 (Review Summary)
+  const handleDocProcessingComplete = () => {
+    clearPendingNavigation();
+    setCurrentScreen('doc_summary');
+  };
+
+  // 3. Step 3 (Review Summary) -> Step 4 (Decomposition Pipeline Analysis)
+  const handleProceedToAnalyze = () => {
+    clearPendingNavigation();
     setCurrentScreen('analyzing');
   };
 
+  // 4. Step 4 (Pipeline Analysis Complete) -> Step 5 (WBS Result Screen)
   const handleAnalysisComplete = () => {
     clearPendingNavigation();
     advanceTimerRef.current = setTimeout(() => {
       setTargetResultTab('structure');
       setCurrentScreen('results');
       advanceTimerRef.current = null;
-    }, 800);
+    }, 600);
   };
 
-  const handleCancelAnalysis = () => {
+  // Navigation handlers
+  const handleBackToCreate = () => {
     clearPendingNavigation();
     setCurrentScreen('create');
   };
 
   const handleRegenerate = () => {
     clearPendingNavigation();
-    if (activeJobId) {
-      resetJobStatusSimulation(activeJobId);
+    if (activeJobId && activeJobId.trim().length > 0) {
       setCurrentScreen('analyzing');
     } else {
       setCurrentScreen('create');
@@ -68,7 +98,6 @@ export default function App() {
 
   const handleCreateNewWbs = () => {
     clearPendingNavigation();
-    resetJobStatusSimulation();
     setActiveJobId('');
     setCurrentScreen('create');
   };
@@ -83,9 +112,30 @@ export default function App() {
     clearPendingNavigation();
     setActiveTab(tab);
     if (tab === 'create') {
+      setActiveJobId('');
       setCurrentScreen('create');
     }
   };
+
+  const renderMissingJobIdError = () => (
+    <div className="app-missing-job-card">
+      <div className="app-missing-job-icon-box">
+        <AlertTriangle size={24} />
+      </div>
+      <h2 className="app-missing-job-title">Missing Job ID</h2>
+      <p className="app-missing-job-desc">
+        No active analysis job ID was provided for this page. Please start from Step 1 and upload your project files.
+      </p>
+      <button
+        type="button"
+        onClick={handleCreateNewWbs}
+        className="app-missing-job-btn"
+      >
+        <ArrowLeft size={15} />
+        Back to Document Upload
+      </button>
+    </div>
+  );
 
   const renderContent = () => {
     if (activeTab === 'create') {
@@ -93,12 +143,38 @@ export default function App() {
         return <CreateWbsScreen onGenerateWbs={handleGenerateWbs} />;
       }
 
+      const hasValidJobId = Boolean(activeJobId && activeJobId.trim().length > 0);
+      if (!hasValidJobId) {
+        return renderMissingJobIdError();
+      }
+
+      if (currentScreen === 'doc_processing') {
+        return (
+          <ProcessingProjectDocumentScreen
+            jobId={activeJobId}
+            onProcessingComplete={handleDocProcessingComplete}
+            onBack={handleBackToCreate}
+            onCancel={handleBackToCreate}
+          />
+        );
+      }
+
+      if (currentScreen === 'doc_summary') {
+        return (
+          <ReviewProjectSummaryScreen
+            jobId={activeJobId}
+            onProceedToAnalyze={handleProceedToAnalyze}
+            onDiscard={handleBackToCreate}
+          />
+        );
+      }
+
       if (currentScreen === 'analyzing') {
         return (
           <AnalyzingProjectScreen
             jobId={activeJobId}
             onAnalysisComplete={handleAnalysisComplete}
-            onCancel={handleCancelAnalysis}
+            onCancel={handleBackToCreate}
           />
         );
       }
@@ -124,7 +200,7 @@ export default function App() {
       );
     }
 
-    const titles: Record<string, string> = {
+    const placeholderTitles: Record<string, string> = {
       projects: 'My Projects',
       templates: 'Templates',
       exports: 'Exports',
@@ -132,11 +208,11 @@ export default function App() {
     };
 
     return (
-      <div style={{ padding: '48px', textAlign: 'center', color: '#64748B' }}>
-        <h2 style={{ fontSize: '20px', color: '#0F172A', marginBottom: '8px' }}>
-          {titles[activeTab] || 'Section Under Development'}
+      <div className="app-placeholder-box">
+        <h2 className="app-placeholder-title">
+          {placeholderTitles[activeTab] || 'Section Under Development'}
         </h2>
-        <p style={{ fontSize: '14px', margin: 0 }}>
+        <p className="app-placeholder-desc">
           This section is currently being configured and will be available soon.
         </p>
       </div>
@@ -144,13 +220,13 @@ export default function App() {
   };
 
   return (
-    <AppLayout 
-      activeTab={activeTab} 
+    <AppLayout
+      activeTab={activeTab}
       onNavClick={handleNavClick}
       currentUser={{
         name: 'John Doe',
         role: 'Lead Planner',
-        initials: 'JD'
+        initials: 'JD',
       }}
     >
       {renderContent()}
