@@ -9,7 +9,7 @@ import { resetJobStatusSimulation } from './services/wbsService';
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('create');
   
-  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('create');
+  const [currentScreen, setCurrentScreen] = useState<'create' | 'analyzing' | 'results' | 'validation'>('validation');
   const [activeJobId, setActiveJobId] = useState<string>('');
   
   const [targetResultTab, setTargetResultTab] = useState<'structure' | 'coverage' | 'insights' | 'unmapped'>('structure');
