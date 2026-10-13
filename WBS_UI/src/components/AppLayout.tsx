@@ -161,7 +161,7 @@ export default function AppLayout({
               </button>
             </div>
             <p className="app-help-dialog-body">
-              Upload your Project Scope Document in Step 1 and your domain WBS template in Step 2. The pipeline will dynamically synthesize the project hierarchy and derive Primavera P6 work breakdown structures.
+              Upload your Project Scope Document in Step 1. You can optionally add a domain WBS template in Step 2, or let the pipeline synthesize the project hierarchy directly from the project scope.
             </p>
             <div className="app-help-dialog-footer">
               <button 
