@@ -1,0 +1,477 @@
+/* Container & Layout */
+.wbs-rev-container {
+  padding: 24px clamp(16px, 3vw, 36px);
+  max-width: 1280px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-rev-header {
+  margin-bottom: 22px;
+}
+
+.wbs-rev-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
+}
+
+.wbs-rev-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Horizontal Pipeline Stepper */
+.wbs-rev-flow-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  background-color: #ffffff;
+  padding: 16px 24px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow-x: auto;
+  gap: 8px;
+}
+
+.wbs-rev-flow-node-group {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.wbs-rev-flow-node {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.wbs-rev-flow-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.wbs-rev-flow-badge-done {
+  background-color: #16a34a;
+  color: #ffffff;
+}
+
+.wbs-rev-flow-badge-active {
+  border: 2px solid #2563eb;
+  background-color: #ffffff;
+}
+
+.wbs-rev-flow-badge-pending {
+  background-color: #cbd5e1;
+}
+
+.wbs-rev-flow-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #2563eb;
+}
+
+.wbs-rev-flow-text-main {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.wbs-rev-flow-text-active {
+  color: #2563eb !important;
+}
+
+.wbs-rev-flow-text-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.wbs-rev-flow-text-sub-active {
+  color: #2563eb !important;
+}
+
+.wbs-rev-flow-divider {
+  flex: 1;
+  height: 2px;
+  background-color: #e2e8f0;
+  margin: 0 12px;
+  min-width: 20px;
+}
+
+/* Two-Column Editor Layout */
+.wbs-rev-body-grid {
+  display: grid;
+  grid-template-columns: clamp(220px, 24%, 280px) 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .wbs-rev-body-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wbs-rev-sections-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.wbs-rev-sections-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.wbs-rev-section-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  transition: background-color 0.15s ease;
+}
+
+.wbs-rev-section-btn:hover {
+  background-color: #f8fafc;
+}
+
+.wbs-rev-section-btn:focus-visible {
+  background-color: #f1f5f9;
+  box-shadow: inset 0 0 0 2px #2563eb;
+}
+
+.wbs-rev-section-btn-active {
+  background-color: #eff6ff;
+  border-left: 3px solid #2563eb;
+}
+
+.wbs-rev-section-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  padding-right: 8px;
+}
+
+.wbs-rev-num-bubble {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background-color: #f1f5f9;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.wbs-rev-num-bubble-active {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+.wbs-rev-section-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wbs-rev-editor-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.wbs-rev-editor-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.wbs-rev-editor-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.wbs-rev-badge-ai {
+  font-size: 11px;
+  font-weight: 600;
+  background-color: #fef3c7;
+  color: #b45309;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wbs-rev-editor-desc {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+}
+
+.wbs-rev-textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 12px;
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.6;
+  font-family: inherit;
+  box-sizing: border-box;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wbs-rev-textarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.wbs-rev-char-count {
+  text-align: right;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.wbs-rev-ref-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 14px;
+  margin: 16px 0;
+}
+
+.wbs-rev-ref-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 2px 0;
+}
+
+.wbs-rev-ref-desc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 10px 0;
+}
+
+.wbs-rev-pill-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border-radius: 4px;
+  margin-right: 6px;
+  margin-bottom: 4px;
+}
+
+.wbs-rev-pill-page-muted {
+  font-size: 11.5px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.wbs-rev-meta-box {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.wbs-rev-meta-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wbs-rev-meta-badge-file {
+  width: 32px;
+  height: 32px;
+  background-color: #0284c7;
+  color: #ffffff;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.wbs-rev-doc-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0f172a;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wbs-rev-doc-size {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.wbs-rev-confidence-right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .wbs-rev-confidence-right {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.wbs-rev-confidence-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.wbs-rev-confidence-track {
+  width: 100%;
+  height: 6px;
+  background-color: #e2e8f0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.wbs-rev-confidence-fill {
+  height: 100%;
+  background-color: #10b981;
+  transition: width 0.3s ease;
+}
+
+.wbs-rev-confidence-subtext {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Actions Row */
+.wbs-rev-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.wbs-rev-btn-discard,
+.wbs-rev-btn-save {
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #1e293b;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.wbs-rev-btn-discard:hover,
+.wbs-rev-btn-save:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.wbs-rev-btn-discard:focus-visible,
+.wbs-rev-btn-save:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.wbs-rev-btn-save-success {
+  background-color: #f0fdf4 !important;
+  color: #166534 !important;
+  border-color: #86efac !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wbs-rev-btn-generate {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background-color: #0284c7;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.wbs-rev-btn-generate:hover {
+  background-color: #0369a1;
+}
+
+.wbs-rev-btn-generate:focus-visible {
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4);
+}

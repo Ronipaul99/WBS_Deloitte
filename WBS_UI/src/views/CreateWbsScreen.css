@@ -1,0 +1,276 @@
+/* Container & Layout */
+.wbs-create-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.wbs-create-header {
+  margin-bottom: 28px;
+}
+
+.wbs-create-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+}
+
+.wbs-create-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Submission Error Banner */
+.wbs-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background-color: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  color: #dc2626;
+  margin-bottom: 24px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Upload Grid */
+.wbs-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.wbs-upload-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.wbs-step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.wbs-step-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wbs-step-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+}
+
+.wbs-step-description {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+/* Dropzone */
+.wbs-dropzone {
+  flex: 1;
+  border: 2px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  background-color: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+}
+
+.wbs-dropzone:hover {
+  border-color: #3b82f6;
+  background-color: #f1f5f9;
+}
+
+.wbs-dropzone:focus-visible {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+/* Dragging active state */
+.wbs-dropzone-active {
+  border-color: #2563eb !important;
+  background-color: #eff6ff !important;
+  transform: scale(1.01);
+}
+
+.wbs-dropzone-icon {
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.wbs-dropzone-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px 0;
+}
+
+.wbs-dropzone-hint {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.wbs-file-input-hidden {
+  display: none;
+}
+
+/* File Selected Pill */
+.wbs-file-selected {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wbs-file-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+}
+
+.wbs-file-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #166534;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.wbs-file-size-tag {
+  font-size: 11px;
+  color: #15803d;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wbs-remove-file-btn {
+  background: none;
+  border: none;
+  color: #166534;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.wbs-remove-file-btn:hover {
+  background-color: #dcfce7;
+  color: #14532d;
+}
+
+.wbs-remove-file-btn:focus-visible {
+  outline: 2px solid #16a34a;
+  outline-offset: 1px;
+}
+
+/* Field Validation Error */
+.wbs-field-error {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+/* Action Area */
+.wbs-action-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+.wbs-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 22px;
+  color: #ffffff;
+  border-radius: 6px;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  min-height: 42px;
+  box-sizing: border-box;
+  outline: none;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.wbs-generate-btn-active {
+  background-color: #2563eb;
+  cursor: pointer;
+}
+
+.wbs-generate-btn-active:hover {
+  background-color: #1d4ed8;
+}
+
+.wbs-generate-btn-active:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.4);
+}
+
+.wbs-generate-btn-disabled {
+  background-color: #94a3b8;
+  cursor: not-allowed;
+}
+
+/* Animated Spinner */
+.wbs-spinner {
+  animation: wbs-spin 1s linear infinite;
+}
+
+@keyframes wbs-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

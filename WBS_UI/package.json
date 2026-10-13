@@ -11,7 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "lucide-react": "latest",
+    "lucide-react": "^1.52.0",
     "react": "latest",
     "react-dom": "latest"
   },
