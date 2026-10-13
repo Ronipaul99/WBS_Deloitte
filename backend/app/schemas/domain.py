@@ -109,7 +109,7 @@ class JobResponse(ORMModel):
 
 class GenerationCreate(BaseModel):
     document_id: UUID
-    template_id: UUID
+    template_id: UUID | None = None
     summary_id: UUID
 
 

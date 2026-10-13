@@ -55,7 +55,7 @@ export interface ProcessingDocStatusResponse {
   title: string;
   subtitle: string;
   projectDoc: DocumentFileInfo;
-  templateDoc: DocumentFileInfo;
+  templateDoc?: DocumentFileInfo;
   steps: ProcessingStepItem[];
   overallStatus: 'PROCESSING' | 'COMPLETED' | 'FAILED';
   errorMessage?: string | null;
@@ -191,8 +191,8 @@ interface JobSessionState {
   projectDocName: string;
   projectDocSize: string;
   projectDocType: 'pdf' | 'excel' | 'doc';
-  templateDocName: string;
-  templateDocSize: string;
+  templateDocName: string | null;
+  templateDocSize: string | null;
   projectTitle: string;
   docSnapshotIndex: number;
   analysisStepIndex: number;
@@ -236,7 +236,7 @@ function getCurrentDate(): string {
 function bindEvidenceAndTemplate(
   nodes: WbsNode[] = [],
   projectName: string,
-  templateName: string
+  templateName?: string
 ): WbsNode[] {
   return nodes.map((node) => {
     const evidenceText =
@@ -251,7 +251,9 @@ function bindEvidenceAndTemplate(
       ...node,
       template: node.template?.includes('Custom')
         ? 'Custom Scope Addition'
-        : `Aligned with ${templateName}`,
+        : templateName
+          ? `Aligned with ${templateName}`
+          : 'AI-generated from project scope',
       evidence: {
         text: evidenceText,
         document: projectName,
@@ -282,8 +284,8 @@ export async function createWbsGenerationJob(
 ): Promise<{ jobId: string }> {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
-  if (!projectFile || !templateFile) {
-    throw new Error('Both project scope document and template file are required.');
+  if (!projectFile) {
+    throw new Error('A project scope document is required.');
   }
 
   const jobId = `job_wbs_${Date.now().toString().slice(-6)}`;
@@ -299,9 +301,9 @@ export async function createWbsGenerationJob(
   // Bind uploaded documents
   baseWbs.projectId = jobId;
   baseWbs.projectName = projectTitle;
-  baseWbs.templateName = templateFile.name;
+  baseWbs.templateName = templateFile?.name ?? 'AI-Generated Baseline';
   baseWbs.generatedDate = getCurrentDate();
-  baseWbs.wbsTree = bindEvidenceAndTemplate(baseWbs.wbsTree, projectFile.name, templateFile.name);
+  baseWbs.wbsTree = bindEvidenceAndTemplate(baseWbs.wbsTree, projectFile.name, templateFile?.name);
 
   baseWbs.unmappedRequirements = (baseWbs.unmappedRequirements || []).map((req) => ({
     ...req,
@@ -312,8 +314,8 @@ export async function createWbsGenerationJob(
     projectDocName: projectFile.name,
     projectDocSize: formatBytes(projectFile.size),
     projectDocType,
-    templateDocName: templateFile.name,
-    templateDocSize: formatBytes(templateFile.size),
+    templateDocName: templateFile?.name ?? null,
+    templateDocSize: templateFile ? formatBytes(templateFile.size) : null,
     projectTitle,
     docSnapshotIndex: 0,
     analysisStepIndex: 0,
@@ -354,13 +356,22 @@ export async function getProcessingDocStatus(jobId: string): Promise<ProcessingD
       type: session.projectDocType,
       status: 'UPLOADED',
     },
-    templateDoc: {
-      name: session.templateDocName,
-      size: session.templateDocSize,
-      type: 'excel',
-      status: 'UPLOADED',
-    },
-    steps: currentSnapshot.steps,
+    templateDoc: session.templateDocName
+      ? {
+          name: session.templateDocName,
+          size: session.templateDocSize || '',
+          type: 'excel',
+          status: 'UPLOADED',
+        }
+      : undefined,
+    steps: currentSnapshot.steps.map((step) =>
+      step.stepCode === 'UPLOAD' && !session.templateDocName
+        ? {
+            ...step,
+            description: 'Your project document has been uploaded and verified.',
+          }
+        : step
+    ),
     overallStatus: currentSnapshot.overallStatus,
     errorMessage: null,
   };
@@ -406,7 +417,25 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
   await new Promise((resolve) => setTimeout(resolve, 150));
   const session = getSessionOrThrow(jobId);
 
-  const stepsDef = (rawJobConfig as unknown as { steps: Array<{ id: string; stepCode: string; title: string; description: string }> }).steps;
+  const stepsDef = (
+    rawJobConfig as unknown as {
+      steps: Array<{ id: string; stepCode: string; title: string; description: string }>;
+    }
+  ).steps.map((step) => {
+    if (session.templateDocName || step.stepCode !== 'ANALYZE_TEMPLATE') return step;
+    return {
+      ...step,
+      title: 'Building baseline hierarchy',
+      description: 'Deriving the WBS structure from the approved project scope',
+    };
+  }).map((step) => {
+    if (session.templateDocName || step.stepCode !== 'MAP_SCOPE') return step;
+    return {
+      ...step,
+      title: 'Organizing project scope',
+      description: 'Mapping requirements into the generated WBS hierarchy',
+    };
+  });
   const currentIndex = session.analysisStepIndex;
 
   const steps: AnalysisStep[] = stepsDef.map((step, idx) => {
@@ -434,10 +463,14 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
     jobId,
     overallStatus: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
     title: (rawJobConfig as unknown as { title: string }).title,
-    subtitle: `Processing ${session.projectDocName} against ${session.templateDocName}...`,
+    subtitle: session.templateDocName
+      ? `Processing ${session.projectDocName} against ${session.templateDocName}...`
+      : `Generating a WBS baseline from ${session.projectDocName}...`,
     sideCard: {
       title: 'Decomposing Requirements',
-      description: `Neural parser is decomposing ${session.projectDocName} into ${session.templateDocName}.`,
+      description: session.templateDocName
+        ? `Neural parser is decomposing ${session.projectDocName} into ${session.templateDocName}.`
+        : `Neural parser is deriving a WBS hierarchy from ${session.projectDocName}.`,
     },
     steps,
     errorMessage: null,

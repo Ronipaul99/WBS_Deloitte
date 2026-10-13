@@ -1,3 +1,14 @@
+x-backend-environment: &backend_environment
+  APP_ENV: development
+  DATABASE_URL: postgresql+asyncpg://wbs:wbs@postgres:5432/wbs
+  DIRECT_DATABASE_URL: postgresql+asyncpg://wbs:wbs@postgres:5432/wbs
+  DATABASE_USE_NULL_POOL: "false"
+  REDIS_URL: redis://redis:6379/0
+  TASKS_EAGER: "false"
+  AUTO_CREATE_TABLES: "false"
+  UPLOAD_ROOT: /data/uploads
+  CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -20,23 +31,24 @@ services:
     ports:
       - "6379:6379"
 
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment: *backend_environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build: .
-    environment: &backend_environment
-      APP_ENV: development
-      DATABASE_URL: postgresql+asyncpg://wbs:wbs@postgres:5432/wbs
-      REDIS_URL: redis://redis:6379/0
-      TASKS_EAGER: "false"
-      AUTO_CREATE_TABLES: "true"
-      UPLOAD_ROOT: /data/uploads
-      CORS_ORIGINS: http://localhost:5173,http://127.0.0.1:5173
+    environment: *backend_environment
     ports:
       - "8000:8000"
     volumes:
       - uploads:/data/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
 
@@ -47,12 +59,11 @@ services:
     volumes:
       - uploads:/data/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
 
 volumes:
   postgres_data:
   uploads:
-

@@ -25,7 +25,8 @@ async def create_generation(
 ) -> Job:
     await get_tenant_project(db, context.tenant.id, project_id)
     document = await get_tenant_document(db, context.tenant.id, payload.document_id)
-    await get_tenant_template(db, context.tenant.id, payload.template_id)
+    if payload.template_id is not None:
+        await get_tenant_template(db, context.tenant.id, payload.template_id)
     summary = await db.get(DocumentSummary, payload.summary_id)
     if document.project_id != project_id:
         raise HTTPException(status_code=400, detail="Document does not belong to this project.")
@@ -42,7 +43,7 @@ async def create_generation(
         current_step="Queued for WBS generation",
         request_payload={
             "document_id": str(payload.document_id),
-            "template_id": str(payload.template_id),
+            "template_id": str(payload.template_id) if payload.template_id else None,
             "summary_id": str(payload.summary_id),
         },
     )

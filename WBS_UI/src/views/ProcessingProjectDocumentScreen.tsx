@@ -220,21 +220,23 @@ export default function ProcessingProjectDocumentScreen({
           </div>
         </div>
 
-        <div className="wbs-proc-file-card">
-          <div className="wbs-proc-file-left">
-            <div className="wbs-proc-badge-excel">
-              <FileSpreadsheet size={16} />
+        {data.templateDoc && (
+          <div className="wbs-proc-file-card">
+            <div className="wbs-proc-file-left">
+              <div className="wbs-proc-badge-excel">
+                <FileSpreadsheet size={16} />
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="wbs-proc-file-label">WBS Reference Template</div>
+                <div className="wbs-proc-file-name">{data.templateDoc.name}</div>
+                <div className="wbs-proc-file-size">{data.templateDoc.size}</div>
+              </div>
             </div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="wbs-proc-file-label">WBS Reference Template</div>
-              <div className="wbs-proc-file-name">{data.templateDoc.name}</div>
-              <div className="wbs-proc-file-size">{data.templateDoc.size}</div>
+            <div className="wbs-proc-tag-success">
+              <Check size={14} /> Uploaded successfully
             </div>
           </div>
-          <div className="wbs-proc-tag-success">
-            <Check size={14} /> Uploaded successfully
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Stepper & Side Card */}

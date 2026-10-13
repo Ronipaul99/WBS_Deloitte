@@ -10,7 +10,8 @@ from app.db.base import Base
 from app.models import domain  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+migration_url = get_settings().sqlalchemy_migration_url.replace("%", "%%")
+config.set_main_option("sqlalchemy.url", migration_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

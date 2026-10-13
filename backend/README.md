@@ -4,6 +4,7 @@ FastAPI boilerplate for the tenant-aware WBS generation workflow. It includes:
 
 - async FastAPI and SQLAlchemy
 - SQLite for zero-configuration local development
+- Neon-ready pooled runtime and direct migration connections
 - PostgreSQL and Redis through Docker Compose
 - Celery worker wiring for long-running document and AI tasks
 - development identity seeding and an OIDC-ready authentication boundary
@@ -56,18 +57,58 @@ ruff check .
 
 ## Database migrations
 
-The application auto-creates tables for the first development run. The initial Alembic migration
-is included for managed environments; disable `AUTO_CREATE_TABLES` and apply it with:
+### Connect Neon
+
+In the Neon dashboard, copy both connection strings. Use the pooled URL for API traffic and the
+direct URL for schema migrations. Do not commit either credential.
+
+```dotenv
+DATABASE_URL=postgresql://USER:PASSWORD@ep-EXAMPLE-pooler.REGION.aws.neon.tech/neondb?sslmode=require
+DIRECT_DATABASE_URL=postgresql://USER:PASSWORD@ep-EXAMPLE.REGION.aws.neon.tech/neondb?sslmode=require
+DATABASE_USE_NULL_POOL=true
+AUTO_CREATE_TABLES=false
+```
+
+The application converts standard Neon `postgresql://` URLs to SQLAlchemy's asyncpg dialect. The
+pooled URL is used only by the running API; Alembic deliberately uses the direct URL.
+
+Apply the checked-in migrations to a new Neon branch or database before starting the API:
 
 ```powershell
 alembic upgrade head
 ```
 
-Create and commit another revision under `migrations/versions/` whenever the models change:
+### Make a schema change
+
+Use this process for every database change:
+
+1. Create a Neon development branch from the current production branch.
+2. Point `DIRECT_DATABASE_URL` at that development branch.
+3. Update the SQLAlchemy models in `app/models/domain.py`.
+4. Generate a migration:
 
 ```powershell
 alembic revision --autogenerate -m "describe the model change"
 ```
+
+5. Review the generated file in `migrations/versions/`. Autogeneration must not be accepted
+   without checking column types, nullability, defaults, indexes, constraints, and data backfills.
+6. Apply and verify it on the Neon development branch:
+
+```powershell
+alembic upgrade head
+alembic check
+python -m pytest
+```
+
+7. Commit the model and migration together. In deployment, run `alembic upgrade head` before
+   starting the new API version.
+
+Use `alembic downgrade -1` only while testing a reversible migration. For production failures,
+prefer a reviewed forward-fix migration when rolling back would risk losing data.
+
+`AUTO_CREATE_TABLES=true` remains available only for throwaway local SQLite tests. Keep it `false`
+for Neon so every schema change has a migration history.
 
 ## Authentication and tenancy
 

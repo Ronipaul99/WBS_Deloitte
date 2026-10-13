@@ -12,6 +12,8 @@ os.environ.update(
         "APP_ENV": "test",
         "AUTH_MODE": "development",
         "DATABASE_URL": f"sqlite+aiosqlite:///{TEST_DATABASE.as_posix()}",
+        "DIRECT_DATABASE_URL": "",
+        "DATABASE_USE_NULL_POOL": "false",
         "UPLOAD_ROOT": str(TEST_UPLOAD_ROOT),
         "TASKS_EAGER": "true",
         "AUTO_CREATE_TABLES": "true",

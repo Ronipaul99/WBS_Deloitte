@@ -44,13 +44,12 @@ def test_project_summary_generation_validation_and_export(client, tenant_id):
         },
     )
     assert template_response.status_code == 201
-    template_id = template_response.json()["id"]
+    assert template_response.json()["id"]
 
     generation_response = client.post(
         f"/api/v1/tenants/{tenant_id}/projects/{project_id}/generations",
         json={
             "document_id": document_id,
-            "template_id": template_id,
             "summary_id": summary_id,
         },
     )

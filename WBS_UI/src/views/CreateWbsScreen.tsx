@@ -110,7 +110,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
   };
 
   const handleGenerateClick = async () => {
-    if (!projectFile || !templateFile || isSubmitting) return;
+    if (!projectFile || isSubmitting) return;
 
     setIsSubmitting(true);
     setSubmissionError(null);
@@ -126,7 +126,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
     }
   };
 
-  const isFormValid = Boolean(projectFile && templateFile && !projectFileError && !templateFileError);
+  const isFormValid = Boolean(projectFile && !projectFileError);
 
   return (
     <div className="wbs-create-container">
@@ -135,7 +135,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
           Create Work Breakdown Structure
         </h1>
         <p className="wbs-create-subtitle">
-          Upload your project document and a reference WBS template. The AI will analyze the content and generate a planner-ready WBS.
+          Upload your project document to generate a planner-ready WBS. Add a reference WBS template when you want the generated structure to follow an existing hierarchy.
         </p>
       </header>
 
@@ -217,6 +217,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
           <div className="wbs-step-header">
             <span className="wbs-step-badge">2</span>
             <h2 className="wbs-step-title">Reference WBS Template</h2>
+            <span className="wbs-optional-label">Optional</span>
           </div>
           <p className="wbs-step-description">
             Upload your organization or domain baseline WBS hierarchy.
