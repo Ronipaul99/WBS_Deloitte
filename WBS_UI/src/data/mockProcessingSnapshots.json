@@ -1,0 +1,331 @@
+[
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "IN_PROGRESS"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "PENDING"
+      }
+    ]
+  },
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "IN_PROGRESS"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "PENDING"
+      }
+    ]
+  },
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "IN_PROGRESS"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "PENDING"
+      }
+    ]
+  },
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "IN_PROGRESS"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "PENDING"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "PENDING"
+      }
+    ]
+  },
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "IN_PROGRESS"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "PENDING"
+      }
+    ]
+  },
+  {
+    "overallStatus": "PROCESSING",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "IN_PROGRESS"
+      }
+    ]
+  },
+  {
+    "overallStatus": "COMPLETED",
+    "steps": [
+      {
+        "id": "step-1",
+        "stepCode": "UPLOAD",
+        "title": "File uploaded successfully",
+        "description": "Your project document and WBS template have been uploaded and verified.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-2",
+        "stepCode": "EXTRACT",
+        "title": "Extracting text from document",
+        "description": "Reading and extracting text from your project file.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-3",
+        "stepCode": "SECTIONS",
+        "title": "Identifying document sections",
+        "description": "Analyzing the document structure and headers.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-4",
+        "stepCode": "DETECT",
+        "title": "Detecting key project information",
+        "description": "Finding project objectives, scope, deliverables, and constraints.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-5",
+        "stepCode": "ORGANIZE",
+        "title": "Extracting 7 key summary sections",
+        "description": "Using AI to extract and organize content into 7 key sections.",
+        "status": "COMPLETED"
+      },
+      {
+        "id": "step-6",
+        "stepCode": "PREPARE",
+        "title": "Preparing editable summary",
+        "description": "Structuring the extracted information into an editable summary.",
+        "status": "COMPLETED"
+      }
+    ]
+  }
+]

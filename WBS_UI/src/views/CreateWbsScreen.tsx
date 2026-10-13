@@ -6,7 +6,8 @@ import {
   X, 
   ArrowRight, 
   ShieldAlert, 
-  FileSpreadsheet 
+  FileSpreadsheet,
+  Loader2 
 } from 'lucide-react';
 import { createWbsGenerationJob } from '../services/wbsService';
 import './CreateWbsScreen.css';
@@ -15,22 +16,23 @@ interface CreateWbsScreenProps {
   onGenerateWbs?: (jobId: string) => void;
 }
 
-const ALLOWED_PROJECT_MIMES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/csv'
-];
+const MAX_UPLOAD_SIZE_MB = 25;
 
-const ALLOWED_TEMPLATE_MIMES = [
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'text/csv',
-  'application/xml',
-  'text/xml'
-];
+const ACCEPTED_PROJECT_EXTENSIONS = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.csv'];
+const ACCEPTED_TEMPLATE_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.xml'];
+
+function extractFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? '.' + parts.pop()!.toLowerCase() : '';
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
 
 export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps) {
   const [projectFile, setProjectFile] = useState<File | null>(null);
@@ -39,52 +41,67 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
   const [projectFileError, setProjectFileError] = useState<string | null>(null);
   const [templateFileError, setTemplateFileError] = useState<string | null>(null);
 
+  const [isDraggingProject, setIsDraggingProject] = useState<boolean>(false);
+  const [isDraggingTemplate, setIsDraggingTemplate] = useState<boolean>(false);
+
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
 
-  const validateFile = (file: File, allowedTypes: string[], maxMb: number = 25): string | null => {
+  const validateFile = (file: File, allowedExtensions: string[], maxMb: number = MAX_UPLOAD_SIZE_MB): string | null => {
     if (file.size > maxMb * 1024 * 1024) {
       return `File exceeds maximum upload size of ${maxMb}MB.`;
     }
-    const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-    const isMimeValid = allowedTypes.includes(file.type);
-    const isExtValid = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.csv', '.xml'].includes(ext);
-
-    if (!isMimeValid && !isExtValid) {
-      return 'Unsupported file format. Please upload an accepted document type.';
+    const ext = extractFileExtension(file.name);
+    if (!allowedExtensions.includes(ext)) {
+      return `Unsupported file format (${ext || 'no extension'}). Accepted formats: ${allowedExtensions.join(', ')}`;
     }
     return null;
   };
 
   const handleProjectSelect = (file: File) => {
-    const error = validateFile(file, ALLOWED_PROJECT_MIMES);
+    const error = validateFile(file, ACCEPTED_PROJECT_EXTENSIONS);
     if (error) {
       setProjectFile(null);
       setProjectFileError(error);
-      if (projectInputRef.current) projectInputRef.current.value = '';
     } else {
       setProjectFile(file);
       setProjectFileError(null);
     }
+    if (projectInputRef.current) projectInputRef.current.value = '';
   };
 
   const handleTemplateSelect = (file: File) => {
-    const error = validateFile(file, ALLOWED_TEMPLATE_MIMES);
+    const error = validateFile(file, ACCEPTED_TEMPLATE_EXTENSIONS);
     if (error) {
       setTemplateFile(null);
       setTemplateFileError(error);
-      if (templateInputRef.current) templateInputRef.current.value = '';
     } else {
       setTemplateFile(file);
       setTemplateFileError(null);
     }
+    if (templateInputRef.current) templateInputRef.current.value = '';
+  };
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
+    e.preventDefault();
+    if (type === 'project') setIsDraggingProject(true);
+    else setIsDraggingTemplate(true);
+  };
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
+    e.preventDefault();
+    if (type === 'project') setIsDraggingProject(false);
+    else setIsDraggingTemplate(false);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
     e.preventDefault();
+    if (type === 'project') setIsDraggingProject(false);
+    else setIsDraggingTemplate(false);
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
       if (type === 'project') handleProjectSelect(file);
@@ -93,7 +110,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
   };
 
   const handleGenerateClick = async () => {
-    if (!projectFile || !templateFile) return;
+    if (!projectFile || !templateFile || isSubmitting) return;
 
     setIsSubmitting(true);
     setSubmissionError(null);
@@ -118,7 +135,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
           Create Work Breakdown Structure
         </h1>
         <p className="wbs-create-subtitle">
-          Upload your project document and a reference WBS template. The AI will analyze the content and generate a planner-ready WBS
+          Upload your project document and a reference WBS template. The AI will analyze the content and generate a planner-ready WBS.
         </p>
       </header>
 
@@ -135,34 +152,31 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
         {/* Step 1: Project Scope */}
         <div className="wbs-upload-card">
           <div className="wbs-step-header">
-            <span className="wbs-step-badge">
-              1
-            </span>
-            <h2 className="wbs-step-title">
-              Project Scope Document
-            </h2>
+            <span className="wbs-step-badge">1</span>
+            <h2 className="wbs-step-title">Project Scope Document</h2>
           </div>
           <p className="wbs-step-description">
             Upload your RFP, Scope of Work, Technical Specification, or BOQ document.
           </p>
 
           <div 
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => handleDragOver(e, 'project')}
+            onDragLeave={(e) => handleDragLeave(e, 'project')}
             onDrop={(e) => handleDrop(e, 'project')}
             onClick={() => projectInputRef.current?.click()}
-            className="wbs-dropzone"
+            className={`wbs-dropzone ${isDraggingProject ? 'wbs-dropzone-active' : ''}`}
           >
             <FileUp size={34} color="#3B82F6" className="wbs-dropzone-icon" />
             <p className="wbs-dropzone-label">
               Click to upload or drag & drop
             </p>
             <span className="wbs-dropzone-hint">
-              PDF, DOCX, XLSX up to 25MB
+              PDF, DOCX, XLSX up to {MAX_UPLOAD_SIZE_MB}MB
             </span>
             <input 
               ref={projectInputRef} 
               type="file" 
-              accept=".pdf,.docx,.doc,.xlsx,.xls,.csv" 
+              accept={ACCEPTED_PROJECT_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleProjectSelect(e.target.files[0]);
@@ -174,14 +188,16 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
             <div className="wbs-file-selected">
               <div className="wbs-file-info">
                 <CheckCircle size={16} color="#16A34A" />
-                <span className="wbs-file-name">
-                  {projectFile.name}
-                </span>
+                <span className="wbs-file-name">{projectFile.name}</span>
+                <span className="wbs-file-size-tag">({formatBytes(projectFile.size)})</span>
               </div>
               <button 
                 type="button" 
                 aria-label="Remove project file"
-                onClick={() => { setProjectFile(null); if (projectInputRef.current) projectInputRef.current.value = ''; }} 
+                onClick={() => { 
+                  setProjectFile(null); 
+                  if (projectInputRef.current) projectInputRef.current.value = ''; 
+                }} 
                 className="wbs-remove-file-btn"
               >
                 <X size={15} />
@@ -199,34 +215,31 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
         {/* Step 2: Reference Template */}
         <div className="wbs-upload-card">
           <div className="wbs-step-header">
-            <span className="wbs-step-badge">
-              2
-            </span>
-            <h2 className="wbs-step-title">
-              Reference WBS Template
-            </h2>
+            <span className="wbs-step-badge">2</span>
+            <h2 className="wbs-step-title">Reference WBS Template</h2>
           </div>
           <p className="wbs-step-description">
             Upload your organization or domain baseline WBS hierarchy.
           </p>
 
           <div 
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => handleDragOver(e, 'template')}
+            onDragLeave={(e) => handleDragLeave(e, 'template')}
             onDrop={(e) => handleDrop(e, 'template')}
             onClick={() => templateInputRef.current?.click()}
-            className="wbs-dropzone"
+            className={`wbs-dropzone ${isDraggingTemplate ? 'wbs-dropzone-active' : ''}`}
           >
             <FileSpreadsheet size={34} color="#10B981" className="wbs-dropzone-icon" />
             <p className="wbs-dropzone-label">
               Click to upload or drag & drop
             </p>
             <span className="wbs-dropzone-hint">
-              XLSX, CSV, XML (Primavera P6) up to 25MB
+              XLSX, CSV, XML (Primavera P6) up to {MAX_UPLOAD_SIZE_MB}MB
             </span>
             <input 
               ref={templateInputRef} 
               type="file" 
-              accept=".xlsx,.xls,.csv,.xml" 
+              accept={ACCEPTED_TEMPLATE_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleTemplateSelect(e.target.files[0]);
@@ -238,14 +251,16 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
             <div className="wbs-file-selected">
               <div className="wbs-file-info">
                 <CheckCircle size={16} color="#16A34A" />
-                <span className="wbs-file-name">
-                  {templateFile.name}
-                </span>
+                <span className="wbs-file-name">{templateFile.name}</span>
+                <span className="wbs-file-size-tag">({formatBytes(templateFile.size)})</span>
               </div>
               <button 
                 type="button" 
                 aria-label="Remove template file"
-                onClick={() => { setTemplateFile(null); if (templateInputRef.current) templateInputRef.current.value = ''; }} 
+                onClick={() => { 
+                  setTemplateFile(null); 
+                  if (templateInputRef.current) templateInputRef.current.value = ''; 
+                }} 
                 className="wbs-remove-file-btn"
               >
                 <X size={15} />
@@ -271,8 +286,17 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
             isFormValid && !isSubmitting ? 'wbs-generate-btn-active' : 'wbs-generate-btn-disabled'
           }`}
         >
-          <span>{isSubmitting ? 'Initializing Job...' : 'Generate Draft WBS'}</span>
-          <ArrowRight size={16} />
+          {isSubmitting ? (
+            <>
+              <Loader2 size={16} className="wbs-spinner" />
+              <span>Initializing Job...</span>
+            </>
+          ) : (
+            <>
+              <span>Generate Draft WBS</span>
+              <ArrowRight size={16} />
+            </>
+          )}
         </button>
       </div>
     </div>

@@ -1,4 +1,6 @@
 import rawJobConfig from '../data/mockJobStatus.json';
+import rawProcessingSnapshots from '../data/mockProcessingSnapshots.json';
+import rawProjectSummary from '../data/mockProjectSummary.json';
 import rawWbsResult from '../data/mockWbsResult.json';
 import rawValidationResult from '../data/mockWbsValidation.json';
 
@@ -14,6 +16,7 @@ export interface AnalysisStep {
   title: string;
   description: string;
   status: StepStatus;
+  progress?: number;
 }
 
 export interface SideCardConfig {
@@ -29,6 +32,48 @@ export interface JobStatusResponse {
   sideCard: SideCardConfig;
   steps: AnalysisStep[];
   errorMessage?: string | null;
+}
+
+export interface DocumentFileInfo {
+  name: string;
+  size: string;
+  type: 'pdf' | 'excel' | 'doc';
+  status: 'UPLOADED' | 'FAILED';
+}
+
+export interface ProcessingStepItem {
+  id: string;
+  stepCode: string;
+  title: string;
+  description: string;
+  status: StepStatus;
+  progress?: number;
+}
+
+export interface ProcessingDocStatusResponse {
+  jobId: string;
+  title: string;
+  subtitle: string;
+  projectDoc: DocumentFileInfo;
+  templateDoc: DocumentFileInfo;
+  steps: ProcessingStepItem[];
+  overallStatus: 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  errorMessage?: string | null;
+}
+
+export interface SummarySectionItem {
+  id: number;
+  title: string;
+  content: string;
+  pages: string[];
+}
+
+export interface ProjectSummaryResponse {
+  jobId: string;
+  projectName: string;
+  document: DocumentFileInfo;
+  confidenceScore: number;
+  sections: SummarySectionItem[];
 }
 
 export interface WbsNode {
@@ -139,109 +184,236 @@ export interface WbsValidationPayload {
 }
 
 /* ==========================================================================
-   Stateful Pipeline & Singletons
+   Per-Job Isolated State Store (No Cross-Tab or Singleton Leaks)
    ========================================================================== */
 
-const jobConfig = rawJobConfig as unknown as {
-  title: string;
-  subtitle: string;
-  sideCard: SideCardConfig;
-  steps: Array<{ id: string; stepCode: string; title: string; description: string }>;
-};
-
-const jobStepPointers: Record<string, number> = {};
-
-let activeProjectDocName = 'Uploaded_Scope_Document.pdf';
-let activeTemplateDocName = 'Domain_Baseline_Template.xlsx';
-let activeProjectTitle = rawWbsResult.projectName || 'Capital Engineering Project';
-
-let currentWbsResult: WbsResultPayload = JSON.parse(JSON.stringify(rawWbsResult));
-const currentValidation: WbsValidationPayload = JSON.parse(JSON.stringify(rawValidationResult));
-
-function formatFilenameToProjectName(fileName: string): string {
-  const withoutExt = fileName.replace(/\.[^/.]+$/, '');
-  return withoutExt
-    .replace(/[_-]+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+interface JobSessionState {
+  projectDocName: string;
+  projectDocSize: string;
+  projectDocType: 'pdf' | 'excel' | 'doc';
+  templateDocName: string;
+  templateDocSize: string;
+  projectTitle: string;
+  docSnapshotIndex: number;
+  analysisStepIndex: number;
+  summarySections: SummarySectionItem[];
+  wbsResult: WbsResultPayload;
 }
 
-function getCurrentFormattedDate(): string {
-  const now = new Date();
-  return now.toLocaleDateString('en-GB', {
+const activeSessions: Record<string, JobSessionState> = {};
+
+function inferDocType(fileName: string): 'pdf' | 'excel' | 'doc' {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  if (['xlsx', 'xls', 'csv'].includes(ext)) return 'excel';
+  if (['docx', 'doc'].includes(ext)) return 'doc';
+  return 'pdf';
+}
+
+function formatFilenameToProjectTitle(fileName: string): string {
+  const baseName = fileName.replace(/\.[^/.]+$/, '');
+  return baseName
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function getCurrentDate(): string {
+  return new Date().toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
 }
 
-function rebindTreeMetadata(nodes: WbsNode[], documentName: string, templateName: string): WbsNode[] {
-  return nodes.map((node) => ({
-    ...node,
-    template: node.template.includes('Custom') ? 'Custom Scope Addition' : `Aligned with ${templateName}`,
-    evidence: node.evidence ? { ...node.evidence, document: documentName } : undefined,
-    children: node.children ? rebindTreeMetadata(node.children, documentName, templateName) : undefined,
-  }));
+function bindEvidenceAndTemplate(
+  nodes: WbsNode[] = [],
+  projectName: string,
+  templateName: string
+): WbsNode[] {
+  return nodes.map((node) => {
+    const evidenceText =
+      node.evidence?.text ||
+      node.description ||
+      `Scope deliverable defined under baseline specifications for ${node.name}.`;
+
+    const evidenceSection =
+      node.evidence?.section || `Section ${node.code} Scope Clause`;
+
+    return {
+      ...node,
+      template: node.template?.includes('Custom')
+        ? 'Custom Scope Addition'
+        : `Aligned with ${templateName}`,
+      evidence: {
+        text: evidenceText,
+        document: projectName,
+        section: evidenceSection,
+      },
+      children: node.children
+        ? bindEvidenceAndTemplate(node.children, projectName, templateName)
+        : undefined,
+    };
+  });
 }
+
+function getSessionOrThrow(jobId: string): JobSessionState {
+  const session = activeSessions[jobId];
+  if (!session) {
+    throw new Error(`Job "${jobId}" was not found or session has expired.`);
+  }
+  return session;
+}
+
+/* ==========================================================================
+   1. Create Job (Upload Screen)
+   ========================================================================== */
 
 export async function createWbsGenerationJob(
   projectFile?: File | null,
   templateFile?: File | null
 ): Promise<{ jobId: string }> {
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
-  const newJobId = `job_wbs_${Date.now().toString().slice(-6)}`;
-  jobStepPointers[newJobId] = 0;
-
-  currentWbsResult = JSON.parse(JSON.stringify(rawWbsResult));
-
-  if (projectFile) {
-    activeProjectDocName = projectFile.name;
-    activeProjectTitle = formatFilenameToProjectName(projectFile.name);
-  } else {
-    activeProjectTitle = currentWbsResult.projectName || 'Capital Project';
-  }
-
-  if (templateFile) {
-    activeTemplateDocName = templateFile.name;
-  }
-
-  currentWbsResult.projectId = newJobId;
-  currentWbsResult.projectName = activeProjectTitle;
-  currentWbsResult.templateName = activeTemplateDocName;
-  currentWbsResult.generatedDate = getCurrentFormattedDate();
-  currentWbsResult.wbsTree = rebindTreeMetadata(
-    currentWbsResult.wbsTree,
-    activeProjectDocName,
-    activeTemplateDocName
-  );
-
-  currentWbsResult.unmappedRequirements = currentWbsResult.unmappedRequirements.map((req) => ({
-    ...req,
-    sourceDoc: activeProjectDocName,
-  }));
-
-  return { jobId: newJobId };
-}
-
-export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
   await new Promise((resolve) => setTimeout(resolve, 200));
 
-  if (!jobId) {
-    throw new Error('Valid Job ID is required to poll pipeline status.');
+  if (!projectFile || !templateFile) {
+    throw new Error('Both project scope document and template file are required.');
   }
 
-  if (jobStepPointers[jobId] === undefined) {
-    jobStepPointers[jobId] = 0;
+  const jobId = `job_wbs_${Date.now().toString().slice(-6)}`;
+  const projectTitle = formatFilenameToProjectTitle(projectFile.name);
+  const projectDocType = inferDocType(projectFile.name);
+
+  // Deep clone baseline template from backend mock
+  const baseWbs: WbsResultPayload = JSON.parse(JSON.stringify(rawWbsResult));
+  const baseSummary: SummarySectionItem[] = JSON.parse(
+    JSON.stringify((rawProjectSummary as { sections: SummarySectionItem[] }).sections)
+  );
+
+  // Bind uploaded documents
+  baseWbs.projectId = jobId;
+  baseWbs.projectName = projectTitle;
+  baseWbs.templateName = templateFile.name;
+  baseWbs.generatedDate = getCurrentDate();
+  baseWbs.wbsTree = bindEvidenceAndTemplate(baseWbs.wbsTree, projectFile.name, templateFile.name);
+
+  baseWbs.unmappedRequirements = (baseWbs.unmappedRequirements || []).map((req) => ({
+    ...req,
+    sourceDoc: projectFile.name,
+  }));
+
+  activeSessions[jobId] = {
+    projectDocName: projectFile.name,
+    projectDocSize: formatBytes(projectFile.size),
+    projectDocType,
+    templateDocName: templateFile.name,
+    templateDocSize: formatBytes(templateFile.size),
+    projectTitle,
+    docSnapshotIndex: 0,
+    analysisStepIndex: 0,
+    summarySections: baseSummary,
+    wbsResult: baseWbs,
+  };
+
+  return { jobId };
+}
+
+/* ==========================================================================
+   2. Processing Document Status (Screen 1.5)
+   ========================================================================== */
+
+export async function getProcessingDocStatus(jobId: string): Promise<ProcessingDocStatusResponse> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const session = getSessionOrThrow(jobId);
+
+  const snapshots = rawProcessingSnapshots as unknown as Array<{
+    overallStatus: 'PROCESSING' | 'COMPLETED' | 'FAILED';
+    steps: ProcessingStepItem[];
+  }>;
+
+  const currentIndex = session.docSnapshotIndex;
+  const currentSnapshot = snapshots[currentIndex] || snapshots[snapshots.length - 1];
+
+  if (currentIndex < snapshots.length - 1) {
+    session.docSnapshotIndex = currentIndex + 1;
   }
 
-  const currentPointer = jobStepPointers[jobId];
+  return {
+    jobId,
+    title: 'Processing Project Document',
+    subtitle: `Extracting key scope items from ${session.projectDocName}...`,
+    projectDoc: {
+      name: session.projectDocName,
+      size: session.projectDocSize,
+      type: session.projectDocType,
+      status: 'UPLOADED',
+    },
+    templateDoc: {
+      name: session.templateDocName,
+      size: session.templateDocSize,
+      type: 'excel',
+      status: 'UPLOADED',
+    },
+    steps: currentSnapshot.steps,
+    overallStatus: currentSnapshot.overallStatus,
+    errorMessage: null,
+  };
+}
 
-  const steps: AnalysisStep[] = jobConfig.steps.map((step, index: number) => {
+/* ==========================================================================
+   3. Review Project Summary (Screen 3)
+   ========================================================================== */
+
+export async function getProjectSummary(jobId: string): Promise<ProjectSummaryResponse> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const session = getSessionOrThrow(jobId);
+
+  return {
+    jobId,
+    projectName: session.projectTitle,
+    document: {
+      name: session.projectDocName,
+      size: session.projectDocSize,
+      type: session.projectDocType,
+      status: 'UPLOADED',
+    },
+    confidenceScore: (rawProjectSummary as { confidenceScore: number }).confidenceScore,
+    sections: JSON.parse(JSON.stringify(session.summarySections)),
+  };
+}
+
+export async function saveProjectSummary(
+  jobId: string,
+  updatedSections: SummarySectionItem[]
+): Promise<boolean> {
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const session = getSessionOrThrow(jobId);
+  session.summarySections = JSON.parse(JSON.stringify(updatedSections));
+  return true;
+}
+
+/* ==========================================================================
+   4. Decomposition Analysis Pipeline (Screen 4)
+   ========================================================================== */
+
+export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  const session = getSessionOrThrow(jobId);
+
+  const stepsDef = (rawJobConfig as unknown as { steps: Array<{ id: string; stepCode: string; title: string; description: string }> }).steps;
+  const currentIndex = session.analysisStepIndex;
+
+  const steps: AnalysisStep[] = stepsDef.map((step, idx) => {
     let status: StepStatus = 'PENDING';
-    if (index < currentPointer) {
+    if (idx < currentIndex) {
       status = 'COMPLETED';
-    } else if (index === currentPointer) {
+    } else if (idx === currentIndex) {
       status = 'IN_PROGRESS';
     }
     return {
@@ -253,19 +425,19 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
     };
   });
 
-  const isCompleted = currentPointer >= jobConfig.steps.length;
+  const isCompleted = currentIndex >= stepsDef.length;
   if (!isCompleted) {
-    jobStepPointers[jobId] = currentPointer + 1;
+    session.analysisStepIndex = currentIndex + 1;
   }
 
   return {
     jobId,
     overallStatus: isCompleted ? 'COMPLETED' : 'IN_PROGRESS',
-    title: jobConfig.title,
-    subtitle: `Processing ${activeProjectDocName} against ${activeTemplateDocName}...`,
+    title: (rawJobConfig as unknown as { title: string }).title,
+    subtitle: `Processing ${session.projectDocName} against ${session.templateDocName}...`,
     sideCard: {
       title: 'Decomposing Requirements',
-      description: `Neural parser is aligning deliverables from ${activeProjectDocName} into ${activeTemplateDocName}.`,
+      description: `Neural parser is decomposing ${session.projectDocName} into ${session.templateDocName}.`,
     },
     steps,
     errorMessage: null,
@@ -273,39 +445,47 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResponse> {
 }
 
 export function resetJobStatusSimulation(jobId?: string): void {
-  if (jobId) {
-    jobStepPointers[jobId] = 0;
-  } else {
-    Object.keys(jobStepPointers).forEach((id) => {
-      jobStepPointers[id] = 0;
+  if (jobId && activeSessions[jobId]) {
+    activeSessions[jobId].analysisStepIndex = 0;
+    activeSessions[jobId].docSnapshotIndex = 0;
+  } else if (!jobId) {
+    Object.keys(activeSessions).forEach((id) => {
+      activeSessions[id].analysisStepIndex = 0;
+      activeSessions[id].docSnapshotIndex = 0;
     });
   }
 }
 
+/* ==========================================================================
+   5. WBS Results & Interactive Tree Mutations (Screen 5)
+   ========================================================================== */
+
 export async function getWbsResult(jobId: string): Promise<WbsResultPayload> {
   await new Promise((resolve) => setTimeout(resolve, 150));
+  const session = getSessionOrThrow(jobId);
+
   return {
-    ...currentWbsResult,
-    projectId: jobId || currentWbsResult.projectId,
-    generatedDate: getCurrentFormattedDate(),
+    ...session.wbsResult,
+    projectId: jobId,
+    generatedDate: getCurrentDate(),
   };
 }
 
 export async function updateWbsTree(
-  _jobId: string,
-  _wbsTree: WbsNode[],
-  _updatedUnmapped?: UnmappedRequirement[],
-  _updatedScopeCoverage?: ScopeCoverageData
+  jobId: string,
+  wbsTree: WbsNode[],
+  updatedUnmapped?: UnmappedRequirement[],
+  updatedScopeCoverage?: ScopeCoverageData
 ): Promise<{ success: boolean; updatedAt: string }> {
-  void _jobId;
   await new Promise((resolve) => setTimeout(resolve, 200));
+  const session = getSessionOrThrow(jobId);
 
-  currentWbsResult.wbsTree = _wbsTree;
-  if (_updatedUnmapped) {
-    currentWbsResult.unmappedRequirements = _updatedUnmapped;
+  session.wbsResult.wbsTree = wbsTree;
+  if (updatedUnmapped) {
+    session.wbsResult.unmappedRequirements = updatedUnmapped;
   }
-  if (_updatedScopeCoverage) {
-    currentWbsResult.scopeCoverage = _updatedScopeCoverage;
+  if (updatedScopeCoverage) {
+    session.wbsResult.scopeCoverage = updatedScopeCoverage;
   }
 
   return {
@@ -314,75 +494,177 @@ export async function updateWbsTree(
   };
 }
 
+/* ==========================================================================
+   6. Screen 6: Real Dynamic Validation Engine
+   - Computes counts, coverage math, and check statuses from live tree state
+   - Pulls AI recommendations, check titles, and UI subtexts from mock backend contract
+   ========================================================================== */
+
 export async function getWbsValidation(jobId: string): Promise<WbsValidationPayload> {
   await new Promise((resolve) => setTimeout(resolve, 150));
+  const session = getSessionOrThrow(jobId);
 
-  const flat: WbsNode[] = [];
-  const walk = (nodes: WbsNode[]) => {
-    nodes.forEach((node) => {
-      flat.push(node);
-      if (node.children && node.children.length > 0) {
-        walk(node.children);
-      }
+  // Read backend mock response template (data contract)
+  const baseValidation = rawValidationResult as unknown as WbsValidationPayload;
+
+  // 1. Calculate deliverables dynamically from the active tree
+  const flatNodes: WbsNode[] = [];
+  const walk = (nodes: WbsNode[] = []) => {
+    nodes.forEach((n) => {
+      flatNodes.push(n);
+      if (n.children && n.children.length > 0) walk(n.children);
     });
   };
-  walk(currentWbsResult.wbsTree);
+  walk(session.wbsResult.wbsTree || []);
 
-  const phases = flat.filter((n) => n.type === 'Phase').length;
-  const workPackages = flat.length - phases;
-  const sc = currentWbsResult.scopeCoverage || {
-    overallScore: 0,
-    mappedCount: 0,
-    totalRequirements: 0,
-    gapCount: 0,
+  const totalCount = flatNodes.length;
+  const phasesCount = flatNodes.filter((n) => n.type === 'Phase').length;
+  const workPackagesCount = Math.max(0, totalCount - phasesCount);
+
+  // 2. Calculate scope metrics dynamically from active session state
+  const unmapped = session.wbsResult.unmappedRequirements || [];
+  const rawCoverage = session.wbsResult.scopeCoverage;
+
+  const totalRequirements =
+    rawCoverage?.totalRequirements ?? (workPackagesCount + unmapped.length);
+  const mappedCount = rawCoverage?.mappedCount ?? workPackagesCount;
+  const computedPercentage = totalRequirements > 0
+    ? Math.min(100, Math.round((mappedCount / totalRequirements) * 100))
+    : 100;
+
+  // 3. Dynamic Rule Evaluation: Single-child phases
+  let singleChildPhasesCount = 0;
+  const inspectPhaseChildren = (nodes: WbsNode[] = []) => {
+    nodes.forEach((n) => {
+      if (n.type === 'Phase' && n.children && n.children.length === 1) {
+        singleChildPhasesCount++;
+      }
+      if (n.children) inspectPhaseChildren(n.children);
+    });
   };
-  const itemsAdded = flat.filter((n) => n.isAiAdded).length;
-  const unmapped = currentWbsResult.unmappedRequirements || [];
+  inspectPhaseChildren(session.wbsResult.wbsTree || []);
 
-  const dynamicRecommendations: string[] = [];
-  if (unmapped.length > 0) {
-    dynamicRecommendations.push(
-      `Evaluate ${unmapped.length} unmapped requirements (${unmapped.map((u) => u.code).join(', ')}) for insertion into engineering packages.`
-    );
-  }
-  const aiAddedNodes = flat.filter((n) => n.isAiAdded);
-  if (aiAddedNodes.length > 0) {
-    dynamicRecommendations.push(
-      `Cross-check scope addition "${aiAddedNodes[0].name}" (${aiAddedNodes[0].code}) with procurement milestones.`
-    );
-  }
-  dynamicRecommendations.push(
-    `Verify Primavera P6 activity ID syntax across all ${workPackages} terminal work packages prior to schedule baseline freeze.`
+  // 4. Dynamic Rule Evaluation: Duplicate deliverable titles
+  const nameOccurrences: Record<string, number> = {};
+  flatNodes.forEach((n) => {
+    const key = n.name.trim().toLowerCase();
+    nameOccurrences[key] = (nameOccurrences[key] || 0) + 1;
+  });
+  const duplicateEntriesCount = Object.values(nameOccurrences).filter((c) => c > 1).length;
+
+  // 5. Dynamic Rule Evaluation: Broad terminal packages
+  const broadPackagesCount = flatNodes.filter(
+    (n) =>
+      n.type === 'Work Package' &&
+      (!n.children || n.children.length === 0) &&
+      (n.description?.length ?? 0) > 100
+  ).length;
+
+  // 6. Dynamically map evaluated check results against backend check definitions
+  const validationChecks: ValidationCheckItem[] = (baseValidation.validationChecks || []).map(
+    (check) => {
+      const lowerTitle = (check.title || '').toLowerCase();
+
+      if (lowerTitle.includes('hierarchy')) {
+        return {
+          ...check,
+          status: singleChildPhasesCount === 0 ? 'PASSED' : 'WARNING',
+          description:
+            singleChildPhasesCount === 0
+              ? 'No issues found'
+              : `${singleChildPhasesCount} phase(s) contain only a single child package`,
+        };
+      }
+
+      if (lowerTitle.includes('duplicate')) {
+        return {
+          ...check,
+          status: duplicateEntriesCount === 0 ? 'PASSED' : 'WARNING',
+          description:
+            duplicateEntriesCount === 0
+              ? 'No duplicates found'
+              : `${duplicateEntriesCount} duplicate deliverables detected`,
+        };
+      }
+
+      if (lowerTitle.includes('coverage')) {
+        return {
+          ...check,
+          status: computedPercentage >= 85 ? 'PASSED' : 'WARNING',
+          description: `${computedPercentage}% of requirements mapped`,
+        };
+      }
+
+      if (lowerTitle.includes('template')) {
+        return {
+          ...check,
+          status: 'PASSED',
+          description: 'Structure follows template pattern',
+        };
+      }
+
+      if (lowerTitle.includes('broad')) {
+        return {
+          ...check,
+          status: broadPackagesCount === 0 ? 'PASSED' : 'WARNING',
+          description:
+            broadPackagesCount === 0
+              ? 'Work packages are sufficiently decomposed'
+              : `${broadPackagesCount} items require further decomposition`,
+          actionLabel: broadPackagesCount > 0 ? check.actionLabel || 'View' : undefined,
+        };
+      }
+
+      if (lowerTitle.includes('no mapping')) {
+        return {
+          ...check,
+          status: unmapped.length === 0 ? 'PASSED' : 'WARNING',
+          description:
+            unmapped.length === 0
+              ? 'All requirements mapped'
+              : `${unmapped.length} requirements need attention`,
+          actionLabel: unmapped.length > 0 ? check.actionLabel || 'View' : undefined,
+        };
+      }
+
+      return check;
+    }
   );
 
+  // 7. Unmapped requirements table mapped dynamically from actual session items
+  const unmappedRequirementsTable: UnmappedTableItem[] = unmapped.map((u) => ({
+    reference: u.code,
+    summary: u.reason || u.title,
+  }));
+
+  // 8. Return merged payload with real calculated math and backend-sourced copy
   return {
-    ...currentValidation,
-    jobId: jobId || currentWbsResult.projectId,
-    projectName: currentWbsResult.projectName,
+    jobId,
+    projectName: session.projectTitle,
+    version: session.wbsResult.version,
+    breadcrumbs: session.wbsResult.breadcrumbs || [],
     summaryCards: {
       wbsItems: {
-        count: flat.length,
-        phasesCount: phases,
-        workPackagesCount: workPackages,
+        count: totalCount,
+        phasesCount,
+        workPackagesCount,
       },
       scopeCoverage: {
-        percentage: sc.overallScore,
-        mapped: sc.mappedCount,
-        total: sc.totalRequirements,
+        percentage: computedPercentage,
+        mapped: mappedCount,
+        total: totalRequirements,
       },
       itemsAdded: {
-        count: itemsAdded,
-        subtext: 'Not in template',
+        count: flatNodes.filter((n) => n.isAiAdded).length,
+        subtext: baseValidation.summaryCards.itemsAdded.subtext,
       },
       potentialGaps: {
         count: unmapped.length,
-        subtext: 'Review recommended',
+        subtext: baseValidation.summaryCards.potentialGaps.subtext,
       },
     },
-    unmappedRequirements: unmapped.map((r) => ({
-      reference: `${r.code} (${activeProjectDocName})`,
-      summary: `${r.title} — ${r.reason}`,
-    })),
-    aiRecommendations: dynamicRecommendations,
+    validationChecks,
+    unmappedRequirements: unmappedRequirementsTable,
+    aiRecommendations: baseValidation.aiRecommendations || [],
   };
 }

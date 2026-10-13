@@ -16,6 +16,7 @@ import './AnalyzingProjectScreen.css';
 
 const MAX_NETWORK_RETRIES = 4;
 const BASE_POLL_INTERVAL_MS = 1500;
+const MAX_BACKOFF_INTERVAL_MS = 5000;
 
 interface AnalyzingProjectScreenProps {
   jobId: string;
@@ -85,6 +86,7 @@ export default function AnalyzingProjectScreen({
 
         if (response.overallStatus === 'COMPLETED') {
           clearTimer();
+          isActive = false;
           if (onAnalysisCompleteRef.current) {
             onAnalysisCompleteRef.current();
           }
@@ -93,6 +95,7 @@ export default function AnalyzingProjectScreen({
 
         if (response.overallStatus === 'FAILED') {
           clearTimer();
+          isActive = false;
           const failureReason = response.errorMessage || 
             'AI analysis pipeline failed while decomposing project specifications.';
           setIsFatalError(true);
@@ -104,7 +107,7 @@ export default function AnalyzingProjectScreen({
         }
 
         timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
-      } catch {
+      } catch (err: unknown) {
         if (!isActive || currentJobId !== jobId) {
           return;
         }
@@ -113,7 +116,10 @@ export default function AnalyzingProjectScreen({
 
         if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
           clearTimer();
-          const networkFailure = 'Lost connectivity to analysis engine. Please verify network access and retry.';
+          isActive = false;
+          const networkFailure = err instanceof Error 
+            ? err.message 
+            : 'Lost connectivity to analysis engine. Please verify network access and retry.';
           setIsFatalError(true);
           setErrorMessage(networkFailure);
           if (onErrorRef.current) {
@@ -122,7 +128,11 @@ export default function AnalyzingProjectScreen({
           return;
         }
 
-        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS * 1.5);
+        const backoffMs = Math.min(
+          BASE_POLL_INTERVAL_MS * Math.pow(1.5, consecutiveErrors), 
+          MAX_BACKOFF_INTERVAL_MS
+        );
+        timerId = setTimeout(poll, backoffMs);
       } finally {
         isFetching = false;
       }
@@ -145,7 +155,7 @@ export default function AnalyzingProjectScreen({
   const renderIndicator = (status: StepStatus) => {
     if (status === 'COMPLETED') {
       return (
-        <div className="wbs-indicator-completed">
+        <div className="wbs-indicator-completed" aria-label="Step completed">
           <Check size={16} strokeWidth={2.6} />
         </div>
       );
@@ -153,7 +163,7 @@ export default function AnalyzingProjectScreen({
 
     if (status === 'IN_PROGRESS') {
       return (
-        <div className="wbs-indicator-in-progress">
+        <div className="wbs-indicator-in-progress" aria-label="Step in progress">
           <Loader2
             size={16}
             color="#2563EB"
@@ -163,7 +173,15 @@ export default function AnalyzingProjectScreen({
       );
     }
 
-    return <div className="wbs-indicator-pending" />;
+    if (status === 'FAILED') {
+      return (
+        <div className="wbs-indicator-failed" aria-label="Step failed">
+          <AlertTriangle size={15} color="#DC2626" />
+        </div>
+      );
+    }
+
+    return <div className="wbs-indicator-pending" aria-label="Step pending" />;
   };
 
   if (isMissingJobId) {
@@ -172,9 +190,7 @@ export default function AnalyzingProjectScreen({
         <div className="wbs-error-icon-box">
           <AlertTriangle size={24} />
         </div>
-        <h2 className="wbs-card-title">
-          Missing Job ID
-        </h2>
+        <h2 className="wbs-card-title">Missing Job ID</h2>
         <p className="wbs-card-description">
           No active analysis job ID was provided. Please return to Step 1 and upload your project files.
         </p>
@@ -198,9 +214,7 @@ export default function AnalyzingProjectScreen({
           <AlertTriangle size={24} strokeWidth={2.2} />
         </div>
 
-        <h2 className="wbs-card-title">
-          Analysis Pipeline Interrupted
-        </h2>
+        <h2 className="wbs-card-title">Analysis Pipeline Interrupted</h2>
 
         <p className="wbs-fatal-description">
           {errorMessage || 'The automated WBS generation process encountered an unrecoverable exception.'}
@@ -222,8 +236,7 @@ export default function AnalyzingProjectScreen({
             onClick={handleManualRetry}
             className="wbs-btn-primary"
           >
-            <RefreshCw size={14} />
-            Retry Connection
+            <RefreshCw size={14} /> Retry Connection
           </button>
         </div>
       </div>
@@ -245,14 +258,17 @@ export default function AnalyzingProjectScreen({
     );
   }
 
+  const sideCardTitle = jobData.sideCard?.title || 'Decomposing Requirements';
+  const sideCardDescription =
+    jobData.sideCard?.description ||
+    'Aligning project deliverables with WBS hierarchy standard.';
+
   return (
     <div className="wbs-analysis-container">
       {/* Header with Cancel Button */}
       <header className="wbs-analysis-header">
         <div className="wbs-analysis-header-row">
-          <h1 className="wbs-analysis-title">
-            {jobData.title}
-          </h1>
+          <h1 className="wbs-analysis-title">{jobData.title}</h1>
 
           {onCancel && (
             <button
@@ -264,28 +280,30 @@ export default function AnalyzingProjectScreen({
             </button>
           )}
         </div>
-        <p className="wbs-analysis-subtitle">
-          {jobData.subtitle}
-        </p>
+        <p className="wbs-analysis-subtitle">{jobData.subtitle}</p>
       </header>
 
       {/* Stepper Grid */}
       <div className="wbs-stepper-grid">
-        <div className="wbs-stepper-track">
+        <div className="wbs-stepper-track" aria-live="polite">
           {jobData.steps.map((step, index) => {
             const isLast = index === jobData.steps.length - 1;
             const isCompleted = step.status === 'COMPLETED';
-            const isInactive = step.status !== 'COMPLETED' && step.status !== 'IN_PROGRESS';
+            const isInProgress = step.status === 'IN_PROGRESS';
+            const isFailed = step.status === 'FAILED';
+            const isInactive = !isCompleted && !isInProgress && !isFailed;
+            const progressVal = (step as { progress?: number }).progress;
 
             return (
-              <div
-                key={step.id}
-                className="wbs-step-row"
-              >
+              <div key={step.id} className="wbs-step-row">
                 {!isLast && (
                   <div
                     className={`wbs-step-line ${
-                      isCompleted ? 'wbs-step-line-completed' : 'wbs-step-line-pending'
+                      isCompleted
+                        ? 'wbs-step-line-completed'
+                        : isFailed
+                        ? 'wbs-step-line-failed'
+                        : 'wbs-step-line-pending'
                     }`}
                   />
                 )}
@@ -309,6 +327,15 @@ export default function AnalyzingProjectScreen({
                   >
                     {step.description}
                   </div>
+
+                  {isInProgress && typeof progressVal === 'number' && (
+                    <div className="wbs-step-progress-track">
+                      <div
+                        className="wbs-step-progress-fill"
+                        style={{ width: `${progressVal}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -320,12 +347,8 @@ export default function AnalyzingProjectScreen({
             <FileText size={44} color="#3B82F6" strokeWidth={1.5} />
           </div>
 
-          <h2 className="wbs-side-card-title">
-            {jobData.sideCard.title}
-          </h2>
-          <p className="wbs-side-card-desc">
-            {jobData.sideCard.description}
-          </p>
+          <h2 className="wbs-side-card-title">{sideCardTitle}</h2>
+          <p className="wbs-side-card-desc">{sideCardDescription}</p>
         </div>
       </div>
     </div>

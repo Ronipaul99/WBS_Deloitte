@@ -5,11 +5,9 @@ import {
   Target,
   AlertTriangle,
   Lightbulb,
-  AlertCircle,
   X,
   RefreshCw,
   ArrowLeft,
-  PlusCircle,
 } from 'lucide-react';
 import {
   getWbsValidation,
@@ -29,7 +27,6 @@ export default function WbsValidationScreen({
   jobId,
   onBackToResults,
   onViewUnmapped,
-  onCreateNew,
 }: WbsValidationScreenProps) {
   const [data, setData] = useState<WbsValidationPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -45,7 +42,7 @@ export default function WbsValidationScreen({
     let isMounted = true;
 
     async function loadData() {
-      if (!jobId) {
+      if (!jobId || jobId.trim() === '') {
         if (isMounted) {
           setErrorMessage('No valid Job ID was provided for validation.');
           setIsLoading(false);
@@ -104,40 +101,6 @@ export default function WbsValidationScreen({
     }
   }, [selectedIssue]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!selectedIssue) return;
-
-      if (e.key === 'Escape') {
-        setSelectedIssue(null);
-        return;
-      }
-
-      if (e.key === 'Tab' && modalBoxRef.current) {
-        const focusableElements = modalBoxRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        const firstElement = focusableElements[0];
-        const lastElement = focusableElements[focusableElements.length - 1];
-
-        if (e.shiftKey) {
-          if (document.activeElement === firstElement) {
-            e.preventDefault();
-            lastElement?.focus();
-          }
-        } else {
-          if (document.activeElement === lastElement) {
-            e.preventDefault();
-            firstElement?.focus();
-          }
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIssue]);
-
   if (isLoading) {
     return (
       <div className="wbs-state-validating">
@@ -165,19 +128,13 @@ export default function WbsValidationScreen({
   }
 
   const unmappedRequirements = data.unmappedRequirements ?? [];
-  const unmappedCount = unmappedRequirements.length;
   const validationChecks = data.validationChecks ?? [];
   const aiRecommendations = data.aiRecommendations ?? [];
-  const summaryCards = data.summaryCards ?? {
-    wbsItems: { count: 0, phasesCount: 0, workPackagesCount: 0 },
-    scopeCoverage: { percentage: 0, mapped: 0, total: 0 },
-    itemsAdded: { count: 0, subtext: 'Not in template' },
-    potentialGaps: { count: 0, subtext: 'Review recommended' },
-  };
+  const summaryCards = data.summaryCards;
 
   return (
     <div className="wbs-validation-container">
-      {/* Top Left Navigation */}
+      {/* Top Left Navigation Link */}
       {onBackToResults && (
         <div className="wbs-nav-back-wrapper">
           <button
@@ -192,55 +149,37 @@ export default function WbsValidationScreen({
         </div>
       )}
 
-      {/* Header Row */}
+      {/* Header Row (No Breadcrumb bar) */}
       <div className="wbs-validation-header-row">
         <div>
-          <h1 className="wbs-validation-title">
-            WBS Validation
-          </h1>
+          <h1 className="wbs-validation-title">WBS Validation</h1>
           <p className="wbs-validation-subtitle">
-            Automated checks verifying scope alignment against {data.projectName}.
+            AI-powered checks to ensure completeness, consistency and alignment with your template.
           </p>
         </div>
 
-        {/* Header Actions */}
         <div className="wbs-validation-header-actions">
           <button
             type="button"
             onClick={handleManualRefresh}
             disabled={isReRunning}
-            className="wbs-btn-refresh"
+            className="wbs-btn-refresh-ref"
           >
-            <RotateCw size={13} className={isReRunning ? 'wbs-validation-spin' : undefined} />
-            <span>{isReRunning ? 'Validating...' : 'Re-run Validation'}</span>
+            <RotateCw size={14} className={isReRunning ? 'wbs-validation-spin' : undefined} />
+            <span>Re-run Validation</span>
           </button>
-
-          {onCreateNew && (
-            <button
-              type="button"
-              onClick={onCreateNew}
-              className="wbs-btn-create-new"
-            >
-              <PlusCircle size={14} />
-              <span>Create New WBS</span>
-            </button>
-          )}
         </div>
       </div>
 
-      {/* 4 Summary Cards */}
+      {/* 4 Summary KPI Cards */}
       <div className="kpi-cards-grid">
         <div className="wbs-kpi-card">
           <div className="wbs-kpi-icon-badge wbs-kpi-badge-green">
-            <Check size={18} strokeWidth={2.5} />
+            <Check size={18} strokeWidth={3} />
           </div>
           <div className="wbs-kpi-content">
-            <div className="wbs-kpi-val">
-              {summaryCards.wbsItems.count}
-            </div>
-            <div className="wbs-kpi-title">
-              WBS Items
-            </div>
+            <div className="wbs-kpi-val">{summaryCards.wbsItems.count}</div>
+            <div className="wbs-kpi-title">WBS Items</div>
             <div className="wbs-kpi-subtext">
               {summaryCards.wbsItems.phasesCount} Phases | {summaryCards.wbsItems.workPackagesCount} Work Packages
             </div>
@@ -252,12 +191,8 @@ export default function WbsValidationScreen({
             <Target size={18} />
           </div>
           <div className="wbs-kpi-content">
-            <div className="wbs-kpi-val">
-              {summaryCards.scopeCoverage.percentage}%
-            </div>
-            <div className="wbs-kpi-title">
-              Scope Coverage
-            </div>
+            <div className="wbs-kpi-val">{summaryCards.scopeCoverage.percentage}%</div>
+            <div className="wbs-kpi-title">Scope Coverage</div>
             <div className="wbs-kpi-subtext">
               {summaryCards.scopeCoverage.mapped} of {summaryCards.scopeCoverage.total} requirements mapped
             </div>
@@ -266,18 +201,12 @@ export default function WbsValidationScreen({
 
         <div className="wbs-kpi-card">
           <div className="wbs-kpi-icon-badge wbs-kpi-badge-amber">
-            <span style={{ fontSize: '16px', fontWeight: 700 }}>!</span>
+            <span style={{ fontSize: '15px', fontWeight: 800 }}>!</span>
           </div>
           <div className="wbs-kpi-content">
-            <div className="wbs-kpi-val">
-              {summaryCards.itemsAdded.count}
-            </div>
-            <div className="wbs-kpi-title">
-              Items Added
-            </div>
-            <div className="wbs-kpi-subtext">
-              {summaryCards.itemsAdded.subtext}
-            </div>
+            <div className="wbs-kpi-val">{summaryCards.itemsAdded.count}</div>
+            <div className="wbs-kpi-title">Items Added</div>
+            <div className="wbs-kpi-subtext">{summaryCards.itemsAdded.subtext}</div>
           </div>
         </div>
 
@@ -286,26 +215,18 @@ export default function WbsValidationScreen({
             <AlertTriangle size={18} />
           </div>
           <div className="wbs-kpi-content">
-            <div className="wbs-kpi-val">
-              {summaryCards.potentialGaps.count}
-            </div>
-            <div className="wbs-kpi-title">
-              Potential Gaps
-            </div>
-            <div className="wbs-kpi-subtext">
-              {summaryCards.potentialGaps.subtext}
-            </div>
+            <div className="wbs-kpi-val">{summaryCards.potentialGaps.count}</div>
+            <div className="wbs-kpi-title">Potential Gaps</div>
+            <div className="wbs-kpi-subtext">{summaryCards.potentialGaps.subtext}</div>
           </div>
         </div>
       </div>
 
-      {/* Two-Column Responsive Grid */}
+      {/* Two-Column Responsive Layout Matching Reference */}
       <div className="wbs-validation-main-grid">
-        {/* Left Column: Validation Checks */}
+        {/* Left Column: Validation Results */}
         <div className="wbs-checks-card">
-          <h2 className="wbs-section-title">
-            Validation Results
-          </h2>
+          <h2 className="wbs-section-title">Validation Results</h2>
 
           <div className="wbs-checks-list">
             {validationChecks.map((check) => {
@@ -318,24 +239,30 @@ export default function WbsValidationScreen({
                         isPassed ? 'wbs-status-pass' : 'wbs-status-warn'
                       }`}
                     >
-                      {isPassed ? <Check size={12} strokeWidth={3} /> : <AlertCircle size={12} strokeWidth={3} />}
+                      {isPassed ? (
+                        <Check size={12} strokeWidth={3.2} />
+                      ) : (
+                        <span style={{ fontSize: '12px', fontWeight: 800 }}>!</span>
+                      )}
                     </div>
 
                     <div>
-                      <div className="wbs-check-name">
-                        {check.title}
-                      </div>
-                      <div className="wbs-check-desc">
-                        {check.description}
-                      </div>
+                      <div className="wbs-check-name">{check.title}</div>
+                      <div className="wbs-check-desc">{check.description}</div>
                     </div>
                   </div>
 
                   {check.actionLabel && (
                     <button
                       type="button"
-                      onClick={() => setSelectedIssue(check)}
-                      className="wbs-check-action-btn"
+                      onClick={() => {
+                        if (check.title.toLowerCase().includes('no mapping') && onViewUnmapped) {
+                          onViewUnmapped();
+                        } else {
+                          setSelectedIssue(check);
+                        }
+                      }}
+                      className="wbs-check-action-link"
                     >
                       {check.actionLabel}
                     </button>
@@ -346,52 +273,48 @@ export default function WbsValidationScreen({
           </div>
         </div>
 
-        {/* Right Column: Unmapped Requirements & Recommendations */}
+        {/* Right Column: Unmapped & Recommendations */}
         <div className="wbs-right-column">
           <div className="wbs-card-standard">
             <div className="wbs-unmapped-header-row">
               <h2 className="wbs-section-title" style={{ margin: 0 }}>
-                Unmapped Requirements ({unmappedCount})
+                Unmapped Requirements ({unmappedRequirements.length})
               </h2>
               {onViewUnmapped && (
                 <button
                   type="button"
                   onClick={onViewUnmapped}
-                  className="wbs-view-all-btn"
+                  className="wbs-view-all-link"
                 >
                   View All
                 </button>
               )}
             </div>
 
-            {unmappedCount === 0 ? (
-              <div className="wbs-empty-unmapped-banner">
-                All requirements are mapped to WBS packages.
+            <div className="wbs-unmapped-table">
+              <div className="wbs-unmapped-table-header">
+                <span>Reference</span>
+                <span>Requirement Summary</span>
               </div>
-            ) : (
-              <div className="wbs-unmapped-table">
-                <div className="wbs-unmapped-table-header">
-                  <span>Reference</span>
-                  <span>Requirement Summary</span>
+              {unmappedRequirements.map((req, idx) => (
+                <div
+                  key={idx}
+                  className={`wbs-unmapped-table-row ${
+                    idx === unmappedRequirements.length - 1 ? '' : 'wbs-row-border'
+                  }`}
+                >
+                  <span className="wbs-req-reference">{req.reference}</span>
+                  <span className="wbs-req-summary">{req.summary}</span>
                 </div>
-                {unmappedRequirements.map((req, idx) => (
-                  <div
-                    key={idx}
-                    className={`wbs-unmapped-table-row ${
-                      idx === unmappedCount - 1 ? '' : 'wbs-row-border'
-                    }`}
-                  >
-                    <span className="wbs-req-reference">{req.reference}</span>
-                    <span className="wbs-req-summary">{req.summary}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+              ))}
+            </div>
           </div>
 
           <div className="wbs-card-standard">
             <div className="wbs-rec-header-row">
-              <Lightbulb size={18} color="#1A73E8" />
+              <div className="wbs-rec-bulb-icon">
+                <Lightbulb size={18} color="#1A73E8" fill="#1A73E8" />
+              </div>
               <h2 className="wbs-section-title" style={{ margin: 0 }}>
                 AI Recommendations
               </h2>
@@ -408,13 +331,11 @@ export default function WbsValidationScreen({
         </div>
       </div>
 
-      {/* Accessible Dialog with Focus Trap */}
+      {/* Accessible Detail Dialog */}
       {selectedIssue && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="issue-modal-title"
-          aria-describedby="issue-modal-desc"
           onClick={() => setSelectedIssue(null)}
           className="wbs-issue-backdrop"
         >
@@ -424,24 +345,17 @@ export default function WbsValidationScreen({
             className="wbs-issue-dialog-box"
           >
             <div className="wbs-issue-dialog-header">
-              <h3 id="issue-modal-title" className="wbs-issue-dialog-title">
-                {selectedIssue.title}
-              </h3>
+              <h3 className="wbs-issue-dialog-title">{selectedIssue.title}</h3>
               <button
                 ref={closeButtonRef}
                 type="button"
-                aria-label="Close dialog"
                 onClick={() => setSelectedIssue(null)}
                 className="wbs-issue-close-btn"
               >
                 <X size={16} />
               </button>
             </div>
-
-            <p id="issue-modal-desc" className="wbs-issue-dialog-desc">
-              {selectedIssue.description}
-            </p>
-
+            <p className="wbs-issue-dialog-desc">{selectedIssue.description}</p>
             <div className="wbs-issue-dialog-footer">
               <button
                 type="button"
