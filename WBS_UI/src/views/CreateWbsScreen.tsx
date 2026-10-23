@@ -7,16 +7,19 @@ import {
   ArrowRight, 
   ShieldAlert, 
   FileSpreadsheet,
-  Loader2 
+  Loader2,
+  ArrowLeft,
 } from 'lucide-react';
 import { startWorkflow } from '../services/workflowApi';
-import type { WorkflowSession } from '../services/workflowTypes';
+import type { ProjectResponse, WorkflowSession } from '../services/workflowTypes';
 import { useAuth } from '../auth/authContext';
 import { PERMISSIONS } from '../auth/permissions';
 import './CreateWbsScreen.css';
 
 interface CreateWbsScreenProps {
+  project: ProjectResponse;
   onWorkflowStarted?: (session: WorkflowSession) => void;
+  onBack: () => void;
 }
 
 const MAX_UPLOAD_SIZE_MB = 25;
@@ -37,11 +40,11 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-export default function CreateWbsScreen({ onWorkflowStarted }: CreateWbsScreenProps) {
+export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: CreateWbsScreenProps) {
   const { activeTenant, can } = useAuth();
   const canUploadProject = can(PERMISSIONS.DOCUMENT_UPLOAD);
   const canUploadTemplate = can(PERMISSIONS.TEMPLATE_MANAGE);
-  const canGenerate = can(PERMISSIONS.PROJECT_CREATE) && canUploadProject && can(PERMISSIONS.WBS_GENERATE);
+  const canGenerate = canUploadProject && can(PERMISSIONS.WBS_GENERATE);
   const [projectFile, setProjectFile] = useState<File | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
 
@@ -131,6 +134,7 @@ export default function CreateWbsScreen({ onWorkflowStarted }: CreateWbsScreenPr
     try {
       const session = await startWorkflow(
         activeTenant.id,
+        project,
         projectFile,
         templateFile,
         controller.signal,
@@ -149,12 +153,16 @@ export default function CreateWbsScreen({ onWorkflowStarted }: CreateWbsScreenPr
 
   return (
     <div className="wbs-create-container">
+      <button type="button" className="wbs-back-button" onClick={onBack} disabled={isSubmitting}>
+        <ArrowLeft size={15} aria-hidden="true" />
+        {project.name}
+      </button>
       <header className="wbs-create-header">
         <h1 className="wbs-create-title">
           Create Work Breakdown Structure
         </h1>
         <p className="wbs-create-subtitle">
-          Upload your project document to generate a planner-ready WBS. Add a reference WBS template when you want the generated structure to follow an existing hierarchy.
+          Upload the scope document for <strong>{project.name}</strong> to generate a planner-ready WBS. Add a reference WBS template when you want the generated structure to follow an existing hierarchy.
         </p>
       </header>
 

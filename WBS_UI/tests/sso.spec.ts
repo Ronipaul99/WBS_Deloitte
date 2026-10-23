@@ -26,7 +26,7 @@ test('SSO callback uses the internal session and clears transient URL data', asy
   });
   await page.goto('/sso/callback');
 
-  await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Welcome back, Test' })).toBeVisible();
   await expect(page).toHaveURL('http://127.0.0.1:5176/');
   const storage = await page.evaluate(() => ({
     local: { ...localStorage },

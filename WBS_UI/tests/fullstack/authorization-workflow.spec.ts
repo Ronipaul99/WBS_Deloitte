@@ -260,6 +260,12 @@ test.describe.serial('live tenant authorization and WBS workflow', () => {
 
   test('completes document upload, summary, WBS, validation, and export through the live UI', async ({ page }) => {
     await loginPage(page, state.emails.editor_a);
+    await page.getByRole('button', { name: 'Create project', exact: true }).click();
+    await page.getByLabel('Project name').fill(`Live project ${state.run_id}`);
+    await page.getByLabel('Description Optional').fill('Live browser workflow project');
+    await page.getByRole('button', { name: 'Create project', exact: true }).click();
+    await expect(page.getByRole('heading', { name: `Live project ${state.run_id}` })).toBeVisible();
+    await page.getByRole('button', { name: 'Create new WBS', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
 
     await page.locator('input[type="file"]').first().setInputFiles({
@@ -293,19 +299,19 @@ test.describe.serial('live tenant authorization and WBS workflow', () => {
     await loginPage(page, state.emails.multi);
     await expect(page.getByRole('heading', { name: 'Choose a workspace' })).toBeVisible();
     await page.getByRole('button', { name: /Tenant A/ }).click();
-    await expect(page.getByRole('heading', { name: 'My Projects' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 
     await page.getByRole('button', { name: 'Open profile menu' }).click();
     await page.getByRole('menuitem', { name: 'Switch workspace' }).click();
     await expect(page.getByRole('heading', { name: 'Choose a workspace' })).toBeVisible();
     await page.getByRole('button', { name: /Tenant B/ }).click();
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'My Projects' })).toHaveCount(0);
   });
 
   test('removes protected UI after logout and remains protected after back navigation', async ({ page }) => {
     await loginPage(page, state.emails.editor_a);
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
     await page.getByRole('button', { name: 'Open profile menu' }).click();
     await page.getByRole('menuitem', { name: 'Profile Details' }).click();
     await expect(page.getByRole('heading', { name: 'Account settings' })).toBeVisible();
@@ -321,7 +327,7 @@ test.describe.serial('live tenant authorization and WBS workflow', () => {
 
   test('has no horizontal overflow at desktop and mobile widths', async ({ page }) => {
     await loginPage(page, state.emails.editor_a);
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await assertNoHorizontalOverflow(page);

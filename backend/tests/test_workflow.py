@@ -1,3 +1,15 @@
+from io import BytesIO
+from zipfile import ZIP_DEFLATED, ZipFile
+
+
+def _xlsx_bytes() -> bytes:
+    output = BytesIO()
+    with ZipFile(output, "w", ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<Types />")
+        archive.writestr("xl/workbook.xml", "<workbook />")
+    return output.getvalue()
+
+
 def test_project_summary_generation_validation_and_export(client, tenant_id):
     project_response = client.post(
         f"/api/v1/tenants/{tenant_id}/projects",
@@ -9,7 +21,7 @@ def test_project_summary_generation_validation_and_export(client, tenant_id):
     document_response = client.post(
         f"/api/v1/tenants/{tenant_id}/projects/{project_id}/documents",
         data={"kind": "PROJECT"},
-        files={"file": ("scope.pdf", b"placeholder scope", "application/pdf")},
+        files={"file": ("scope.pdf", b"%PDF-1.4\nplaceholder scope", "application/pdf")},
     )
     assert document_response.status_code == 201
     document_id = document_response.json()["id"]
@@ -38,7 +50,7 @@ def test_project_summary_generation_validation_and_export(client, tenant_id):
         files={
             "file": (
                 "template.xlsx",
-                b"placeholder template",
+                _xlsx_bytes(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         },
@@ -110,6 +122,22 @@ def test_uploads_reject_extension_and_content_type_mismatch(client, tenant_id):
         files={"file": ("template.xlsx", b"not a declared workbook", "application/pdf")},
     )
     assert template.status_code == 415
+
+
+def test_uploads_reject_spoofed_file_content(client, tenant_id):
+    project = client.post(
+        f"/api/v1/tenants/{tenant_id}/projects",
+        json={"name": "Content validation"},
+    )
+    project_id = project.json()["id"]
+
+    document = client.post(
+        f"/api/v1/tenants/{tenant_id}/projects/{project_id}/documents",
+        data={"kind": "PROJECT"},
+        files={"file": ("scope.pdf", b"plain text", "application/pdf")},
+    )
+    assert document.status_code == 415
+    assert document.json()["detail"] == "The uploaded file content does not match its extension."
 
 
 def test_frontend_workflow_contracts_are_exposed_in_openapi(client):

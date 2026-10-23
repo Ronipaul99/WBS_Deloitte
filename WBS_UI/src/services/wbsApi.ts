@@ -9,6 +9,14 @@ export function getLatestWbs(
   return apiRequest(`/tenants/${tenantId}/projects/${projectId}/wbs/latest`, { signal });
 }
 
+export function listWbsVersions(
+  tenantId: string,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<WbsVersionResponse[]> {
+  return apiRequest(`/tenants/${tenantId}/projects/${projectId}/wbs/versions`, { signal });
+}
+
 export function updateWbs(
   tenantId: string,
   versionId: string,

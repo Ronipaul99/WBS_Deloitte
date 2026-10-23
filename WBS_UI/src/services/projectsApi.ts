@@ -1,6 +1,13 @@
 import { apiRequest } from './apiClient';
 import type { ProjectResponse } from './workflowTypes';
 
+export function listProjects(
+  tenantId: string,
+  signal?: AbortSignal,
+): Promise<ProjectResponse[]> {
+  return apiRequest(`/tenants/${tenantId}/projects`, { signal });
+}
+
 export function createProject(
   tenantId: string,
   name: string,

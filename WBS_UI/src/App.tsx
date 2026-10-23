@@ -17,13 +17,19 @@ import ResetPasswordScreen from './views/ResetPasswordScreen';
 import InvitationAcceptanceScreen from './views/InvitationAcceptanceScreen';
 import SsoCompletionScreen from './views/SsoCompletionScreen';
 import AccountSettingsScreen from './views/AccountSettingsScreen';
+import HomeScreen from './views/HomeScreen';
+import {
+  CreateProjectScreen,
+  ProjectsScreen,
+  ProjectWorkspaceScreen,
+} from './views/ProjectScreens';
 import type { AccountSettingsSection } from './views/AccountSettingsScreen';
 import TenantSelectionScreen from './views/TenantSelectionScreen';
 import { acceptTenantInvitation } from './services/memberAdministration';
 import { enterpriseSignInUrl } from './services/apiClient';
 import { startGeneration } from './services/generationsApi';
 import { startValidation } from './services/validationsApi';
-import type { WorkflowSession } from './services/workflowTypes';
+import type { ProjectResponse, WorkflowSession } from './services/workflowTypes';
 import './App.css';
 
 type PublicAuthRoute =
@@ -260,9 +266,10 @@ function WorkspaceApp({
   canSwitchWorkspace,
   onSwitchWorkspace,
 }: WorkspaceAppProps) {
-  const defaultTab = can(PERMISSIONS.PROJECT_CREATE) ? 'create' : 'projects';
   const directMemberRoute = window.location.pathname === '/settings/members';
-  const [activeTab, setActiveTab] = useState<string>(directMemberRoute ? 'settings' : defaultTab);
+  const [activeTab, setActiveTab] = useState<string>(directMemberRoute ? 'settings' : 'home');
+  const [projectScreen, setProjectScreen] = useState<'list' | 'create' | 'workspace' | 'wbs'>('list');
+  const [selectedProject, setSelectedProject] = useState<ProjectResponse | null>(null);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('create');
   const [workflow, setWorkflow] = useState<WorkflowSession | null>(null);
   const [settingsSection, setSettingsSection] = useState<AccountSettingsSection>(
@@ -272,8 +279,46 @@ function WorkspaceApp({
     'structure' | 'coverage' | 'insights' | 'unmapped'
   >('structure');
 
+  const canCreateProject = can(PERMISSIONS.PROJECT_CREATE);
+  const canCreateWbs = can(PERMISSIONS.DOCUMENT_UPLOAD) && can(PERMISSIONS.WBS_GENERATE);
+
+  const resetWbsFlow = () => {
+    setWorkflow(null);
+    setCurrentScreen('create');
+    setTargetResultTab('structure');
+  };
+
+  const showProjectList = () => {
+    resetWbsFlow();
+    setSelectedProject(null);
+    setProjectScreen('list');
+    setActiveTab('projects');
+  };
+
+  const showCreateProject = () => {
+    if (!canCreateProject) return;
+    resetWbsFlow();
+    setSelectedProject(null);
+    setProjectScreen('create');
+    setActiveTab('projects');
+  };
+
+  const openProject = (project: ProjectResponse) => {
+    resetWbsFlow();
+    setSelectedProject(project);
+    setProjectScreen('workspace');
+    setActiveTab('projects');
+  };
+
+  const showWbsUpload = () => {
+    if (!selectedProject || !canCreateWbs) return;
+    resetWbsFlow();
+    setProjectScreen('wbs');
+  };
+
   // 1. Step 1 (Upload) -> Step 2 (Document Processing Stepper)
   const handleWorkflowStarted = (session: WorkflowSession) => {
+    setSelectedProject(session.project);
     setWorkflow(session);
     setCurrentScreen('doc_processing');
   };
@@ -296,10 +341,14 @@ function WorkspaceApp({
     setCurrentScreen('results');
   };
 
-  // Navigation handlers
-  const handleBackToCreate = () => {
+  const handleBackToUpload = () => {
     setWorkflow(null);
     setCurrentScreen('create');
+  };
+
+  const handleBackToProject = () => {
+    resetWbsFlow();
+    setProjectScreen(selectedProject ? 'workspace' : 'list');
   };
 
   const handleRegenerate = async () => {
@@ -331,8 +380,8 @@ function WorkspaceApp({
   };
 
   const handleCreateNewWbs = () => {
-    setWorkflow(null);
-    setCurrentScreen('create');
+    resetWbsFlow();
+    setProjectScreen('wbs');
   };
 
   const handleViewAllUnmapped = () => {
@@ -342,27 +391,33 @@ function WorkspaceApp({
 
   const handleNavClick = (tab: string) => {
     const requiredPermissions: Record<string, Permission> = {
-      create: PERMISSIONS.PROJECT_CREATE,
+      home: PERMISSIONS.PROJECT_READ,
       projects: PERMISSIONS.PROJECT_READ,
       templates: PERMISSIONS.TEMPLATE_READ,
       exports: PERMISSIONS.EXPORT_READ,
       settings: PERMISSIONS.MEMBER_READ,
     };
     if (!requiredPermissions[tab] || !can(requiredPermissions[tab])) return;
-    setActiveTab(tab);
+    if (tab === 'projects') {
+      showProjectList();
+    } else {
+      setActiveTab(tab);
+      resetWbsFlow();
+      setSelectedProject(null);
+      setProjectScreen('list');
+    }
     if (tab === 'settings') {
       setSettingsSection('members');
       window.history.pushState({}, '', '/settings/members');
     } else if (window.location.pathname.startsWith('/settings/')) {
       window.history.pushState({}, '', '/');
     }
-    if (tab === 'create') {
-      setWorkflow(null);
-      setCurrentScreen('create');
-    }
   };
 
   const handleProfileDetails = () => {
+    resetWbsFlow();
+    setSelectedProject(null);
+    setProjectScreen('list');
     setSettingsSection('profile');
     setActiveTab('settings');
     window.history.pushState({}, '', '/settings/profile');
@@ -380,15 +435,15 @@ function WorkspaceApp({
       </div>
       <h2 className="app-missing-job-title">Missing Job ID</h2>
       <p className="app-missing-job-desc">
-        No active analysis job ID was provided for this page. Please start from Step 1 and upload your project files.
+        No active analysis job was found. Return to the project and start the WBS workflow again.
       </p>
       <button
         type="button"
-        onClick={handleCreateNewWbs}
+        onClick={handleBackToProject}
         className="app-missing-job-btn"
       >
         <ArrowLeft size={15} />
-        Back to Document Upload
+        Back to Project
       </button>
     </div>
   );
@@ -409,9 +464,63 @@ function WorkspaceApp({
       );
     }
 
-    if (activeTab === 'create') {
+    if (activeTab === 'home') {
+      return (
+        <HomeScreen
+          user={user}
+          activeTenant={activeTenant}
+          canCreateProject={canCreateProject}
+          onCreateProject={showCreateProject}
+          onOpenProject={openProject}
+          onViewProjects={showProjectList}
+        />
+      );
+    }
+
+    if (activeTab === 'projects') {
+      if (projectScreen === 'create') {
+        return (
+          <CreateProjectScreen
+            tenantId={activeTenant.id}
+            onCreated={openProject}
+            onCancel={showProjectList}
+          />
+        );
+      }
+
+      if (projectScreen === 'workspace' && selectedProject) {
+        return (
+          <ProjectWorkspaceScreen
+            tenantId={activeTenant.id}
+            project={selectedProject}
+            canCreateWbs={canCreateWbs}
+            onBack={showProjectList}
+            onCreateWbs={showWbsUpload}
+          />
+        );
+      }
+
+      if (projectScreen === 'list') {
+        return (
+          <ProjectsScreen
+            tenantId={activeTenant.id}
+            canCreateProject={canCreateProject}
+            onCreateProject={showCreateProject}
+            onOpenProject={openProject}
+          />
+        );
+      }
+
+      if (!selectedProject) return renderMissingJobIdError();
+
       if (currentScreen === 'create') {
-        return <CreateWbsScreen onWorkflowStarted={handleWorkflowStarted} />;
+        return (
+          <CreateWbsScreen
+            project={selectedProject}
+            onWorkflowStarted={handleWorkflowStarted}
+            onBack={handleBackToProject}
+          />
+        );
       }
 
       if (!workflow) {
@@ -426,8 +535,8 @@ function WorkspaceApp({
             document={workflow.document}
             template={workflow.template}
             onProcessingComplete={handleDocProcessingComplete}
-            onBack={handleBackToCreate}
-            onCancel={handleBackToCreate}
+            onBack={handleBackToUpload}
+            onCancel={handleBackToUpload}
           />
         );
       }
@@ -440,7 +549,7 @@ function WorkspaceApp({
             document={workflow.document}
             template={workflow.template}
             onProceedToAnalyze={handleProceedToAnalyze}
-            onDiscard={handleBackToCreate}
+            onDiscard={handleBackToUpload}
           />
         );
       }
@@ -453,7 +562,7 @@ function WorkspaceApp({
             jobId={workflow.generationJobId}
             projectName={workflow.project.name}
             onAnalysisComplete={handleAnalysisComplete}
-            onCancel={handleBackToCreate}
+            onCancel={handleBackToUpload}
           />
         );
       }
@@ -486,10 +595,8 @@ function WorkspaceApp({
     }
 
     const placeholderTitles: Record<string, string> = {
-      projects: 'My Projects',
       templates: 'Templates',
       exports: 'Exports',
-      settings: 'Settings',
     };
 
     return (

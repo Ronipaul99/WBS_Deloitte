@@ -24,6 +24,12 @@ def production_values(**overrides):
         "public_ui_url": "https://wbs.example.com",
         "cors_origins": "https://wbs.example.com",
         "forwarded_allow_ips": "10.0.0.0/8",
+        "storage_backend": "s3",
+        "object_storage_bucket": "assets",
+        "aws_endpoint_url_s3": "https://storage.example.com",
+        "aws_access_key_id": "test-access-key",
+        "aws_secret_access_key": "test-secret-key",
+        "aws_region": "us-east-2",
     }
     values.update(overrides)
     return values
@@ -65,6 +71,39 @@ def test_production_rejects_development_authentication_bypass() -> None:
         Settings(
             _env_file=None,
             **production_values(auth_mode="development"),
+        )
+
+
+def test_s3_storage_requires_complete_secure_configuration() -> None:
+    with pytest.raises(ValidationError, match="S3 object storage configuration is incomplete"):
+        Settings(_env_file=None, storage_backend="s3")
+
+    with pytest.raises(ValidationError, match="AWS_ENDPOINT_URL_S3"):
+        Settings(
+            _env_file=None,
+            storage_backend="s3",
+            aws_endpoint_url_s3="http://storage.example.com",
+            aws_access_key_id="test-access-key",
+            aws_secret_access_key="test-secret-key",
+        )
+
+    settings = Settings(
+        _env_file=None,
+        storage_backend="s3",
+        aws_endpoint_url_s3="https://storage.example.com",
+        aws_access_key_id="test-access-key",
+        aws_secret_access_key="test-secret-key",
+    )
+    assert settings.object_storage_bucket == "assets"
+    assert settings.aws_secret_access_key is not None
+    assert "test-secret-key" not in repr(settings)
+
+
+def test_production_requires_s3_object_storage() -> None:
+    with pytest.raises(ValidationError, match="STORAGE_BACKEND=s3"):
+        Settings(
+            _env_file=None,
+            **production_values(storage_backend="local"),
         )
 
 

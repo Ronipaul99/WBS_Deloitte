@@ -6,7 +6,7 @@ from typing import Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
-from pydantic import EmailStr, Field, model_validator
+from pydantic import EmailStr, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     auto_create_tables: bool = True
     bootstrap_development_data: bool = True
     upload_root: Path = Path(".data/uploads")
+    storage_backend: Literal["local", "s3"] = "local"
+    object_storage_bucket: str = "assets"
+    aws_endpoint_url_s3: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: SecretStr | None = None
+    aws_region: str = "us-east-2"
+    object_storage_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    object_storage_read_timeout_seconds: int = Field(default=60, ge=5, le=300)
+    object_storage_max_attempts: int = Field(default=3, ge=1, le=5)
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     max_upload_bytes: int = 25 * 1024 * 1024
     max_request_body_bytes: int = 26 * 1024 * 1024
@@ -120,6 +129,31 @@ class Settings(BaseSettings):
                 raise ValueError("AUTH_JWT_SECRET and AUTH_AUDIT_SECRET must be independent")
         if self.auth_mode in {"oidc", "hybrid"}:
             self._validate_oidc_settings()
+        if self.storage_backend == "s3":
+            required_storage = {
+                "AWS_ENDPOINT_URL_S3": self.aws_endpoint_url_s3,
+                "AWS_ACCESS_KEY_ID": self.aws_access_key_id,
+                "AWS_SECRET_ACCESS_KEY": (
+                    self.aws_secret_access_key.get_secret_value()
+                    if self.aws_secret_access_key
+                    else None
+                ),
+                "AWS_REGION": self.aws_region,
+                "OBJECT_STORAGE_BUCKET": self.object_storage_bucket,
+            }
+            missing_storage = [name for name, value in required_storage.items() if not value]
+            if missing_storage:
+                raise ValueError(
+                    "S3 object storage configuration is incomplete: "
+                    + ", ".join(missing_storage)
+                )
+            if not self._is_storage_endpoint(self.aws_endpoint_url_s3 or ""):
+                raise ValueError(
+                    "AWS_ENDPOINT_URL_S3 must be an HTTPS origin "
+                    "(HTTP is allowed only for local development endpoints)"
+                )
+            if not self._is_valid_bucket_name(self.object_storage_bucket):
+                raise ValueError("OBJECT_STORAGE_BUCKET is not a valid S3 bucket name")
         if self.app_env == "production":
             if self.auth_mode == "development":
                 raise ValueError("AUTH_MODE=development is forbidden in production")
@@ -135,6 +169,8 @@ class Settings(BaseSettings):
                 raise ValueError("DIRECT_DATABASE_URL is required in production")
             if not self.sqlalchemy_migration_url.startswith("postgresql+asyncpg://"):
                 raise ValueError("DIRECT_DATABASE_URL must use PostgreSQL in production")
+            if self.storage_backend != "s3":
+                raise ValueError("STORAGE_BACKEND=s3 is required in production")
             if self.sqlalchemy_database_url == self.sqlalchemy_migration_url:
                 raise ValueError(
                     "DATABASE_URL and DIRECT_DATABASE_URL must use separate production credentials"
@@ -396,6 +432,34 @@ class Settings(BaseSettings):
         except ValueError:
             return False
         return True
+
+    def _is_storage_endpoint(self, value: str) -> bool:
+        parts = urlsplit(value)
+        if (
+            not parts.netloc
+            or parts.username
+            or parts.password
+            or parts.path not in {"", "/"}
+            or parts.query
+            or parts.fragment
+        ):
+            return False
+        if parts.scheme == "https":
+            return True
+        return bool(
+            self.app_env != "production"
+            and parts.scheme == "http"
+            and parts.hostname in {"localhost", "127.0.0.1", "::1"}
+        )
+
+    @staticmethod
+    def _is_valid_bucket_name(value: str) -> bool:
+        if not 3 <= len(value) <= 63 or value.startswith("-") or value.endswith("-"):
+            return False
+        return all(
+            character.islower() or character.isdigit() or character in ".-"
+            for character in value
+        )
 
     @staticmethod
     def _database_url_requires_tls(value: str) -> bool:

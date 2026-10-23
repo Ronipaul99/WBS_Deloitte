@@ -10,7 +10,7 @@ FastAPI boilerplate for the tenant-aware WBS generation workflow. It includes:
 - Argon2id local passwords, short-lived JWT access tokens, and rotating refresh sessions
 - backend-managed OIDC Authorization Code with PKCE and internal application sessions
 - database-backed role permissions on every tenant-owned operation
-- local object storage with tenant-prefixed keys
+- local development storage and private S3-compatible Neon Object Storage
 - document summary, WBS generation, validation, and export placeholders
 - OpenAPI documentation and end-to-end contract tests
 
@@ -38,6 +38,28 @@ Development mode automatically provisions this tenant ID:
 ```
 
 No bearer token is required while `AUTH_MODE=development`.
+
+## Use Neon Object Storage
+
+The document and WBS template upload endpoints use local disk by default. To use a private Neon
+bucket, create a fresh storage credential and place these values only in the untracked `.env` file
+or your deployment secret manager:
+
+```dotenv
+STORAGE_BACKEND=s3
+OBJECT_STORAGE_BUCKET=assets
+AWS_ENDPOINT_URL_S3=https://YOUR-ENDPOINT.storage.REGION.aws.neon.tech
+AWS_ACCESS_KEY_ID=YOUR-NEW-KEY-ID
+AWS_SECRET_ACCESS_KEY=YOUR-NEW-SECRET
+AWS_REGION=us-east-2
+```
+
+Restart the API after changing storage settings. `GET /api/v1/health/ready` verifies access to the
+configured bucket. Uploads continue through the authenticated API; the backend validates the
+declared type, file signature, actual byte size, tenant/project ownership, and writes a generated
+key such as `tenants/{tenant}/projects/{project}/documents/{uuid}.pdf`. Original filenames remain
+database metadata and are never used as object keys. Do not make the bucket public and do not place
+S3 credentials in `WBS_UI` environment variables.
 
 ## Enable local authentication
 

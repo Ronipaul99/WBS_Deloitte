@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { 
   Sparkles,
-  Layers, 
+  House,
   FolderKanban, 
   FileSpreadsheet, 
   DownloadCloud, 
@@ -39,7 +39,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({
   children,
-  activeTab = 'create',
+  activeTab = 'home',
   onNavClick,
   appTitle = 'WBS Genie',
   currentUser = {
@@ -85,7 +85,7 @@ export default function AppLayout({
   }, [showProfileMenu]);
 
   const sidebarLinks = [
-    { id: 'create', label: 'Create WBS', icon: Layers, permission: PERMISSIONS.PROJECT_CREATE },
+    { id: 'home', label: 'Home', icon: House, permission: PERMISSIONS.PROJECT_READ },
     { id: 'projects', label: 'My Projects', icon: FolderKanban, permission: PERMISSIONS.PROJECT_READ },
     { id: 'templates', label: 'Templates', icon: FileSpreadsheet, permission: PERMISSIONS.TEMPLATE_READ },
     { id: 'exports', label: 'Exports', icon: DownloadCloud, permission: PERMISSIONS.EXPORT_READ },

@@ -32,7 +32,7 @@ test.describe('live authentication and browser security', () => {
     await page.getByLabel('Email address').fill(state.emails.editor_a);
     await page.locator('#login-password').fill(password);
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 
     const refreshCookie = (await page.context().cookies()).find(
       (cookie) => cookie.name === 'wbs_refresh',
@@ -46,13 +46,13 @@ test.describe('live authentication and browser security', () => {
     await assertNoCredentialStorage(page);
 
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
     await assertNoCredentialStorage(page);
   });
 
   test('coalesces concurrent refreshes after the test-only access token expires', async ({ page }) => {
     await loginPage(page, state.emails.editor_a);
-    await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
 
     let successfulRefreshes = 0;
     page.on('response', (response) => {

@@ -284,7 +284,7 @@ test('existing account signs in and accepts its invitation', async ({ page }) =>
   await page.getByLabel('Password', { exact: true }).fill('Correct-Horse-Battery-Staple-84');
   await page.getByRole('button', { name: 'Sign in and join' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole('button', { name: 'Create WBS' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
   expect(authorization).toBe('Bearer existing-user-access');
 });
 

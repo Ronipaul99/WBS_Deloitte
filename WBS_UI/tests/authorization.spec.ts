@@ -4,6 +4,7 @@ import {
   VIEWER_PERMISSIONS,
   mockAuthenticatedUser,
 } from './auth-mocks';
+import { createProjectAndOpenWbs, mockWorkflowApi } from './workflow-mocks';
 
 test('viewer sees read-only navigation without create or settings commands', async ({ page }) => {
   await mockAuthenticatedUser(page, { role: 'VIEWER', permissions: VIEWER_PERMISSIONS });
@@ -13,15 +14,18 @@ test('viewer sees read-only navigation without create or settings commands', asy
   await expect(page.getByRole('button', { name: 'Templates' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Exports' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Create WBS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create project' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toHaveCount(0);
 });
 
 test('editor can create a WBS but does not see administrative settings', async ({ page }) => {
   await mockAuthenticatedUser(page, { role: 'EDITOR', permissions: EDITOR_PERMISSIONS });
+  await mockWorkflowApi(page);
   await page.goto('/');
 
-  await expect(page.getByRole('button', { name: 'Create WBS' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
+  await createProjectAndOpenWbs(page);
   await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
 });

@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import { mockAuthenticatedUser } from './auth-mocks'
-import { mockWorkflowApi } from './workflow-mocks'
+import { createProjectAndOpenWbs, mockWorkflowApi } from './workflow-mocks'
 
 test('generates a draft when only the required project document is uploaded', async ({ page }) => {
   await mockAuthenticatedUser(page)
   await mockWorkflowApi(page)
   await page.goto('/')
+  await createProjectAndOpenWbs(page)
 
   const generateButton = page.getByRole('button', { name: 'Generate Draft WBS' })
   await expect(generateButton).toBeDisabled()

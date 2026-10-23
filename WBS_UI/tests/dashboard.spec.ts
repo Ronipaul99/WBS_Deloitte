@@ -27,6 +27,11 @@ for (const viewport of viewports) {
 
 test('signs in and renders the authenticated workspace', async ({ page }) => {
   let authenticated = false
+  await page.route('**/api/v1/tenants/*/projects', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: '[]',
+  }))
   await page.route('**/api/v1/auth/refresh', (route) => route.fulfill({ status: 401 }))
   await page.route('**/api/v1/auth/login', async (route) => {
     authenticated = true
@@ -67,7 +72,8 @@ test('signs in and renders the authenticated workspace', async ({ page }) => {
   await page.getByLabel('Password', { exact: true }).fill('a-valid-test-password')
   await page.getByRole('button', { name: 'Sign in' }).click()
 
-  await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Welcome back, Test' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Open profile menu' })).toContainText('Test Planner')
   const storedKeys = await page.evaluate(() => ({
     local: Object.keys(localStorage),

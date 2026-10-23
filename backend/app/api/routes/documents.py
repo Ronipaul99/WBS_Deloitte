@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from uuid import UUID
 
@@ -9,16 +10,20 @@ from starlette.datastructures import UploadFile
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_document, get_tenant_project
-from app.core.config import Settings, get_settings
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import Document, DocumentKind
 from app.schemas.domain import DocumentResponse
-from app.services.storage import LocalObjectStorage
+from app.services.storage import (
+    ObjectStorageUnavailableError,
+    UploadObjectStorage,
+    get_upload_storage,
+)
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}", tags=["documents"], responses=TENANT_AUTH_RESPONSES
 )
+logger = logging.getLogger(__name__)
 
 PROJECT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"}
 PROJECT_CONTENT_TYPES = {
@@ -62,7 +67,7 @@ async def upload_document(
     project_id: UUID,
     context: TenantContext = Depends(require_permission(Permission.DOCUMENT_UPLOAD)),
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
 ) -> Document:
     await get_tenant_project(db, context.tenant.id, project_id)
     form = await request.form()
@@ -92,21 +97,41 @@ async def upload_document(
             detail="The uploaded content type does not match the project document extension.",
         )
 
-    storage_key, size = await LocalObjectStorage(settings).save(
-        context.tenant.id, "documents", file
-    )
+    file_name = Path(file.filename or "upload.bin").name
+    try:
+        storage_key, size = await storage.save(
+            context.tenant.id,
+            "documents",
+            file,
+            suffix=suffix,
+            content_type=content_type,
+            project_id=project_id,
+        )
+    except ObjectStorageUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document storage is temporarily unavailable.",
+        ) from None
     document = Document(
         tenant_id=context.tenant.id,
         project_id=project_id,
         uploaded_by=context.user.id,
         kind=kind,
-        file_name=Path(file.filename or "upload.bin").name,
+        file_name=file_name,
         content_type=content_type,
         size_bytes=size,
         storage_key=storage_key,
     )
-    db.add(document)
-    await db.commit()
+    try:
+        db.add(document)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        try:
+            await storage.delete_object(storage_key)
+        except ObjectStorageUnavailableError:
+            logger.exception("Failed to compensate object upload after database error")
+        raise
     await db.refresh(document)
     return document
 
@@ -140,10 +165,16 @@ async def delete_document(
     document_id: UUID,
     context: TenantContext = Depends(require_permission(Permission.DOCUMENT_UPLOAD)),
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
 ) -> Response:
     document = await get_tenant_document(db, context.tenant.id, document_id)
-    LocalObjectStorage(settings).delete(document.storage_key)
+    try:
+        await storage.delete_object(document.storage_key)
+    except ObjectStorageUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Document storage is temporarily unavailable.",
+        ) from None
     await db.delete(document)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

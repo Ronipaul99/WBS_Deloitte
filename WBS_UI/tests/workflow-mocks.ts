@@ -19,6 +19,7 @@ interface WorkflowMockOptions {
 }
 
 export interface WorkflowMockState {
+  projectCreates: number;
   templateUploads: number;
   generationPayload: Record<string, unknown> | null;
   refreshDuringGenerationPoll: boolean;
@@ -59,6 +60,7 @@ export async function mockWorkflowApi(
   options: WorkflowMockOptions = {},
 ): Promise<WorkflowMockState> {
   const state: WorkflowMockState = {
+    projectCreates: 0,
     templateUploads: 0,
     generationPayload: null,
     refreshDuringGenerationPoll: false,
@@ -74,12 +76,17 @@ export async function mockWorkflowApi(
     const method = request.method();
     state.requestPaths.push(path);
 
+    if (method === 'GET' && path.endsWith('/projects')) {
+      return json(route, []);
+    }
     if (method === 'POST' && path.endsWith('/projects')) {
+      state.projectCreates += 1;
+      const payload = request.postDataJSON() as { name: string; description?: string | null };
       return json(route, {
         id: IDS.project,
         tenant_id: IDS.tenant,
-        name: 'Project Scope',
-        description: 'Created from project-scope.pdf',
+        name: payload.name,
+        description: payload.description ?? null,
         status: 'ACTIVE',
         ...timestamps(),
       }, 201);
@@ -211,6 +218,9 @@ export async function mockWorkflowApi(
         ...timestamps(),
       });
     }
+    if (method === 'GET' && path.endsWith(`/projects/${IDS.project}/wbs/versions`)) {
+      return json(route, []);
+    }
     if (method === 'PUT' && path.endsWith(`/wbs/${IDS.version}`)) {
       return json(route, { id: IDS.version, ...(request.postDataJSON() as object) });
     }
@@ -280,4 +290,15 @@ export async function mockWorkflowApi(
     return json(route, { detail: `Unhandled workflow route: ${method} ${path}` }, 500);
   });
   return state;
+}
+
+export async function createProjectAndOpenWbs(
+  page: Page,
+  name = 'Project Scope',
+): Promise<void> {
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await page.getByLabel('Project name').fill(name);
+  await page.getByLabel('Description Optional').fill('POC delivery scope');
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await page.getByRole('button', { name: 'Create new WBS', exact: true }).click();
 }

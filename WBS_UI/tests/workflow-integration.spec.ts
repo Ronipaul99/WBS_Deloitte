@@ -1,8 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockAuthenticatedUser } from './auth-mocks';
-import { mockWorkflowApi, type WorkflowMockState } from './workflow-mocks';
+import {
+  createProjectAndOpenWbs,
+  mockWorkflowApi,
+  type WorkflowMockState,
+} from './workflow-mocks';
 
 async function uploadProject(page: Page, withTemplate = false) {
+  await createProjectAndOpenWbs(page);
   const inputs = page.locator('input[type="file"]');
   await inputs.first().setInputFiles({
     name: 'project-scope.pdf',
@@ -39,6 +44,7 @@ test('runs the required-document workflow through summary, WBS, validation, and 
   await reachResults(page);
 
   expect(state.templateUploads).toBe(0);
+  expect(state.projectCreates).toBe(1);
   expect(state.generationPayload).toEqual({
     document_id: '20000000-0000-0000-0000-000000000001',
     summary_id: '50000000-0000-0000-0000-000000000001',

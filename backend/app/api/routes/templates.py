@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from uuid import UUID
 
@@ -9,18 +10,22 @@ from starlette.datastructures import UploadFile
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_template
-from app.core.config import Settings, get_settings
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import WbsTemplate
 from app.schemas.domain import TemplateResponse
-from app.services.storage import LocalObjectStorage
+from app.services.storage import (
+    ObjectStorageUnavailableError,
+    UploadObjectStorage,
+    get_upload_storage,
+)
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}/templates",
     tags=["templates"],
     responses=TENANT_AUTH_RESPONSES,
 )
+logger = logging.getLogger(__name__)
 TEMPLATE_EXTENSIONS = {".xls", ".xlsx", ".csv", ".xml"}
 TEMPLATE_CONTENT_TYPES = {
     ".xls": {"application/vnd.ms-excel"},
@@ -56,7 +61,7 @@ async def upload_template(
     request: Request,
     context: TenantContext = Depends(require_permission(Permission.TEMPLATE_MANAGE)),
     db: AsyncSession = Depends(get_db),
-    settings: Settings = Depends(get_settings),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
 ) -> WbsTemplate:
     form = await request.form()
     file = form.get("file")
@@ -76,20 +81,39 @@ async def upload_template(
             detail="The uploaded content type does not match the WBS template extension.",
         )
 
-    storage_key, size = await LocalObjectStorage(settings).save(
-        context.tenant.id, "templates", file
-    )
+    file_name = Path(file.filename or "template.bin").name
+    try:
+        storage_key, size = await storage.save(
+            context.tenant.id,
+            "templates",
+            file,
+            suffix=suffix,
+            content_type=content_type,
+        )
+    except ObjectStorageUnavailableError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Template storage is temporarily unavailable.",
+        ) from None
     template = WbsTemplate(
         tenant_id=context.tenant.id,
         uploaded_by=context.user.id,
         name=(name or Path(file.filename or "Template").stem).strip(),
-        file_name=Path(file.filename or "template.bin").name,
+        file_name=file_name,
         content_type=content_type,
         size_bytes=size,
         storage_key=storage_key,
     )
-    db.add(template)
-    await db.commit()
+    try:
+        db.add(template)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        try:
+            await storage.delete_object(storage_key)
+        except ObjectStorageUnavailableError:
+            logger.exception("Failed to compensate template upload after database error")
+        raise
     await db.refresh(template)
     return template
 

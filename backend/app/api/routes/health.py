@@ -15,6 +15,11 @@ from app.models.auth import AuthIdentity, RefreshSession
 from app.models.domain import MembershipRole, Tenant, TenantMembership, User
 from app.schemas.domain import HealthResponse
 from app.services.readiness import database_is_at_migration_head
+from app.services.storage import (
+    ObjectStorageUnavailableError,
+    UploadObjectStorage,
+    get_upload_storage,
+)
 
 router = APIRouter(prefix="/health", tags=["system"])
 logger = logging.getLogger(__name__)
@@ -66,7 +71,9 @@ async def liveness(settings: Settings = Depends(get_settings)) -> HealthResponse
 
 @router.get("/ready", response_model=HealthResponse)
 async def readiness(
-    db: AsyncSession = Depends(get_db), settings: Settings = Depends(get_settings)
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
 ) -> HealthResponse:
     try:
         await db.execute(text("SELECT 1"))
@@ -94,8 +101,15 @@ async def readiness(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Service is not ready.",
             )
+        await storage.check()
     except SQLAlchemyError:
         logger.error("Readiness check failed: database unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service is not ready.",
+        ) from None
+    except ObjectStorageUnavailableError:
+        logger.error("Readiness check failed: object storage unavailable")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service is not ready.",
