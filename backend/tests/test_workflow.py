@@ -89,3 +89,52 @@ def test_project_summary_generation_validation_and_export(client, tenant_id):
 def test_unknown_tenant_is_not_exposed(client):
     response = client.get("/api/v1/tenants/00000000-0000-0000-0000-000000000099/projects")
     assert response.status_code == 404
+
+
+def test_uploads_reject_extension_and_content_type_mismatch(client, tenant_id):
+    project = client.post(
+        f"/api/v1/tenants/{tenant_id}/projects",
+        json={"name": "Upload validation"},
+    )
+    project_id = project.json()["id"]
+
+    document = client.post(
+        f"/api/v1/tenants/{tenant_id}/projects/{project_id}/documents",
+        data={"kind": "PROJECT"},
+        files={"file": ("scope.pdf", b"not a declared PDF", "text/plain")},
+    )
+    assert document.status_code == 415
+
+    template = client.post(
+        f"/api/v1/tenants/{tenant_id}/templates",
+        files={"file": ("template.xlsx", b"not a declared workbook", "application/pdf")},
+    )
+    assert template.status_code == 415
+
+
+def test_frontend_workflow_contracts_are_exposed_in_openapi(client):
+    schemas = client.get("/openapi.json").json()["components"]["schemas"]
+
+    generation = schemas["GenerationCreate"]
+    assert set(generation["required"]) == {"document_id", "summary_id"}
+    assert "template_id" in generation["properties"]
+    assert "template_id" not in generation["required"]
+
+    assert {
+        "id",
+        "tenant_id",
+        "status",
+        "progress",
+        "result_payload",
+    }.issubset(schemas["JobResponse"]["properties"])
+    assert {
+        "id",
+        "project_id",
+        "version_number",
+        "tree",
+        "scope_coverage",
+    }.issubset(schemas["WbsVersionResponse"]["properties"])
+    assert {"id", "status", "result"}.issubset(schemas["ValidationResponse"]["properties"])
+    assert {"id", "status", "format", "download_url"}.issubset(
+        schemas["ExportResponse"]["properties"]
+    )

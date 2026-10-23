@@ -1,7 +1,8 @@
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, status
+from starlette.datastructures import UploadFile
 
 from app.core.config import Settings
 

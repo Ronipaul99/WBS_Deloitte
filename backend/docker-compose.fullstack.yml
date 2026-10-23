@@ -1,0 +1,16 @@
+services:
+  postgres-fullstack:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wbs_fullstack
+      POSTGRES_USER: wbs_fullstack
+      POSTGRES_PASSWORD: "${FULLSTACK_POSTGRES_PASSWORD:?FULLSTACK_POSTGRES_PASSWORD is required}"
+    ports:
+      - "${FULLSTACK_POSTGRES_PORT:-55432}:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wbs_fullstack -d wbs_fullstack"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

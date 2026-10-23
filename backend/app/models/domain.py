@@ -55,10 +55,14 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(160))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auth_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
 
 class TenantMembership(TimestampMixin, Base):
     __tablename__ = "tenant_memberships"
+    __table_args__ = (
+        Index("ix_tenant_memberships_role_tenant_user", "role", "tenant_id", "user_id"),
+    )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), primary_key=True)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)

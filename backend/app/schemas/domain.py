@@ -19,6 +19,8 @@ class TenantResponse(ORMModel):
     id: UUID
     name: str
     slug: str
+    role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
 
 
 class UserResponse(ORMModel):
@@ -28,6 +30,9 @@ class UserResponse(ORMModel):
 
 
 class CurrentUserResponse(UserResponse):
+    identity_providers: list[str] = Field(default_factory=list)
+    can_change_password: bool = False
+    can_manage_sessions: bool = False
     tenants: list[TenantResponse] = Field(default_factory=list)
 
 

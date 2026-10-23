@@ -1,7 +1,14 @@
 node_modules
 dist
 .env.local
+.env
+.env.*
+!.env.example
 .DS_Store
 *.log
 playwright-report
 test-results
+test-results-phase-06
+test-results-phase-08
+test-results-fullstack
+playwright-report-fullstack

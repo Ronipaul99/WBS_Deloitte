@@ -7,20 +7,24 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import TenantContext, require_tenant_member
+from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
+from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_job
+from app.core.permissions import Permission
 from app.db.session import SessionLocal, get_db
 from app.models.domain import Job, JobType, ProcessingStatus
 from app.schemas.domain import JobResponse
 from app.services.dispatcher import dispatch_generation, dispatch_summary
 
-router = APIRouter(prefix="/tenants/{tenant_id}/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/tenants/{tenant_id}/jobs", tags=["jobs"], responses=TENANT_AUTH_RESPONSES
+)
 
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.JOB_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     return await get_tenant_job(db, context.tenant.id, job_id)
@@ -29,7 +33,7 @@ async def get_job(
 @router.post("/{job_id}/cancel", response_model=JobResponse)
 async def cancel_job(
     job_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.JOB_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     job = await get_tenant_job(db, context.tenant.id, job_id)
@@ -46,7 +50,7 @@ async def cancel_job(
 async def retry_job(
     job_id: UUID,
     background_tasks: BackgroundTasks,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.JOB_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     job = await get_tenant_job(db, context.tenant.id, job_id)
@@ -74,7 +78,7 @@ async def retry_job(
 async def job_events(
     tenant_id: UUID,
     job_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.JOB_READ)),
 ) -> StreamingResponse:
     async def event_stream() -> AsyncIterator[str]:
         last_signature = ""

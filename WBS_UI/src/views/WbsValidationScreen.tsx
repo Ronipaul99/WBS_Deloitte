@@ -10,24 +10,62 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import {
-  getWbsValidation,
-  WbsValidationPayload,
+  getValidation,
+  startValidation,
+} from '../services/validationsApi';
+import { getLatestWbs } from '../services/wbsApi';
+import { pollResource } from '../services/polling';
+import { presentValidation, presentWbs } from '../services/workflowPresentation';
+import type {
+  ProjectResponse,
+  TemplateResponse,
   ValidationCheckItem,
-} from '../services/wbsService';
+  WbsValidationPayload,
+} from '../services/workflowTypes';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS } from '../auth/permissions';
 import './WbsValidationScreen.css';
 
 interface WbsValidationScreenProps {
-  jobId: string;
+  tenantId: string;
+  validationId: string;
+  project: ProjectResponse;
+  template: TemplateResponse | null;
   onBackToResults?: () => void;
   onViewUnmapped?: () => void;
   onCreateNew?: () => void;
 }
 
+async function fetchCompletedValidation(
+  tenantId: string,
+  validationId: string,
+  project: ProjectResponse,
+  template: TemplateResponse | null,
+  signal: AbortSignal,
+): Promise<WbsValidationPayload> {
+  const version = await getLatestWbs(tenantId, project.id, signal);
+  const wbs = presentWbs(version, project, template);
+  const validation = await pollResource({
+    signal,
+    request: (pollSignal) => getValidation(tenantId, validationId, pollSignal),
+    isTerminal: (value) => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(value.status),
+  });
+  if (validation.status !== 'COMPLETED') {
+    throw new Error('Validation was cancelled or failed.');
+  }
+  return presentValidation(validation, wbs);
+}
+
 export default function WbsValidationScreen({
-  jobId,
+  tenantId,
+  validationId,
+  project,
+  template,
   onBackToResults,
   onViewUnmapped,
 }: WbsValidationScreenProps) {
+  const { can } = useAuth();
+  const canRunValidation = can(PERMISSIONS.VALIDATION_RUN);
   const [data, setData] = useState<WbsValidationPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isReRunning, setIsReRunning] = useState<boolean>(false);
@@ -39,14 +77,12 @@ export default function WbsValidationScreen({
   const modalBoxRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
 
     async function loadData() {
-      if (!jobId || jobId.trim() === '') {
-        if (isMounted) {
-          setErrorMessage('No valid Job ID was provided for validation.');
-          setIsLoading(false);
-        }
+      if (!validationId) {
+        setErrorMessage('No validation run was provided.');
+        setIsLoading(false);
         return;
       }
 
@@ -54,34 +90,46 @@ export default function WbsValidationScreen({
       setErrorMessage(null);
 
       try {
-        const res = await getWbsValidation(jobId);
-        if (isMounted) {
-          setData(res);
-        }
+        const res = await fetchCompletedValidation(
+          tenantId,
+          validationId,
+          project,
+          template,
+          controller.signal,
+        );
+        if (!controller.signal.aborted) setData(res);
       } catch (err: unknown) {
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setErrorMessage(err instanceof Error ? err.message : 'Failed to execute WBS validation analysis.');
         }
       } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
+        if (!controller.signal.aborted) setIsLoading(false);
       }
     }
 
     loadData();
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
-  }, [jobId]);
+  }, [project, template, tenantId, validationId]);
 
   const handleManualRefresh = async () => {
+    if (!canRunValidation) return;
     setIsReRunning(true);
     setErrorMessage(null);
 
     try {
-      const res = await getWbsValidation(jobId);
+      const controller = new AbortController();
+      const version = await getLatestWbs(tenantId, project.id, controller.signal);
+      const started = await startValidation(tenantId, version.id, controller.signal);
+      const res = await fetchCompletedValidation(
+        tenantId,
+        started.id,
+        project,
+        template,
+        controller.signal,
+      );
       setData(res);
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to re-run WBS validation analysis.');
@@ -116,13 +164,13 @@ export default function WbsValidationScreen({
         <AlertTriangle size={32} color="#DC2626" className="wbs-state-error-icon" />
         <h2 className="wbs-state-error-title">Validation Failed</h2>
         <p className="wbs-state-error-msg">{errorMessage || 'Unable to retrieve validation records.'}</p>
-        <button
+        {canRunValidation && <button
           type="button"
           onClick={handleManualRefresh}
           className="wbs-retry-validation-btn"
         >
           <RefreshCw size={14} /> Retry Validation
-        </button>
+        </button>}
       </div>
     );
   }
@@ -158,7 +206,7 @@ export default function WbsValidationScreen({
           </p>
         </div>
 
-        <div className="wbs-validation-header-actions">
+        {canRunValidation && <div className="wbs-validation-header-actions">
           <button
             type="button"
             onClick={handleManualRefresh}
@@ -168,7 +216,7 @@ export default function WbsValidationScreen({
             <RotateCw size={14} className={isReRunning ? 'wbs-validation-spin' : undefined} />
             <span>Re-run Validation</span>
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* 4 Summary KPI Cards */}

@@ -9,25 +9,34 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
-  getProcessingDocStatus,
+  cancelJob,
+  getJob,
+} from '../services/jobsApi';
+import { pollResource } from '../services/polling';
+import { presentSummaryJob } from '../services/workflowPresentation';
+import type {
+  DocumentResponse,
   ProcessingDocStatusResponse,
   StepStatus,
-} from '../services/wbsService';
+  TemplateResponse,
+} from '../services/workflowTypes';
 import './ProcessingProjectDocumentScreen.css';
 
 interface ProcessingProjectDocumentScreenProps {
+  tenantId: string;
   jobId: string;
+  document: DocumentResponse;
+  template: TemplateResponse | null;
   onProcessingComplete?: () => void;
   onBack?: () => void;
   onCancel?: () => void;
 }
 
-const BASE_POLL_INTERVAL_MS = 1400;
-const MAX_NETWORK_RETRIES = 4;
-const MAX_BACKOFF_INTERVAL_MS = 5000;
-
 export default function ProcessingProjectDocumentScreen({
+  tenantId,
   jobId,
+  document,
+  template,
   onProcessingComplete,
   onBack,
   onCancel,
@@ -45,83 +54,48 @@ export default function ProcessingProjectDocumentScreen({
   useEffect(() => {
     if (!jobId || jobId.trim() === '') return;
 
-    let isActive = true;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let consecutiveErrors = 0;
-    let isFetching = false;
-
-    const clearTimer = () => {
-      if (timerId) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    };
-
-    const poll = async () => {
-      if (!isActive || isFetching) return;
-      isFetching = true;
-
+    const controller = new AbortController();
+    const run = async () => {
       try {
-        const response = await getProcessingDocStatus(jobId);
-        if (!isActive) return;
-
-        consecutiveErrors = 0;
-        setData(response);
-
-        if (response.overallStatus === 'COMPLETED') {
-          clearTimer();
-          isActive = false;
-          if (onProcessingCompleteRef.current) {
-            onProcessingCompleteRef.current();
-          }
-          return;
-        }
-
-        if (response.overallStatus === 'FAILED') {
-          clearTimer();
-          isActive = false;
+        const job = await pollResource({
+          signal: controller.signal,
+          request: async (signal) => {
+            const nextJob = await getJob(tenantId, jobId, signal);
+            setData(presentSummaryJob(nextJob, document, template));
+            return nextJob;
+          },
+          isTerminal: (value) => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(value.status),
+        });
+        if (controller.signal.aborted) return;
+        if (job.status === 'COMPLETED') {
+          onProcessingCompleteRef.current?.();
+        } else {
           setIsFatalError(true);
-          setErrorMessage(response.errorMessage || 'Document processing failed.');
-          return;
+          setErrorMessage(job.error_message || 'Document processing was cancelled or failed.');
         }
-
-        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
       } catch (err: unknown) {
-        if (!isActive) return;
-
-        consecutiveErrors += 1;
-        if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
-          clearTimer();
-          isActive = false;
-          setIsFatalError(true);
-          setErrorMessage(
-            err instanceof Error ? err.message : 'Lost connection to document processing engine.'
-          );
-          return;
-        }
-
-        const backoffMs = Math.min(
-          BASE_POLL_INTERVAL_MS * Math.pow(1.5, consecutiveErrors),
-          MAX_BACKOFF_INTERVAL_MS
-        );
-        timerId = setTimeout(poll, backoffMs);
-      } finally {
-        isFetching = false;
+        if (controller.signal.aborted) return;
+        setIsFatalError(true);
+        setErrorMessage(err instanceof Error ? err.message : 'Lost connection to document processing engine.');
       }
     };
-
-    poll();
-
-    return () => {
-      isActive = false;
-      clearTimer();
-    };
-  }, [jobId, retryTrigger]);
+    void run();
+    return () => controller.abort();
+  }, [document, jobId, retryTrigger, template, tenantId]);
 
   const handleManualRetry = () => {
     setIsFatalError(false);
     setErrorMessage(null);
     setRetryTrigger((prev) => prev + 1);
+  };
+
+  const handleCancel = async () => {
+    try {
+      await cancelJob(tenantId, jobId);
+    } catch {
+      // Navigation still clears local workflow state if the job already reached a terminal state.
+    }
+    onCancel?.();
   };
 
   const renderIndicator = (status: StepStatus) => {
@@ -160,7 +134,7 @@ export default function ProcessingProjectDocumentScreen({
           <p className="app-missing-job-desc">{errorMessage}</p>
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
             {onCancel && (
-              <button type="button" onClick={onCancel} className="wbs-proc-cancel-btn">
+              <button type="button" onClick={handleCancel} className="wbs-proc-cancel-btn">
                 Cancel
               </button>
             )}
@@ -188,7 +162,7 @@ export default function ProcessingProjectDocumentScreen({
         <div className="wbs-proc-header-row">
           <h1 className="wbs-proc-title">Processing Project Document</h1>
           {onCancel && (
-            <button type="button" onClick={onCancel} className="wbs-proc-cancel-btn">
+            <button type="button" onClick={handleCancel} className="wbs-proc-cancel-btn">
               Cancel
             </button>
           )}

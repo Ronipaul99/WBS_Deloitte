@@ -1,4 +1,4 @@
-import { useState, useRef, ChangeEvent, DragEvent } from 'react';
+import { useEffect, useState, useRef, ChangeEvent, DragEvent } from 'react';
 import { 
   FileUp, 
   CheckCircle, 
@@ -9,11 +9,14 @@ import {
   FileSpreadsheet,
   Loader2 
 } from 'lucide-react';
-import { createWbsGenerationJob } from '../services/wbsService';
+import { startWorkflow } from '../services/workflowApi';
+import type { WorkflowSession } from '../services/workflowTypes';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS } from '../auth/permissions';
 import './CreateWbsScreen.css';
 
 interface CreateWbsScreenProps {
-  onGenerateWbs?: (jobId: string) => void;
+  onWorkflowStarted?: (session: WorkflowSession) => void;
 }
 
 const MAX_UPLOAD_SIZE_MB = 25;
@@ -34,7 +37,11 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps) {
+export default function CreateWbsScreen({ onWorkflowStarted }: CreateWbsScreenProps) {
+  const { activeTenant, can } = useAuth();
+  const canUploadProject = can(PERMISSIONS.DOCUMENT_UPLOAD);
+  const canUploadTemplate = can(PERMISSIONS.TEMPLATE_MANAGE);
+  const canGenerate = can(PERMISSIONS.PROJECT_CREATE) && canUploadProject && can(PERMISSIONS.WBS_GENERATE);
   const [projectFile, setProjectFile] = useState<File | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
 
@@ -49,6 +56,9 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
 
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   const validateFile = (file: File, allowedExtensions: string[], maxMb: number = MAX_UPLOAD_SIZE_MB): string | null => {
     if (file.size > maxMb * 1024 * 1024) {
@@ -99,6 +109,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
 
   const handleDrop = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
     e.preventDefault();
+    if ((type === 'project' && !canUploadProject) || (type === 'template' && !canUploadTemplate)) return;
     if (type === 'project') setIsDraggingProject(false);
     else setIsDraggingTemplate(false);
 
@@ -110,23 +121,31 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
   };
 
   const handleGenerateClick = async () => {
-    if (!projectFile || isSubmitting) return;
+    if (!projectFile || !activeTenant || isSubmitting || !canGenerate) return;
 
     setIsSubmitting(true);
     setSubmissionError(null);
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
 
     try {
-      const { jobId } = await createWbsGenerationJob(projectFile, templateFile);
-      if (onGenerateWbs) {
-        onGenerateWbs(jobId);
-      }
+      const session = await startWorkflow(
+        activeTenant.id,
+        projectFile,
+        templateFile,
+        controller.signal,
+      );
+      onWorkflowStarted?.(session);
     } catch (err: unknown) {
+      if (controller.signal.aborted) return;
       setSubmissionError(err instanceof Error ? err.message : 'Failed to initialize AI analysis job.');
       setIsSubmitting(false);
+    } finally {
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
     }
   };
 
-  const isFormValid = Boolean(projectFile && !projectFileError);
+  const isFormValid = Boolean(projectFile && !projectFileError && canGenerate);
 
   return (
     <div className="wbs-create-container">
@@ -163,7 +182,8 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
             onDragOver={(e) => handleDragOver(e, 'project')}
             onDragLeave={(e) => handleDragLeave(e, 'project')}
             onDrop={(e) => handleDrop(e, 'project')}
-            onClick={() => projectInputRef.current?.click()}
+            onClick={() => canUploadProject && projectInputRef.current?.click()}
+            aria-disabled={!canUploadProject}
             className={`wbs-dropzone ${isDraggingProject ? 'wbs-dropzone-active' : ''}`}
           >
             <FileUp size={34} color="#3B82F6" className="wbs-dropzone-icon" />
@@ -178,6 +198,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
               type="file" 
               accept={ACCEPTED_PROJECT_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
+              disabled={!canUploadProject}
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleProjectSelect(e.target.files[0]);
               }}
@@ -227,7 +248,8 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
             onDragOver={(e) => handleDragOver(e, 'template')}
             onDragLeave={(e) => handleDragLeave(e, 'template')}
             onDrop={(e) => handleDrop(e, 'template')}
-            onClick={() => templateInputRef.current?.click()}
+            onClick={() => canUploadTemplate && templateInputRef.current?.click()}
+            aria-disabled={!canUploadTemplate}
             className={`wbs-dropzone ${isDraggingTemplate ? 'wbs-dropzone-active' : ''}`}
           >
             <FileSpreadsheet size={34} color="#10B981" className="wbs-dropzone-icon" />
@@ -242,6 +264,7 @@ export default function CreateWbsScreen({ onGenerateWbs }: CreateWbsScreenProps)
               type="file" 
               accept={ACCEPTED_TEMPLATE_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
+              disabled={!canUploadTemplate}
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleTemplateSelect(e.target.files[0]);
               }}

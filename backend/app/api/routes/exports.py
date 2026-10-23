@@ -5,15 +5,17 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import TenantContext, require_tenant_member
+from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
+from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_project, get_tenant_wbs_version
 from app.core.config import Settings, get_settings
+from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import ExportFile
 from app.schemas.domain import ExportCreate, ExportResponse
 from app.services.dispatcher import dispatch_export
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["exports"])
+router = APIRouter(prefix="/tenants/{tenant_id}", tags=["exports"], responses=TENANT_AUTH_RESPONSES)
 
 
 def _to_response(export: ExportFile) -> ExportResponse:
@@ -34,7 +36,7 @@ async def create_export(
     version_id: UUID,
     payload: ExportCreate,
     background_tasks: BackgroundTasks,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.EXPORT_CREATE)),
     db: AsyncSession = Depends(get_db),
 ) -> ExportResponse:
     version = await get_tenant_wbs_version(db, context.tenant.id, version_id)
@@ -54,7 +56,7 @@ async def create_export(
 @router.get("/exports/{export_id}", response_model=ExportResponse)
 async def get_export(
     export_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.EXPORT_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> ExportResponse:
     export = await db.scalar(
@@ -71,7 +73,7 @@ async def get_export(
 @router.get("/exports/{export_id}/download")
 async def download_export(
     export_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.EXPORT_READ)),
     db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> FileResponse:
@@ -94,7 +96,7 @@ async def download_export(
 @router.get("/projects/{project_id}/exports", response_model=list[ExportResponse])
 async def list_exports(
     project_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.EXPORT_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> list[ExportResponse]:
     await get_tenant_project(db, context.tenant.id, project_id)

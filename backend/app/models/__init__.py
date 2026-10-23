@@ -1,3 +1,11 @@
+from app.models.auth import (
+    AuthEvent,
+    AuthIdentity,
+    OidcAuthorizationState,
+    PasswordResetToken,
+    RefreshSession,
+    TenantInvitation,
+)
 from app.models.domain import (
     Document,
     DocumentSummary,
@@ -13,11 +21,17 @@ from app.models.domain import (
 )
 
 __all__ = [
+    "AuthEvent",
+    "AuthIdentity",
+    "OidcAuthorizationState",
     "Document",
     "DocumentSummary",
     "ExportFile",
     "Job",
     "Project",
+    "PasswordResetToken",
+    "RefreshSession",
+    "TenantInvitation",
     "Tenant",
     "TenantMembership",
     "User",

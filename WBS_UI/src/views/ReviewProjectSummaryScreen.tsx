@@ -10,16 +10,29 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
-  getProjectSummary,
-  saveProjectSummary,
+  approveSummary,
+  getSummary,
+  updateSummary,
+} from '../services/summariesApi';
+import { startGeneration } from '../services/generationsApi';
+import { presentSummary, summaryUpdateFromSections } from '../services/workflowPresentation';
+import type {
+  DocumentResponse,
+  ProjectResponse,
   ProjectSummaryResponse,
   SummarySectionItem,
-} from '../services/wbsService';
+  TemplateResponse,
+} from '../services/workflowTypes';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS } from '../auth/permissions';
 import './ReviewProjectSummaryScreen.css';
 
 export type ReviewProjectSummaryScreenProps = {
-  jobId: string;
-  onProceedToAnalyze?: () => void;
+  tenantId: string;
+  project: ProjectResponse;
+  document: DocumentResponse;
+  template: TemplateResponse | null;
+  onProceedToAnalyze?: (generationJobId: string, summaryId: string) => void;
   onDiscard?: () => void;
 };
 
@@ -53,14 +66,21 @@ function getConfidenceSubtext(score: number): string {
 }
 
 export default function ReviewProjectSummaryScreen({
-  jobId,
+  tenantId,
+  project,
+  document,
+  template,
   onProceedToAnalyze,
   onDiscard,
 }: ReviewProjectSummaryScreenProps) {
+  const { can } = useAuth();
+  const canUpdateSummary = can(PERMISSIONS.SUMMARY_UPDATE);
+  const canGenerateWbs = can(PERMISSIONS.SUMMARY_APPROVE) && can(PERMISSIONS.WBS_GENERATE);
   const [data, setData] = useState<ProjectSummaryResponse | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<number>(1);
   const [editableSections, setEditableSections] = useState<SummarySectionItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isProceeding, setIsProceeding] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,8 +92,9 @@ export default function ReviewProjectSummaryScreen({
     async function load() {
       try {
         setLoadError(null);
-        const res = await getProjectSummary(jobId);
+        const summary = await getSummary(tenantId, document.id);
         if (!isActive) return;
+        const res = presentSummary(summary, project, document);
         setData(res);
         setEditableSections(res.sections || []);
         if (res.sections && res.sections.length > 0) {
@@ -92,7 +113,7 @@ export default function ReviewProjectSummaryScreen({
     return () => {
       isActive = false;
     };
-  }, [jobId, retryNonce]);
+  }, [document, project, retryNonce, tenantId]);
 
   if (loadError) {
     return (
@@ -149,10 +170,16 @@ export default function ReviewProjectSummaryScreen({
   };
 
   const handleSaveDraft = async () => {
+    if (!canUpdateSummary) return;
     setIsSaving(true);
     setSaveError(null);
     try {
-      await saveProjectSummary(jobId, editableSections);
+      const summary = await updateSummary(
+        tenantId,
+        document.id,
+        summaryUpdateFromSections(data.summary, editableSections),
+      );
+      setData((current) => current ? { ...current, summary } : current);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (err: unknown) {
@@ -163,13 +190,28 @@ export default function ReviewProjectSummaryScreen({
   };
 
   const handleProceed = async () => {
+    if (!canGenerateWbs || isProceeding) return;
+    setIsProceeding(true);
+    setSaveError(null);
     try {
-      await saveProjectSummary(jobId, editableSections);
-    } catch {
-      // Proceed even if background persistence fails
-    }
-    if (onProceedToAnalyze) {
-      onProceedToAnalyze();
+      const updated = canUpdateSummary
+        ? await updateSummary(
+          tenantId,
+          document.id,
+          summaryUpdateFromSections(data.summary, editableSections),
+        )
+        : data.summary;
+      const approved = await approveSummary(tenantId, document.id);
+      const generation = await startGeneration(tenantId, project.id, {
+        documentId: document.id,
+        summaryId: approved.id || updated.id,
+        templateId: template?.id ?? null,
+      });
+      onProceedToAnalyze?.(generation.id, approved.id);
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : 'Unable to approve the summary and start WBS generation.');
+    } finally {
+      setIsProceeding(false);
     }
   };
 
@@ -278,6 +320,7 @@ export default function ReviewProjectSummaryScreen({
             maxLength={MAX_SECTION_CHARS}
             className="wbs-rev-textarea"
             value={currentSection.content}
+            disabled={!canUpdateSummary}
             onChange={(e) => handleContentChange(e.target.value)}
             placeholder="No content extracted for this section."
           />
@@ -339,25 +382,27 @@ export default function ReviewProjectSummaryScreen({
             Discard Changes
           </button>
         )}
-        <button
-          type="button"
-          disabled={isSaving}
-          onClick={handleSaveDraft}
-          className={`wbs-rev-btn-save ${saveSuccess ? 'wbs-rev-btn-save-success' : ''}`}
-        >
-          {isSaving ? (
-            'Saving...'
-          ) : saveSuccess ? (
-            <>
-              <Check size={14} /> Saved!
-            </>
-          ) : (
-            'Save Draft'
-          )}
-        </button>
-        {onProceedToAnalyze && (
-          <button type="button" onClick={handleProceed} className="wbs-rev-btn-generate">
-            <span>Generate WBS</span> <ArrowRight size={14} />
+        {canUpdateSummary && (
+          <button
+            type="button"
+            disabled={isSaving || isProceeding}
+            onClick={handleSaveDraft}
+            className={`wbs-rev-btn-save ${saveSuccess ? 'wbs-rev-btn-save-success' : ''}`}
+          >
+            {isSaving ? (
+              'Saving...'
+            ) : saveSuccess ? (
+              <>
+                <Check size={14} /> Saved!
+              </>
+            ) : (
+              'Save Draft'
+            )}
+          </button>
+        )}
+        {onProceedToAnalyze && canGenerateWbs && (
+          <button type="button" disabled={isSaving || isProceeding} onClick={handleProceed} className="wbs-rev-btn-generate">
+            {isProceeding ? <><Loader2 size={14} className="wbs-spinner" /><span>Starting...</span></> : <><span>Generate WBS</span> <ArrowRight size={14} /></>}
           </button>
         )}
       </div>
