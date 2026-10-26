@@ -50,6 +50,15 @@ async def list_wbs_versions(
     return list(result)
 
 
+@router.get("/wbs/{version_id}", response_model=WbsVersionResponse)
+async def get_wbs_version(
+    version_id: UUID,
+    context: TenantContext = Depends(require_permission(Permission.WBS_READ)),
+    db: AsyncSession = Depends(get_db),
+) -> WbsVersion:
+    return await get_tenant_wbs_version(db, context.tenant.id, version_id)
+
+
 @router.put("/wbs/{version_id}", response_model=WbsVersionResponse)
 async def update_wbs(
     version_id: UUID,

@@ -11,6 +11,7 @@ import {
   test,
 } from './support';
 import type { ApiSession } from './support';
+import { textPdfBuffer } from '../pdf-fixtures';
 
 interface LiveResources {
   projectId: string;
@@ -67,7 +68,7 @@ async function createLiveResources(session: ApiSession): Promise<LiveResources> 
         file: {
           name: fileName,
           mimeType: 'application/pdf',
-          buffer: Buffer.from('%PDF-1.4\n% isolated full-stack fixture\n'),
+          buffer: textPdfBuffer(),
         },
         kind: 'PROJECT',
       },
@@ -258,7 +259,7 @@ test.describe.serial('live tenant authorization and WBS workflow', () => {
     await admin.context.dispose();
   });
 
-  test('completes document upload, summary, WBS, validation, and export through the live UI', async ({ page }) => {
+  test('completes document upload and ingestion through the live UI', async ({ page }) => {
     await loginPage(page, state.emails.editor_a);
     await page.getByRole('button', { name: 'Create project', exact: true }).click();
     await page.getByLabel('Project name').fill(`Live project ${state.run_id}`);
@@ -271,27 +272,12 @@ test.describe.serial('live tenant authorization and WBS workflow', () => {
     await page.locator('input[type="file"]').first().setInputFiles({
       name: `live-scope-${state.run_id}.pdf`,
       mimeType: 'application/pdf',
-      buffer: Buffer.from('%PDF-1.4\n% browser live workflow\n'),
+      buffer: textPdfBuffer(),
     });
-    await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Generate Draft WBS' }).click();
-
-    await expect(page.getByRole('heading', { name: 'Review Project Summary' })).toBeVisible();
-    await page.getByRole('button', { name: 'Generate WBS' }).click();
-    await expect(page.getByRole('heading', { name: 'AI WBS Builder' })).toBeVisible();
-    await expect(page.getByText('Review approved project requirements')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Validate & Proceed' }).click();
-    await expect(page.getByRole('heading', { name: 'WBS Validation' })).toBeVisible();
-    await expect(page.getByText('Unique WBS codes')).toBeVisible();
-    await page.getByRole('button', { name: 'Back to WBS Structure' }).click();
-    await expect(page.getByRole('heading', { name: 'AI WBS Builder' })).toBeVisible();
-
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Export', exact: true }).click();
-    await page.getByRole('button', { name: 'Export as JSON' }).click();
-    const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/\.json$/);
+    await expect(page.getByRole('button', { name: 'Process Document' })).toBeEnabled();
+    await page.getByRole('button', { name: 'Process Document' }).click();
+    await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByRole('heading', { name: 'Review Project Summary' })).toHaveCount(0);
     await assertNoCredentialStorage(page);
   });
 

@@ -12,6 +12,7 @@ from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.domain import MembershipRole, Tenant, TenantMembership, User
 from app.services.auth import add_auth_event, request_fingerprints
+from app.services.readiness import IngestionReadinessError, api_ingestion_is_ready
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -22,6 +23,35 @@ class TenantContext:
     user: User
     role: MembershipRole
     permissions: frozenset[Permission]
+
+
+def require_document_ingestion_enabled(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if not settings.document_ingestion_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "DOCUMENT_INGESTION_DISABLED",
+                "message": "Document ingestion is unavailable.",
+            },
+        )
+
+
+async def ensure_document_ingestion_ready(
+    settings: Settings = Depends(get_settings),
+) -> None:
+    require_document_ingestion_enabled(settings)
+    try:
+        await api_ingestion_is_ready(settings)
+    except IngestionReadinessError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "DOCUMENT_INGESTION_UNREADY",
+                "message": "Document ingestion is temporarily unavailable.",
+            },
+        ) from None
 
 
 async def get_current_user(

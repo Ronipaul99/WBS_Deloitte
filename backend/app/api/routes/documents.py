@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
@@ -10,10 +10,14 @@ from starlette.datastructures import UploadFile
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_document, get_tenant_project
+from app.core.observability import record_document_upload
 from app.core.permissions import Permission
-from app.db.session import get_db
-from app.models.domain import Document, DocumentKind
-from app.schemas.domain import DocumentResponse
+from app.core.upload_errors import UploadErrorCode, upload_error_code, upload_http_error
+from app.db.session import get_db, set_local_tenant_context
+from app.models.domain import Document, DocumentKind, DocumentLifecycleStatus, Job
+from app.schemas.domain import DocumentDeletionStatusResponse, DocumentResponse, JobResponse
+from app.services.dispatcher import publish_deletion_dispatch
+from app.services.document_lifecycle import request_document_deletion
 from app.services.storage import (
     ObjectStorageUnavailableError,
     UploadObjectStorage,
@@ -25,15 +29,47 @@ router = APIRouter(
 )
 logger = logging.getLogger(__name__)
 
-PROJECT_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"}
+PROJECT_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".csv"}
 PROJECT_CONTENT_TYPES = {
-    ".pdf": {"application/pdf"},
-    ".doc": {"application/msword"},
+    ".pdf": {"application/pdf", "application/octet-stream"},
     ".docx": {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},
-    ".xls": {"application/vnd.ms-excel"},
     ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
     ".csv": {"text/csv", "application/csv", "application/vnd.ms-excel"},
 }
+PROJECT_FORMAT_LABELS = {
+    ".pdf": "pdf",
+    ".docx": "docx",
+    ".xlsx": "xlsx",
+    ".csv": "csv",
+}
+COMPENSATION_DELETE_ATTEMPTS = 2
+
+
+async def _cleanup_uploaded_document(
+    storage: UploadObjectStorage,
+    storage_key: str,
+) -> None:
+    for _ in range(COMPENSATION_DELETE_ATTEMPTS):
+        try:
+            await storage.delete_object(storage_key)
+            return
+        except ObjectStorageUnavailableError:
+            continue
+    logger.error("Document object cleanup failed after database rollback")
+
+
+async def _persist_document(
+    db: AsyncSession,
+    storage: UploadObjectStorage,
+    document: Document,
+) -> None:
+    try:
+        db.add(document)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        await _cleanup_uploaded_document(storage, document.storage_key)
+        raise
 
 
 @router.post(
@@ -88,14 +124,24 @@ async def upload_document(
     suffix = Path(file.filename or "").suffix.lower()
     if kind == DocumentKind.PROJECT and suffix not in PROJECT_EXTENSIONS:
         await file.close()
-        raise HTTPException(status_code=400, detail="Unsupported project document format.")
+        record_document_upload(
+            accepted=False,
+            detected_format="unknown",
+            error_code=UploadErrorCode.UNSUPPORTED_DOCUMENT_FORMAT.value,
+        )
+        raise upload_http_error(UploadErrorCode.UNSUPPORTED_DOCUMENT_FORMAT)
+    detected_format = PROJECT_FORMAT_LABELS[suffix]
     content_type = (file.content_type or "").split(";", maxsplit=1)[0].strip().lower()
     if kind == DocumentKind.PROJECT and content_type not in PROJECT_CONTENT_TYPES[suffix]:
         await file.close()
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="The uploaded content type does not match the project document extension.",
+        record_document_upload(
+            accepted=False,
+            detected_format=detected_format,
+            error_code=UploadErrorCode.DOCUMENT_TYPE_MISMATCH.value,
         )
+        raise upload_http_error(UploadErrorCode.DOCUMENT_TYPE_MISMATCH)
+
+    normalized_content_type = "application/pdf" if suffix == ".pdf" else content_type
 
     file_name = Path(file.filename or "upload.bin").name
     try:
@@ -104,35 +150,48 @@ async def upload_document(
             "documents",
             file,
             suffix=suffix,
-            content_type=content_type,
+            content_type=normalized_content_type,
             project_id=project_id,
         )
+    except HTTPException as exc:
+        code = upload_error_code(exc)
+        if code is not None:
+            record_document_upload(
+                accepted=False,
+                detected_format=(
+                    "unknown" if code == UploadErrorCode.DOCUMENT_TYPE_MISMATCH else detected_format
+                ),
+                error_code=code.value,
+            )
+        raise
     except ObjectStorageUnavailableError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document storage is temporarily unavailable.",
-        ) from None
+        record_document_upload(
+            accepted=False,
+            detected_format=detected_format,
+            error_code=UploadErrorCode.OBJECT_STORAGE_UNAVAILABLE.value,
+        )
+        raise upload_http_error(UploadErrorCode.OBJECT_STORAGE_UNAVAILABLE) from None
     document = Document(
         tenant_id=context.tenant.id,
         project_id=project_id,
         uploaded_by=context.user.id,
         kind=kind,
         file_name=file_name,
-        content_type=content_type,
+        content_type=normalized_content_type,
         size_bytes=size,
         storage_key=storage_key,
     )
     try:
-        db.add(document)
-        await db.commit()
+        await _persist_document(db, storage, document)
     except Exception:
-        await db.rollback()
-        try:
-            await storage.delete_object(storage_key)
-        except ObjectStorageUnavailableError:
-            logger.exception("Failed to compensate object upload after database error")
+        record_document_upload(
+            accepted=False,
+            detected_format=detected_format,
+            error_code="INTERNAL_ERROR",
+        )
         raise
     await db.refresh(document)
+    record_document_upload(accepted=True, detected_format=detected_format)
     return document
 
 
@@ -145,7 +204,11 @@ async def list_documents(
     await get_tenant_project(db, context.tenant.id, project_id)
     result = await db.scalars(
         select(Document)
-        .where(Document.tenant_id == context.tenant.id, Document.project_id == project_id)
+        .where(
+            Document.tenant_id == context.tenant.id,
+            Document.project_id == project_id,
+            Document.lifecycle_status != DocumentLifecycleStatus.DELETED.value,
+        )
         .order_by(Document.created_at.desc())
     )
     return list(result)
@@ -160,21 +223,77 @@ async def get_document(
     return await get_tenant_document(db, context.tenant.id, document_id)
 
 
-@router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/documents/{document_id}",
+    response_model=JobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
 async def delete_document(
     document_id: UUID,
     context: TenantContext = Depends(require_permission(Permission.DOCUMENT_UPLOAD)),
     db: AsyncSession = Depends(get_db),
-    storage: UploadObjectStorage = Depends(get_upload_storage),
-) -> Response:
-    document = await get_tenant_document(db, context.tenant.id, document_id)
+) -> Job:
     try:
-        await storage.delete_object(document.storage_key)
-    except ObjectStorageUnavailableError:
+        job, outbox = await request_document_deletion(
+            db,
+            tenant_id=context.tenant.id,
+            document_id=document_id,
+            requested_by=context.user.id,
+        )
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Document not found.") from None
+    except RuntimeError:
         raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Document storage is temporarily unavailable.",
+            status_code=409,
+            detail={
+                "code": "DOCUMENT_DELETION_STATE_INVALID",
+                "message": "The document deletion state could not be verified.",
+            },
         ) from None
-    await db.delete(document)
-    await db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    if outbox is not None:
+        await publish_deletion_dispatch(context.tenant.id, outbox.id)
+    return job
+
+
+@router.get(
+    "/documents/{document_id}/deletion",
+    response_model=DocumentDeletionStatusResponse,
+)
+async def get_document_deletion_status(
+    document_id: UUID,
+    context: TenantContext = Depends(require_permission(Permission.DOCUMENT_READ)),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentDeletionStatusResponse:
+    await set_local_tenant_context(db, context.tenant.id)
+    document = await db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.tenant_id == context.tenant.id,
+        )
+    )
+    if document is None or document.deletion_job_id is None:
+        raise HTTPException(status_code=404, detail="Document deletion not found.")
+    job = await db.scalar(
+        select(Job).where(
+            Job.id == document.deletion_job_id,
+            Job.tenant_id == context.tenant.id,
+            Job.project_id == document.project_id,
+        )
+    )
+    if job is None or document.deletion_requested_at is None or document.vectors_hidden_at is None:
+        raise HTTPException(status_code=404, detail="Document deletion not found.")
+    return DocumentDeletionStatusResponse(
+        document_id=document.id,
+        job_id=job.id,
+        status=job.status,
+        stage=job.current_step or "QUEUED",
+        progress=job.progress,
+        attempt_count=job.attempt_count,
+        lifecycle_status=document.lifecycle_status,
+        deletion_requested_at=document.deletion_requested_at,
+        vectors_hidden_at=document.vectors_hidden_at,
+        deletion_completed_at=document.deletion_completed_at,
+        error_code=document.deletion_error_code or job.error_code,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+    )

@@ -3,16 +3,29 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  FileText,
   FolderKanban,
   Layers3,
   LoaderCircle,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
+  X,
 } from 'lucide-react';
+import {
+  deleteDocument,
+  getDocumentDeletion,
+  listProjectDocuments,
+} from '../services/documentsApi';
 import { createProject, listProjects } from '../services/projectsApi';
 import { listWbsVersions } from '../services/wbsApi';
-import type { ProjectResponse, WbsVersionResponse } from '../services/workflowTypes';
+import type {
+  DocumentDeletionStatusResponse,
+  DocumentResponse,
+  ProjectResponse,
+  WbsVersionResponse,
+} from '../services/workflowTypes';
 import './ProjectScreens.css';
 
 interface CreateProjectScreenProps {
@@ -32,8 +45,12 @@ interface ProjectWorkspaceScreenProps {
   tenantId: string;
   project: ProjectResponse;
   canCreateWbs: boolean;
+  canDeleteDocument: boolean;
+  hasActiveIngestion?: boolean;
   onBack: () => void;
   onCreateWbs: () => void;
+  onResumeIngestion?: () => void;
+  onOpenWbs: (versionId: string) => void;
 }
 
 function countWbsItems(nodes: Array<Record<string, unknown>>): number {
@@ -278,12 +295,25 @@ export function ProjectWorkspaceScreen({
   tenantId,
   project,
   canCreateWbs,
+  canDeleteDocument,
+  hasActiveIngestion = false,
   onBack,
   onCreateWbs,
+  onResumeIngestion,
+  onOpenWbs,
 }: ProjectWorkspaceScreenProps) {
   const [versions, setVersions] = useState<WbsVersionResponse[]>([]);
+  const [documents, setDocuments] = useState<DocumentResponse[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(true);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [versionsError, setVersionsError] = useState<string | null>(null);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [documentReloadKey, setDocumentReloadKey] = useState(0);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
+  const [deletionStatuses, setDeletionStatuses] = useState<
+    Record<string, DocumentDeletionStatusResponse>
+  >({});
   const [reloadKey, setReloadKey] = useState(0);
   const initials = useMemo(
     () => project.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'P',
@@ -305,10 +335,96 @@ export function ProjectWorkspaceScreen({
     return () => controller.abort();
   }, [project.id, reloadKey, tenantId]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    listProjectDocuments(tenantId, project.id, controller.signal)
+      .then(setDocuments)
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setDocumentsError(
+            reason instanceof Error ? reason.message : 'Project documents could not be loaded.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingDocuments(false);
+      });
+    return () => controller.abort();
+  }, [documentReloadKey, project.id, tenantId]);
+
+  useEffect(() => {
+    const deletingDocuments = documents.filter(
+      (document) => document.lifecycle_status === 'DELETING',
+    );
+    if (deletingDocuments.length === 0) return undefined;
+
+    const controller = new AbortController();
+    let timeoutId: number | undefined;
+    const checkStatuses = async () => {
+      try {
+        const statuses = await Promise.all(
+          deletingDocuments.map((document) => (
+            getDocumentDeletion(tenantId, document.id, controller.signal)
+          )),
+        );
+        if (controller.signal.aborted) return;
+        setDeletionStatuses((current) => {
+          const next = { ...current };
+          statuses.forEach((status) => { next[status.document_id] = status; });
+          return next;
+        });
+        const completedIds = new Set(
+          statuses
+            .filter((status) => status.lifecycle_status === 'DELETED')
+            .map((status) => status.document_id),
+        );
+        if (completedIds.size > 0) {
+          setDocuments((current) => current.filter((document) => !completedIds.has(document.id)));
+        }
+        if (statuses.every((status) => status.stage === 'COMPLETED' || status.stage === 'FAILED')) {
+          return;
+        }
+      } catch {
+        // A later bounded poll can recover transient status failures.
+      }
+      if (!controller.signal.aborted) timeoutId = window.setTimeout(checkStatuses, 2000);
+    };
+    void checkStatuses();
+    return () => {
+      controller.abort();
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [documents, tenantId]);
+
   const retryVersions = () => {
     setLoadingVersions(true);
     setVersionsError(null);
     setReloadKey((value) => value + 1);
+  };
+
+  const retryDocuments = () => {
+    setLoadingDocuments(true);
+    setDocumentsError(null);
+    setDocumentReloadKey((value) => value + 1);
+  };
+
+  const handleDeleteDocument = async (document: DocumentResponse) => {
+    if (!canDeleteDocument || document.lifecycle_status !== 'ACTIVE') return;
+    setDeletingDocumentId(document.id);
+    setDocumentsError(null);
+    try {
+      await deleteDocument(tenantId, document.id);
+      setDocuments((current) => current.map((item) => (
+        item.id === document.id
+          ? { ...item, lifecycle_status: 'DELETING', deletion_requested_at: new Date().toISOString() }
+          : item
+      )));
+      setConfirmDeleteId(null);
+    } catch {
+      setDocumentsError('Deletion could not be started. Check the connection and try again.');
+    } finally {
+      setDeletingDocumentId(null);
+    }
   };
 
   return (
@@ -334,12 +450,113 @@ export function ProjectWorkspaceScreen({
           <span><small>Created</small><strong>{formatDate(project.created_at)}</strong></span>
         </div>
         <div>
+          <FileText size={17} aria-hidden="true" />
+          <span>
+            <small>Documents</small>
+            <strong>{loadingDocuments ? 'Loading...' : documents.length}</strong>
+          </span>
+        </div>
+        <div>
           <FolderKanban size={17} aria-hidden="true" />
           <span>
             <small>WBS versions</small>
             <strong>{loadingVersions ? 'Loading...' : versions.length}</strong>
           </span>
         </div>
+      </section>
+
+      <section className="project-document-history" aria-labelledby="project-documents-title">
+        <div className="project-document-heading">
+          <div>
+            <p className="project-eyebrow">Source material</p>
+            <h2 id="project-documents-title">Project documents</h2>
+            <p>Uploaded scope documents and their lifecycle status.</p>
+          </div>
+        </div>
+
+        {loadingDocuments ? (
+          <div className="project-document-state" role="status">
+            <LoaderCircle size={21} className="project-spinner" /> Loading project documents...
+          </div>
+        ) : documentsError ? (
+          <div className="project-document-state project-list-error" role="alert">
+            <span>{documentsError}</span>
+            <button type="button" className="project-secondary-button" onClick={retryDocuments}>
+              <RefreshCw size={14} aria-hidden="true" /> Retry
+            </button>
+          </div>
+        ) : documents.length === 0 ? (
+          <div className="project-document-state">
+            <FileText size={21} aria-hidden="true" /> No project documents uploaded yet.
+          </div>
+        ) : (
+          <div className="project-document-list" aria-label="Project documents">
+            {documents.map((document) => {
+              const status = deletionStatuses[document.id];
+              const isDeleting = document.lifecycle_status === 'DELETING';
+              const deletionFailed = status?.stage === 'FAILED';
+              const isConfirming = confirmDeleteId === document.id;
+              return (
+                <div className="project-document-row" key={document.id}>
+                  <span className="project-document-icon"><FileText size={16} aria-hidden="true" /></span>
+                  <span className="project-document-copy">
+                    <strong title={document.file_name}>{document.file_name}</strong>
+                    <small>
+                      {Math.max(1, Math.ceil(document.size_bytes / 1024)).toLocaleString()} KB
+                      {' · '}Uploaded {formatDate(document.created_at)}
+                    </small>
+                  </span>
+                  <span
+                    className={`project-document-status${deletionFailed ? ' is-failed' : ''}`}
+                    role={isDeleting ? 'status' : undefined}
+                    aria-live={isDeleting ? 'polite' : undefined}
+                  >
+                    {deletionFailed
+                      ? 'Cleanup needs attention'
+                      : isDeleting
+                        ? status?.stage === 'RETRY_WAIT' ? 'Cleanup retry scheduled' : 'Deleting'
+                        : 'Available'}
+                  </span>
+                  <span className="project-document-actions">
+                    {isConfirming ? (
+                      <>
+                        <button
+                          type="button"
+                          className="project-danger-button"
+                          onClick={() => void handleDeleteDocument(document)}
+                          disabled={deletingDocumentId === document.id}
+                        >
+                          {deletingDocumentId === document.id
+                            ? <LoaderCircle size={14} className="project-spinner" aria-label="Starting deletion" />
+                            : <Trash2 size={14} aria-hidden="true" />}
+                          Confirm
+                        </button>
+                        <button
+                          type="button"
+                          className="project-icon-button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          aria-label={`Cancel deletion of ${document.file_name}`}
+                        >
+                          <X size={15} aria-hidden="true" />
+                        </button>
+                      </>
+                    ) : canDeleteDocument && !isDeleting ? (
+                      <button
+                        type="button"
+                        className="project-icon-button"
+                        onClick={() => setConfirmDeleteId(document.id)}
+                        aria-label={`Delete ${document.file_name}`}
+                        title="Delete document"
+                      >
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="project-wbs-history" aria-labelledby="project-wbs-title">
@@ -349,7 +566,11 @@ export function ProjectWorkspaceScreen({
             <h2 id="project-wbs-title">Work breakdown structures</h2>
             <p>Review every generated version or start a new WBS from another project scope document.</p>
           </div>
-          {canCreateWbs && (
+          {hasActiveIngestion && onResumeIngestion ? (
+            <button type="button" className="project-primary-button" onClick={onResumeIngestion}>
+              <RefreshCw size={16} aria-hidden="true" /> Resume document processing
+            </button>
+          ) : canCreateWbs && (
             <button type="button" className="project-primary-button" onClick={onCreateWbs}>
               <Plus size={16} aria-hidden="true" /> Create new WBS
             </button>
@@ -377,25 +598,31 @@ export function ProjectWorkspaceScreen({
             {!canCreateWbs && <span className="project-read-only">Read-only access</span>}
           </div>
         ) : (
-          <div className="project-wbs-list" role="table" aria-label="Previous WBS versions">
-            <div className="project-wbs-list-header" role="row">
-              <span role="columnheader">WBS</span>
-              <span role="columnheader">Status</span>
-              <span role="columnheader">Items</span>
-              <span role="columnheader">Coverage</span>
-              <span role="columnheader">Created</span>
+          <div className="project-wbs-list" aria-label="Previous WBS versions">
+            <div className="project-wbs-list-header" aria-hidden="true">
+              <span>WBS</span>
+              <span>Status</span>
+              <span>Items</span>
+              <span>Coverage</span>
+              <span>Created</span>
             </div>
             {versions.map((version) => (
-              <div className="project-wbs-row" role="row" key={version.id}>
-                <span className="project-wbs-name" role="cell">
+              <button
+                type="button"
+                className="project-wbs-row"
+                key={version.id}
+                onClick={() => onOpenWbs(version.id)}
+                aria-label={`Open WBS version ${version.version_number}`}
+              >
+                <span className="project-wbs-name">
                   <span className="project-wbs-version-icon"><Layers3 size={16} aria-hidden="true" /></span>
                   <span><strong>WBS version {version.version_number}</strong><small>Generated project structure</small></span>
                 </span>
-                <span role="cell"><span className="project-wbs-status">{version.status}</span></span>
-                <strong role="cell">{countWbsItems(version.tree)}</strong>
-                <strong role="cell">{formatCoverage(version)}</strong>
-                <time role="cell" dateTime={version.created_at}>{formatDate(version.created_at)}</time>
-              </div>
+                <span><span className="project-wbs-status">{version.status}</span></span>
+                <strong>{countWbsItems(version.tree)}</strong>
+                <strong>{formatCoverage(version)}</strong>
+                <time dateTime={version.created_at}>{formatDate(version.created_at)}</time>
+              </button>
             ))}
           </div>
         )}

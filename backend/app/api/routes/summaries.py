@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
-from app.api.routes.helpers import get_tenant_document
+from app.api.routes.helpers import get_tenant_document, require_ready_active_run
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import DocumentSummary, Job, JobType
@@ -41,12 +41,13 @@ async def generate_summary(
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     document = await get_tenant_document(db, context.tenant.id, document_id)
+    await require_ready_active_run(db, context.tenant.id, document)
     job = Job(
         tenant_id=context.tenant.id,
         project_id=document.project_id,
         created_by=context.user.id,
         job_type=JobType.DOCUMENT_SUMMARY,
-        current_step="Queued for document extraction",
+        current_step="Queued for summary generation",
         request_payload={"document_id": str(document.id)},
     )
     db.add(job)

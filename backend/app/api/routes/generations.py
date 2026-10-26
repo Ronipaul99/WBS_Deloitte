@@ -6,7 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
-from app.api.routes.helpers import get_tenant_document, get_tenant_project, get_tenant_template
+from app.api.routes.helpers import (
+    get_tenant_document,
+    get_tenant_project,
+    get_tenant_template,
+    require_ready_active_run,
+)
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import DocumentSummary, Job, JobType
@@ -40,6 +45,7 @@ async def create_generation(
     )
     if document.project_id != project_id:
         raise HTTPException(status_code=400, detail="Document does not belong to this project.")
+    await require_ready_active_run(db, context.tenant.id, document)
     if summary is None:
         raise HTTPException(status_code=404, detail="Approved summary not found.")
     if summary.document_id != document.id or not summary.is_approved:

@@ -65,7 +65,26 @@ class DocumentResponse(ORMModel):
     file_name: str
     content_type: str
     size_bytes: int
+    lifecycle_status: str
+    deletion_requested_at: datetime | None
+    deletion_completed_at: datetime | None
     created_at: datetime
+
+
+class DocumentDeletionStatusResponse(BaseModel):
+    document_id: UUID
+    job_id: UUID
+    status: str
+    stage: str
+    progress: int = Field(ge=0, le=100)
+    attempt_count: int = Field(ge=0)
+    lifecycle_status: str
+    deletion_requested_at: datetime
+    vectors_hidden_at: datetime
+    deletion_completed_at: datetime | None
+    error_code: str | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class SummaryUpdate(BaseModel):
@@ -106,8 +125,38 @@ class JobResponse(ORMModel):
     status: str
     progress: int
     current_step: str | None
+    error_code: str | None
     error_message: str | None
+    attempt_count: int
     result_payload: dict[str, Any]
+    created_at: datetime
+    updated_at: datetime
+
+
+class IngestionStatusResponse(BaseModel):
+    job_id: UUID
+    processing_run_id: UUID
+    document_id: UUID
+    status: str
+    stage: str
+    progress: int = Field(ge=0, le=100)
+    attempt_count: int = Field(ge=0)
+    maximum_attempts: int = Field(ge=1)
+    page_count: int = Field(ge=0)
+    worksheet_count: int = Field(ge=0)
+    block_count: int = Field(ge=0)
+    chunk_count: int = Field(ge=0)
+    extractor_name: str | None
+    extractor_version: str | None
+    embedding_provider: str | None
+    embedding_model: str | None
+    embedding_model_revision: str | None
+    warning_codes: list[str] = Field(default_factory=list)
+    error_code: str | None
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    failed_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

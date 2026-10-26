@@ -32,6 +32,22 @@ from app.models.domain import (
     WbsTemplate,
     WbsVersion,
 )
+from app.services.storage import get_upload_storage
+
+
+class RecordingStorage:
+    def __init__(self) -> None:
+        self.save_calls = 0
+
+    async def save(self, *_args, **_kwargs):
+        self.save_calls += 1
+        raise AssertionError("Unauthorized request reached object storage")
+
+    async def delete_object(self, _storage_key):
+        return None
+
+    async def check(self):
+        return None
 
 
 async def _seed_identity(role: str | None, tenant_active: bool = True) -> tuple[str, UUID, UUID]:
@@ -173,21 +189,25 @@ def test_viewer_can_read_but_cannot_upload_or_generate(client):
         ).status_code
         == 403
     )
-    malformed_upload = client.post(
-        f"/api/v1/tenants/{tenant_id}/projects/{uuid4()}/documents",
-        headers={**headers, "Content-Type": "multipart/form-data; boundary=invalid"},
-        content=b"this body cannot be parsed as multipart",
-    )
-    assert malformed_upload.status_code == 403
-    assert (
-        client.post(
+    storage = RecordingStorage()
+    client.app.dependency_overrides[get_upload_storage] = lambda: storage
+    try:
+        malformed_upload = client.post(
+            f"/api/v1/tenants/{tenant_id}/projects/{uuid4()}/documents",
+            headers={**headers, "Content-Type": "multipart/form-data; boundary=invalid"},
+            content=b"this body cannot be parsed as multipart",
+        )
+        denied_upload = client.post(
             f"/api/v1/tenants/{tenant_id}/projects/{uuid4()}/documents",
             headers=headers,
             data={"kind": "PROJECT"},
             files={"file": ("scope.pdf", b"scope", "application/pdf")},
-        ).status_code
-        == 403
-    )
+        )
+    finally:
+        client.app.dependency_overrides.pop(get_upload_storage, None)
+    assert malformed_upload.status_code == 403
+    assert denied_upload.status_code == 403
+    assert storage.save_calls == 0
     assert (
         client.post(
             f"/api/v1/tenants/{tenant_id}/projects/{uuid4()}/generations",
@@ -276,6 +296,18 @@ def test_cross_tenant_resource_ids_return_not_found(client, tenant_id):
     owner_id = get_settings().dev_user_id
     other = client.portal.call(_seed_other_tenant_resources, owner_id)
     base = f"/api/v1/tenants/{tenant_id}"
+    storage = RecordingStorage()
+    client.app.dependency_overrides[get_upload_storage] = lambda: storage
+    try:
+        cross_tenant_upload = client.post(
+            f"{base}/projects/{other['project']}/documents",
+            data={"kind": "PROJECT"},
+            files={"file": ("scope.pdf", b"scope", "application/pdf")},
+        )
+    finally:
+        client.app.dependency_overrides.pop(get_upload_storage, None)
+    assert cross_tenant_upload.status_code == 404
+    assert storage.save_calls == 0
 
     requests = [
         ("get", f"{base}/projects/{other['project']}", None),

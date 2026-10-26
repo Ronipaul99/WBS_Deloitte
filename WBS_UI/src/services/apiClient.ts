@@ -13,6 +13,7 @@ export class ApiError extends Error {
     public readonly status: number,
     public readonly fieldErrors: Record<string, string> = {},
     public readonly retryAfterSeconds: number | null = null,
+    public readonly code: string | null = null,
   ) {
     super(message);
   }
@@ -34,8 +35,12 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
   const fieldErrors: Record<string, string> = {};
   try {
     const body = (await response.json()) as {
-      detail?: string | Array<{ loc?: Array<string | number>; msg?: string }>;
+      detail?:
+        | string
+        | Array<{ loc?: Array<string | number>; msg?: string }>
+        | { code?: unknown; message?: unknown };
     };
+    let code: string | null = null;
     if (typeof body.detail === 'string') {
       message = body.detail;
     } else if (Array.isArray(body.detail)) {
@@ -44,7 +49,19 @@ async function errorFromResponse(response: Response): Promise<ApiError> {
         if (issue.msg) fieldErrors[field] = issue.msg;
       }
       message = Object.values(fieldErrors)[0] ?? 'Some submitted fields are invalid.';
+    } else if (body.detail && typeof body.detail === 'object') {
+      if (typeof body.detail.code === 'string') code = body.detail.code;
+      if (typeof body.detail.message === 'string') message = body.detail.message;
     }
+    const rawRetryAfter = response.headers.get('Retry-After');
+    const retryAfter = rawRetryAfter ? Number.parseInt(rawRetryAfter, 10) : Number.NaN;
+    return new ApiError(
+      message,
+      response.status,
+      fieldErrors,
+      Number.isFinite(retryAfter) ? retryAfter : null,
+      code,
+    );
   } catch {
     // The response did not contain a JSON error body.
   }

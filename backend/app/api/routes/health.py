@@ -14,7 +14,11 @@ from app.db.session import get_db
 from app.models.auth import AuthIdentity, RefreshSession
 from app.models.domain import MembershipRole, Tenant, TenantMembership, User
 from app.schemas.domain import HealthResponse
-from app.services.readiness import database_is_at_migration_head
+from app.services.readiness import (
+    IngestionReadinessError,
+    api_ingestion_is_ready,
+    database_is_at_migration_head,
+)
 from app.services.storage import (
     ObjectStorageUnavailableError,
     UploadObjectStorage,
@@ -102,6 +106,7 @@ async def readiness(
                 detail="Service is not ready.",
             )
         await storage.check()
+        await api_ingestion_is_ready(settings)
     except SQLAlchemyError:
         logger.error("Readiness check failed: database unavailable")
         raise HTTPException(
@@ -110,6 +115,12 @@ async def readiness(
         ) from None
     except ObjectStorageUnavailableError:
         logger.error("Readiness check failed: object storage unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service is not ready.",
+        ) from None
+    except IngestionReadinessError as exc:
+        logger.error("Readiness check failed: %s unavailable", exc.category)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Service is not ready.",

@@ -21,13 +21,7 @@ async function uploadProject(page: Page, withTemplate = false) {
       buffer: Buffer.from('template'),
     });
   }
-  await page.getByRole('button', { name: 'Generate Draft WBS' }).click();
-}
-
-async function reachResults(page: Page) {
-  await expect(page.getByRole('heading', { name: 'Review Project Summary' })).toBeVisible();
-  await page.getByRole('button', { name: 'Generate WBS' }).click();
-  await expect(page.getByRole('heading', { name: 'AI WBS Builder' })).toBeVisible();
+  await page.getByRole('button', { name: 'Process Document' }).click();
 }
 
 async function setup(page: Page, options: Parameters<typeof mockWorkflowApi>[1] = {}) {
@@ -37,65 +31,53 @@ async function setup(page: Page, options: Parameters<typeof mockWorkflowApi>[1] 
   return state;
 }
 
-test('runs the required-document workflow through summary, WBS, validation, and protected export', async ({ page }) => {
+test('stops the required-document workflow at the processed milestone', async ({ page }) => {
   const state: WorkflowMockState = await setup(page);
   await uploadProject(page);
-  await expect(page.getByRole('heading', { name: 'Processing Project Document' })).toBeVisible();
-  await reachResults(page);
+  await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
 
   expect(state.templateUploads).toBe(0);
   expect(state.projectCreates).toBe(1);
-  expect(state.generationPayload).toEqual({
-    document_id: '20000000-0000-0000-0000-000000000001',
-    summary_id: '50000000-0000-0000-0000-000000000001',
-  });
-  await expect(page.getByText('Commission the system').first()).toBeVisible();
-
-  await page.getByRole('button', { name: 'Validate & Proceed' }).click();
-  await expect(page.getByRole('heading', { name: 'WBS Validation' })).toBeVisible();
-  await expect(page.getByText('Unique WBS codes')).toBeVisible();
-  await page.getByRole('button', { name: 'Back to WBS Structure' }).click();
-
-  const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Export', exact: true }).click();
-  await page.getByRole('button', { name: 'Export as JSON' }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe('wbs-v1.json');
+  expect(state.ingestionStarts).toBe(1);
+  expect(state.summaryStarts).toBe(0);
+  expect(state.generationPayload).toBeNull();
 
   const storageKeys = await page.evaluate(() => ({
     local: Object.keys(localStorage),
     session: Object.keys(sessionStorage),
   }));
-  expect(storageKeys).toEqual({ local: [], session: [] });
+  expect(storageKeys.local).toEqual([]);
+  expect(storageKeys.session).toHaveLength(2);
 });
 
-test('uploads and submits the optional template only when selected', async ({ page }) => {
+test('uploads the optional template before starting ingestion', async ({ page }) => {
   const state = await setup(page);
   await uploadProject(page, true);
-  await reachResults(page);
+  await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
 
   expect(state.templateUploads).toBe(1);
-  expect(state.generationPayload).toMatchObject({
-    template_id: '30000000-0000-0000-0000-000000000001',
-  });
+  expect(state.ingestionStarts).toBe(1);
+  expect(state.summaryStarts).toBe(0);
 });
 
-test('shows the backend job failure without substituting mock results', async ({ page }) => {
-  await setup(page, { failSummaryJob: true });
+test('shows a safe ingestion failure without substituting later workflow results', async ({ page }) => {
+  await setup(page, { ingestionStages: ['FAILED'], ingestionErrorCode: 'DOCUMENT_MALFORMED' });
   await uploadProject(page);
 
-  await expect(page.getByRole('heading', { name: 'Document Extraction Interrupted' })).toBeVisible();
-  await expect(page.getByText('Document parser rejected the uploaded content.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Document processing stopped' })).toBeVisible();
+  await expect(page.getByText('The document structure could not be read safely.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Review Project Summary' })).toHaveCount(0);
 });
 
-test('refreshes an expired access token once while polling generation', async ({ page }) => {
-  const state = await setup(page, { refreshDuringGenerationPoll: true });
+test('refreshes an expired access token once while polling ingestion', async ({ page }) => {
+  const state = await setup(page, {
+    ingestionStages: ['QUEUED', 'COMPLETED'],
+    unauthorizedIngestionPollOnce: true,
+  });
   await uploadProject(page);
-  await reachResults(page);
 
+  await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
   expect(state.refreshDuringGenerationPoll).toBe(true);
-  await expect(page.getByRole('heading', { name: 'AI WBS Builder' })).toBeVisible();
 });
 
 test('scopes every workflow request to the workspace selected from multiple tenants', async ({ page }) => {
@@ -114,7 +96,7 @@ test('scopes every workflow request to the workspace selected from multiple tena
         slug: 'engineering',
         role: 'ADMIN',
         permissions: [
-          'project:read', 'project:create', 'document:read', 'document:upload',
+          'project:read', 'project:create', 'document:read', 'document:upload', 'document:process',
           'summary:read', 'summary:update', 'summary:approve', 'template:read',
           'template:manage', 'wbs:read', 'wbs:generate', 'wbs:update',
           'validation:read', 'validation:run', 'export:read', 'export:create',
@@ -128,7 +110,7 @@ test('scopes every workflow request to the workspace selected from multiple tena
   await expect(page.getByRole('heading', { name: 'Choose a workspace' })).toBeVisible();
   await page.getByRole('button', { name: /Engineering Workspace/ }).click();
   await uploadProject(page);
-  await expect(page.getByRole('heading', { name: 'Review Project Summary' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
 
   expect(state.requestPaths.length).toBeGreaterThan(0);
   expect(state.requestPaths.every((path) => (

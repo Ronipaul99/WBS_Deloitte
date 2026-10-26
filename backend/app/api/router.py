@@ -7,6 +7,7 @@ from app.api.routes import (
     generations,
     health,
     identity,
+    ingestions,
     jobs,
     members,
     projects,
@@ -25,6 +26,7 @@ api_router.include_router(identity.router)
 api_router.include_router(members.router)
 api_router.include_router(projects.router)
 api_router.include_router(documents.router)
+api_router.include_router(ingestions.router)
 api_router.include_router(summaries.router)
 api_router.include_router(templates.router)
 api_router.include_router(jobs.router)

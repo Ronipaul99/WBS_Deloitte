@@ -7,10 +7,17 @@ from app.models.auth import (
     TenantInvitation,
 )
 from app.models.domain import (
+    ACTIVE_DOCUMENT_PROCESSING_STATUSES,
     Document,
+    DocumentChunk,
+    DocumentDeletionOutbox,
+    DocumentLifecycleStatus,
+    DocumentProcessingRun,
+    DocumentProcessingStatus,
     DocumentSummary,
     ExportFile,
     Job,
+    JobDispatchOutbox,
     Project,
     Tenant,
     TenantMembership,
@@ -21,12 +28,19 @@ from app.models.domain import (
 )
 
 __all__ = [
+    "ACTIVE_DOCUMENT_PROCESSING_STATUSES",
     "AuthEvent",
     "AuthIdentity",
     "OidcAuthorizationState",
     "Document",
+    "DocumentChunk",
+    "DocumentDeletionOutbox",
+    "DocumentLifecycleStatus",
+    "DocumentProcessingRun",
+    "DocumentProcessingStatus",
     "DocumentSummary",
     "ExportFile",
+    "JobDispatchOutbox",
     "Job",
     "Project",
     "PasswordResetToken",

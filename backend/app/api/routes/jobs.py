@@ -37,6 +37,16 @@ async def cancel_job(
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     job = await get_tenant_job(db, context.tenant.id, job_id)
+    if job.job_type == JobType.DOCUMENT_INGESTION:
+        raise HTTPException(
+            status_code=409,
+            detail="Document ingestion cancellation is not enabled.",
+        )
+    if job.job_type == JobType.DOCUMENT_DELETION:
+        raise HTTPException(
+            status_code=409,
+            detail="Document deletion cancellation is not enabled.",
+        )
     if job.status in {ProcessingStatus.COMPLETED, ProcessingStatus.FAILED}:
         raise HTTPException(status_code=409, detail="Completed jobs cannot be cancelled.")
     job.status = ProcessingStatus.CANCELLED

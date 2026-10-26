@@ -16,7 +16,7 @@ test('viewer sees read-only navigation without create or settings commands', asy
   await expect(page.getByRole('button', { name: 'Create WBS' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Create project' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Process Document' })).toHaveCount(0);
 });
 
 test('editor can create a WBS but does not see administrative settings', async ({ page }) => {
@@ -26,7 +26,7 @@ test('editor can create a WBS but does not see administrative settings', async (
 
   await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
   await createProjectAndOpenWbs(page);
-  await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Process Document' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
 });
 
@@ -44,5 +44,20 @@ test('a forced identity 403 fails safely back to the login screen', async ({ pag
 
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Generate Draft WBS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Process Document' })).toHaveCount(0);
+});
+
+test('WBS generation permission does not authorize document ingestion', async ({ page }) => {
+  await mockAuthenticatedUser(page, {
+    role: 'EDITOR',
+    permissions: EDITOR_PERMISSIONS.filter((permission) => permission !== 'document:process'),
+  });
+  await mockWorkflowApi(page);
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await page.getByLabel('Project name').fill('Read-only ingestion');
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Create new WBS' })).toHaveCount(0);
 });

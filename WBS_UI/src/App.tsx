@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, ArrowLeft, LoaderCircle } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from './auth/authContext';
 import type { CurrentUser, TenantMembership } from './auth/authContext';
 import { PERMISSIONS } from './auth/permissions';
@@ -27,8 +27,15 @@ import type { AccountSettingsSection } from './views/AccountSettingsScreen';
 import TenantSelectionScreen from './views/TenantSelectionScreen';
 import { acceptTenantInvitation } from './services/memberAdministration';
 import { enterpriseSignInUrl } from './services/apiClient';
+import { ApiError } from './services/apiClient';
 import { startGeneration } from './services/generationsApi';
 import { startValidation } from './services/validationsApi';
+import { restoreWorkflow } from './services/workflowApi';
+import {
+  clearWorkflowContext,
+  readWorkflowContext,
+  saveWorkflowContext,
+} from './services/workflowSessionStorage';
 import type { ProjectResponse, WorkflowSession } from './services/workflowTypes';
 import './App.css';
 
@@ -268,8 +275,11 @@ function WorkspaceApp({
 }: WorkspaceAppProps) {
   const directMemberRoute = window.location.pathname === '/settings/members';
   const [activeTab, setActiveTab] = useState<string>(directMemberRoute ? 'settings' : 'home');
-  const [projectScreen, setProjectScreen] = useState<'list' | 'create' | 'workspace' | 'wbs'>('list');
+  const [projectScreen, setProjectScreen] = useState<
+    'list' | 'create' | 'workspace' | 'wbs' | 'result'
+  >('list');
   const [selectedProject, setSelectedProject] = useState<ProjectResponse | null>(null);
+  const [selectedWbsVersionId, setSelectedWbsVersionId] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('create');
   const [workflow, setWorkflow] = useState<WorkflowSession | null>(null);
   const [settingsSection, setSettingsSection] = useState<AccountSettingsSection>(
@@ -278,18 +288,56 @@ function WorkspaceApp({
   const [targetResultTab, setTargetResultTab] = useState<
     'structure' | 'coverage' | 'insights' | 'unmapped'
   >('structure');
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [isRestoringWorkflow, setIsRestoringWorkflow] = useState(
+    () => readWorkflowContext(activeTenant.id) !== null,
+  );
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const canCreateProject = can(PERMISSIONS.PROJECT_CREATE);
-  const canCreateWbs = can(PERMISSIONS.DOCUMENT_UPLOAD) && can(PERMISSIONS.WBS_GENERATE);
+  const canCreateWbs = can(PERMISSIONS.DOCUMENT_UPLOAD) && can(PERMISSIONS.DOCUMENT_PROCESS);
 
-  const resetWbsFlow = () => {
+  useEffect(() => {
+    const stored = readWorkflowContext(activeTenant.id);
+    if (!stored) return;
+    const controller = new AbortController();
+    restoreWorkflow(activeTenant.id, stored, controller.signal)
+      .then((session) => {
+        if (controller.signal.aborted) return;
+        setSelectedProject(session.project);
+        setWorkflow(session);
+        setActiveTab('projects');
+        setProjectScreen('wbs');
+        setCurrentScreen('doc_processing');
+      })
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        const invalidContext = reason instanceof ApiError
+          ? reason.status === 403 || reason.status === 404
+          : reason instanceof Error && reason.message.includes('saved document workflow');
+        if (invalidContext) clearWorkflowContext(activeTenant.id, stored.projectId);
+        setRestoreError(invalidContext
+          ? 'The saved document workflow is no longer available in this workspace.'
+          : 'The document workflow could not be restored. Check the connection and try again.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsRestoringWorkflow(false);
+      });
+    return () => controller.abort();
+  }, [activeTenant.id, restoreAttempt]);
+
+  const resetWbsFlow = (clearStored = true) => {
+    if (clearStored) {
+      clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);
+    }
     setWorkflow(null);
+    setSelectedWbsVersionId(null);
     setCurrentScreen('create');
     setTargetResultTab('structure');
   };
 
   const showProjectList = () => {
-    resetWbsFlow();
+    resetWbsFlow(false);
     setSelectedProject(null);
     setProjectScreen('list');
     setActiveTab('projects');
@@ -297,35 +345,55 @@ function WorkspaceApp({
 
   const showCreateProject = () => {
     if (!canCreateProject) return;
-    resetWbsFlow();
+    resetWbsFlow(false);
     setSelectedProject(null);
     setProjectScreen('create');
     setActiveTab('projects');
   };
 
   const openProject = (project: ProjectResponse) => {
-    resetWbsFlow();
+    const stored = readWorkflowContext(activeTenant.id);
+    resetWbsFlow(false);
     setSelectedProject(project);
-    setProjectScreen('workspace');
     setActiveTab('projects');
+    if (stored?.projectId === project.id) {
+      setProjectScreen('wbs');
+      setCurrentScreen('doc_processing');
+      setIsRestoringWorkflow(true);
+      setRestoreAttempt((value) => value + 1);
+    } else {
+      setProjectScreen('workspace');
+    }
   };
 
   const showWbsUpload = () => {
     if (!selectedProject || !canCreateWbs) return;
+    const stored = readWorkflowContext(activeTenant.id);
+    if (stored?.projectId === selectedProject.id) {
+      setProjectScreen('wbs');
+      setCurrentScreen('doc_processing');
+      setIsRestoringWorkflow(true);
+      setRestoreAttempt((value) => value + 1);
+      return;
+    }
     resetWbsFlow();
     setProjectScreen('wbs');
   };
 
+  const openExistingWbs = (versionId: string) => {
+    if (!selectedProject) return;
+    setWorkflow(null);
+    setSelectedWbsVersionId(versionId);
+    setTargetResultTab('structure');
+    setProjectScreen('result');
+  };
+
   // 1. Step 1 (Upload) -> Step 2 (Document Processing Stepper)
   const handleWorkflowStarted = (session: WorkflowSession) => {
+    saveWorkflowContext(activeTenant.id, session);
     setSelectedProject(session.project);
     setWorkflow(session);
     setCurrentScreen('doc_processing');
-  };
-
-  // 2. Step 2 (Document Processing) -> Step 3 (Review Summary)
-  const handleDocProcessingComplete = () => {
-    setCurrentScreen('doc_summary');
   };
 
   // 3. Step 3 (Review Summary) -> Step 4 (Decomposition Pipeline Analysis)
@@ -349,6 +417,19 @@ function WorkspaceApp({
   const handleBackToProject = () => {
     resetWbsFlow();
     setProjectScreen(selectedProject ? 'workspace' : 'list');
+  };
+
+  const handleLeaveProcessing = (completed: boolean) => {
+    resetWbsFlow(completed);
+    setProjectScreen(selectedProject ? 'workspace' : 'list');
+  };
+
+  const handleResumeIngestion = () => {
+    if (!selectedProject) return;
+    setProjectScreen('wbs');
+    setCurrentScreen('doc_processing');
+    setIsRestoringWorkflow(true);
+    setRestoreAttempt((value) => value + 1);
   };
 
   const handleRegenerate = async () => {
@@ -402,7 +483,7 @@ function WorkspaceApp({
       showProjectList();
     } else {
       setActiveTab(tab);
-      resetWbsFlow();
+      resetWbsFlow(false);
       setSelectedProject(null);
       setProjectScreen('list');
     }
@@ -415,7 +496,7 @@ function WorkspaceApp({
   };
 
   const handleProfileDetails = () => {
-    resetWbsFlow();
+    resetWbsFlow(false);
     setSelectedProject(null);
     setProjectScreen('list');
     setSettingsSection('profile');
@@ -449,6 +530,49 @@ function WorkspaceApp({
   );
 
   const renderContent = () => {
+    if (isRestoringWorkflow) {
+      return (
+        <div className="wbs-state-loading" role="status" aria-live="polite">
+          <LoaderCircle size={34} className="login-spinner" />
+          <span className="wbs-state-loading-text">Restoring document processing...</span>
+        </div>
+      );
+    }
+
+    if (restoreError) {
+      return (
+        <div className="app-missing-job-card" role="alert">
+          <div className="app-missing-job-icon-box"><AlertTriangle size={24} /></div>
+          <h2 className="app-missing-job-title">Document workflow unavailable</h2>
+          <p className="app-missing-job-desc">{restoreError}</p>
+          <div className="app-missing-job-actions">
+            <button
+              type="button"
+              className="app-missing-job-btn"
+              onClick={() => {
+                setRestoreError(null);
+                setIsRestoringWorkflow(true);
+                setRestoreAttempt((value) => value + 1);
+              }}
+            >
+              <RefreshCw size={14} /> Check again
+            </button>
+            <button
+              type="button"
+              className="project-secondary-button"
+              onClick={() => {
+                const stored = readWorkflowContext(activeTenant.id);
+                clearWorkflowContext(activeTenant.id, stored?.projectId);
+                setRestoreError(null);
+              }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (activeTab === 'settings') {
       return (
         <AccountSettingsScreen
@@ -494,8 +618,25 @@ function WorkspaceApp({
             tenantId={activeTenant.id}
             project={selectedProject}
             canCreateWbs={canCreateWbs}
+            canDeleteDocument={can(PERMISSIONS.DOCUMENT_UPLOAD)}
+            hasActiveIngestion={readWorkflowContext(activeTenant.id)?.projectId === selectedProject.id}
             onBack={showProjectList}
             onCreateWbs={showWbsUpload}
+            onResumeIngestion={handleResumeIngestion}
+            onOpenWbs={openExistingWbs}
+          />
+        );
+      }
+
+      if (projectScreen === 'result' && selectedProject && selectedWbsVersionId) {
+        return (
+          <WbsResultScreen
+            tenantId={activeTenant.id}
+            project={selectedProject}
+            template={null}
+            versionId={selectedWbsVersionId}
+            initialTab={targetResultTab}
+            onBack={handleBackToProject}
           />
         );
       }
@@ -531,12 +672,12 @@ function WorkspaceApp({
         return (
           <ProcessingProjectDocumentScreen
             tenantId={activeTenant.id}
-            jobId={workflow.summaryJobId}
+            jobId={workflow.ingestionJobId}
+            processingRunId={workflow.processingRunId}
             document={workflow.document}
             template={workflow.template}
-            onProcessingComplete={handleDocProcessingComplete}
-            onBack={handleBackToUpload}
-            onCancel={handleBackToUpload}
+            initialStatus={workflow.initialIngestionStatus}
+            onBack={handleLeaveProcessing}
           />
         );
       }
@@ -587,7 +728,9 @@ function WorkspaceApp({
           tenantId={activeTenant.id}
           project={workflow.project}
           template={workflow.template}
+          versionId={workflow.wbsVersionId ?? undefined}
           initialTab={targetResultTab}
+          onBack={handleBackToProject}
           onRegenerate={handleRegenerate}
           onNavigateToValidation={handleNavigateToValidation}
         />
@@ -626,10 +769,16 @@ function WorkspaceApp({
           .map((part) => part[0].toUpperCase())
           .join('') || 'U',
       }}
-      onSignOut={() => void onSignOut()}
+      onSignOut={() => {
+        clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);
+        void onSignOut();
+      }}
       onProfileDetails={handleProfileDetails}
       canSwitchWorkspace={canSwitchWorkspace}
-      onSwitchWorkspace={onSwitchWorkspace}
+      onSwitchWorkspace={() => {
+        clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);
+        onSwitchWorkspace();
+      }}
     >
       {renderContent()}
     </AppLayout>

@@ -1,9 +1,9 @@
 from functools import lru_cache
-from ipaddress import ip_network
-from pathlib import Path
+from ipaddress import ip_address, ip_network
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from secrets import compare_digest
 from typing import Literal
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from pydantic import EmailStr, Field, SecretStr, model_validator
@@ -11,7 +11,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        hide_input_in_errors=True,
+    )
 
     app_name: str = "WBS Generator API"
     app_env: Literal["development", "test", "production"] = "development"
@@ -43,6 +48,164 @@ class Settings(BaseSettings):
     readiness_require_migration_head: bool = False
     metrics_enabled: bool = False
     metrics_bearer_token: str = ""
+    document_ingestion_enabled: bool = False
+    embedding_provider: str = Field(default="fastembed", min_length=1, max_length=40)
+    embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1, max_length=160)
+    embedding_dimensions: int = Field(default=384, ge=1, le=4096)
+    embedding_batch_size: int = Field(default=32, ge=1, le=256)
+    embedding_model_path: str = Field(
+        default="/opt/wbs-models/bge-small-en-v1.5", min_length=1, max_length=1024
+    )
+    embedding_model_revision: str | None = Field(
+        default=None,
+        min_length=40,
+        max_length=128,
+        pattern=r"^[0-9a-f]{40,128}$",
+    )
+    embedding_model_manifest_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    embedding_formatting_version: str = Field(
+        default="bge-small-en-v1.5-format-v1",
+        min_length=1,
+        max_length=80,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    )
+    embedding_tokenizer_revision: str | None = Field(
+        default=None,
+        min_length=7,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$",
+    )
+    embedding_tokenizer_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    embedding_max_text_characters: int = Field(default=100_000, ge=1_000, le=1_000_000)
+    embedding_max_concurrent_batches: int = Field(default=1, ge=1, le=8)
+    embedding_cpu_threads: int = Field(default=2, ge=1, le=32)
+    document_processing_timeout_seconds: int = Field(default=900, ge=60, le=3600)
+    document_ingestion_max_attempts: int = Field(default=5, ge=1, le=10)
+    document_ingestion_retry_base_seconds: int = Field(default=5, ge=1, le=300)
+    document_ingestion_retry_max_seconds: int = Field(default=300, ge=5, le=3_600)
+    document_dispatch_publish_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    document_dispatch_lease_seconds: int = Field(default=60, ge=10, le=900)
+    document_reconciliation_stale_seconds: int = Field(default=900, ge=60, le=7_200)
+    document_reconciliation_batch_size: int = Field(default=100, ge=1, le=1_000)
+    document_deletion_max_attempts: int = Field(default=5, ge=1, le=10)
+    document_deletion_retry_base_seconds: int = Field(default=5, ge=1, le=300)
+    document_deletion_retry_max_seconds: int = Field(default=300, ge=5, le=3_600)
+    document_deletion_lease_seconds: int = Field(default=60, ge=10, le=900)
+    document_deletion_stale_seconds: int = Field(default=900, ge=60, le=86_400)
+    document_lifecycle_batch_size: int = Field(default=100, ge=1, le=1_000)
+    document_reconciliation_repairs_enabled: bool = False
+    document_retention_enabled: bool = False
+    document_retention_failed_run_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_cancelled_run_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_superseded_run_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_job_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_malware_event_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_tombstone_days: int | None = Field(default=None, ge=1, le=3650)
+    document_retention_stale_workspace_hours: int | None = Field(default=None, ge=1, le=8760)
+    document_orphan_cleanup_enabled: bool = False
+    document_orphan_minimum_age_hours: int | None = Field(default=None, ge=24, le=8760)
+    document_max_pdf_pages: int = Field(default=500, ge=1, le=2000)
+    document_max_worksheets: int = Field(default=100, ge=1, le=500)
+    document_max_rows_per_sheet: int = Field(default=100_000, ge=1, le=1_000_000)
+    document_max_extracted_characters: int = Field(default=10_000_000, ge=1_000, le=50_000_000)
+    document_max_extracted_blocks: int = Field(default=100_000, ge=1, le=1_000_000)
+    document_max_block_characters: int = Field(default=100_000, ge=1, le=1_000_000)
+    document_max_heading_depth: int = Field(default=16, ge=1, le=64)
+    document_max_heading_label_characters: int = Field(default=500, ge=1, le=2_000)
+    document_max_extraction_warnings: int = Field(default=100, ge=0, le=1_000)
+    document_max_metadata_fields: int = Field(default=16, ge=0, le=64)
+    document_max_metadata_depth: int = Field(default=3, ge=1, le=8)
+    document_max_metadata_value_characters: int = Field(default=1_000, ge=1, le=10_000)
+    document_max_metadata_list_items: int = Field(default=100, ge=0, le=1_000)
+    document_max_sheet_name_characters: int = Field(default=160, ge=1, le=255)
+    document_max_archive_entries: int = Field(default=10_000, ge=10, le=100_000)
+    document_max_archive_compressed_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=4 * 1024,
+        le=256 * 1024 * 1024,
+    )
+    document_max_archive_uncompressed_bytes: int = Field(
+        default=200 * 1024 * 1024,
+        ge=4 * 1024,
+        le=2 * 1024 * 1024 * 1024,
+    )
+    document_max_archive_entry_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        ge=1_024,
+        le=512 * 1024 * 1024,
+    )
+    document_max_archive_expansion_ratio: int = Field(default=100, ge=1, le=1_000)
+    document_max_spreadsheet_columns: int = Field(default=1_000, ge=1, le=16_384)
+    document_max_spreadsheet_cells: int = Field(default=1_000_000, ge=1, le=10_000_000)
+    document_max_merged_ranges: int = Field(default=10_000, ge=0, le=100_000)
+    document_max_csv_columns: int = Field(default=1_000, ge=1, le=10_000)
+    document_max_csv_field_characters: int = Field(default=100_000, ge=1, le=1_000_000)
+    pdf_max_content_stream_bytes: int = Field(
+        default=16 * 1024 * 1024,
+        ge=4 * 1024,
+        le=256 * 1024 * 1024,
+    )
+    pdf_native_text_min_characters: int = Field(default=32, ge=1, le=10_000)
+    pdf_repeated_margin_min_pages: int = Field(default=3, ge=3, le=100)
+    pdf_repeated_margin_min_ratio: float = Field(default=0.8, ge=0.5, le=1.0)
+    pdf_margin_band_ratio: float = Field(default=0.12, ge=0.01, le=0.25)
+    pdf_repeated_margin_max_characters: int = Field(default=160, ge=1, le=1_000)
+    pdf_parser_timeout_seconds: int = Field(default=120, ge=5, le=900)
+    document_chunk_target_tokens: int = Field(default=400, ge=64, le=500)
+    document_chunk_overlap_tokens: int = Field(default=50, ge=0, le=128)
+    document_chunk_max_tokens: int = Field(default=480, ge=64, le=510)
+    document_chunk_formatting_headroom_tokens: int = Field(default=32, ge=2, le=128)
+    document_max_chunks: int = Field(default=100_000, ge=1, le=1_000_000)
+    document_max_chunk_source_references: int = Field(default=2_048, ge=1, le=100_000)
+    ocr_enabled: bool = True
+    ocr_languages: str = Field(default="eng", min_length=3, max_length=64)
+    ocr_timeout_seconds: int = Field(default=300, ge=5, le=1_800)
+    ocr_max_output_bytes: int = Field(
+        default=50 * 1024 * 1024,
+        ge=4 * 1024,
+        le=256 * 1024 * 1024,
+    )
+    ocr_max_temporary_bytes: int = Field(
+        default=256 * 1024 * 1024,
+        ge=4 * 1024,
+        le=2 * 1024 * 1024 * 1024,
+    )
+    ocr_process_output_max_bytes: int = Field(default=64 * 1024, ge=1_024, le=1_048_576)
+    ocr_cpu_limit_seconds: int = Field(default=300, ge=5, le=1_800)
+    ocr_memory_limit_bytes: int = Field(
+        default=2 * 1024 * 1024 * 1024,
+        ge=128 * 1024 * 1024,
+        le=16 * 1024 * 1024 * 1024,
+    )
+    ocrmypdf_expected_version: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._+~-]*$",
+    )
+    tesseract_expected_version: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=40,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._+~-]*$",
+    )
+    malware_scan_required: bool = True
+    clamav_host: str | None = Field(default=None, max_length=255)
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    clamav_connect_timeout_seconds: float = Field(default=3.0, ge=0.1, le=30)
+    clamav_scan_timeout_seconds: float = Field(default=60.0, ge=1, le=300)
+    clamav_response_max_bytes: int = Field(default=4096, ge=64, le=65_536)
+    document_processing_temp_root: str = Field(
+        default="/var/lib/wbs/processing",
+        min_length=1,
+        max_length=1024,
+    )
     refresh_session_retention_days: int = Field(default=30, ge=1, le=365)
     auth_event_retention_days: int = Field(default=365, ge=30, le=2555)
     oidc_state_retention_days: int = Field(default=7, ge=1, le=30)
@@ -144,8 +307,7 @@ class Settings(BaseSettings):
             missing_storage = [name for name, value in required_storage.items() if not value]
             if missing_storage:
                 raise ValueError(
-                    "S3 object storage configuration is incomplete: "
-                    + ", ".join(missing_storage)
+                    "S3 object storage configuration is incomplete: " + ", ".join(missing_storage)
                 )
             if not self._is_storage_endpoint(self.aws_endpoint_url_s3 or ""):
                 raise ValueError(
@@ -163,6 +325,8 @@ class Settings(BaseSettings):
                 raise ValueError("AUTH_COOKIE_SECURE must be true in production")
             if self.auto_create_tables:
                 raise ValueError("AUTO_CREATE_TABLES must be false in production")
+            if self.tasks_eager:
+                raise ValueError("TASKS_EAGER must be false in production")
             if not self.sqlalchemy_database_url.startswith("postgresql+asyncpg://"):
                 raise ValueError("DATABASE_URL must use PostgreSQL in production")
             if not self.direct_database_url:
@@ -218,6 +382,12 @@ class Settings(BaseSettings):
             for origin in self.cors_origin_list:
                 if not self._is_exact_origin(origin, require_https=True):
                     raise ValueError("CORS_ORIGINS must contain exact HTTPS origins in production")
+        if self.document_ingestion_enabled:
+            self._validate_document_ingestion_settings()
+        elif self.document_retention_enabled or self.document_orphan_cleanup_enabled:
+            raise ValueError(
+                "Document retention and orphan cleanup require document ingestion to be enabled"
+            )
         if self.password_recovery_enabled:
             if self.auth_mode not in {"local", "hybrid"}:
                 raise ValueError("Password recovery requires local or hybrid authentication")
@@ -266,6 +436,155 @@ class Settings(BaseSettings):
             if not self._is_exact_origin(origin, require_https=False):
                 raise ValueError("CORS_ORIGINS must contain exact HTTP(S) origins")
         return self
+
+    def _validate_document_ingestion_settings(self) -> None:
+        if self.document_ingestion_retry_base_seconds > self.document_ingestion_retry_max_seconds:
+            raise ValueError(
+                "DOCUMENT_INGESTION_RETRY_BASE_SECONDS cannot exceed "
+                "DOCUMENT_INGESTION_RETRY_MAX_SECONDS"
+            )
+        if self.document_dispatch_lease_seconds >= self.document_reconciliation_stale_seconds:
+            raise ValueError(
+                "DOCUMENT_DISPATCH_LEASE_SECONDS must be shorter than "
+                "DOCUMENT_RECONCILIATION_STALE_SECONDS"
+            )
+        if self.document_deletion_retry_base_seconds > self.document_deletion_retry_max_seconds:
+            raise ValueError(
+                "DOCUMENT_DELETION_RETRY_BASE_SECONDS cannot exceed "
+                "DOCUMENT_DELETION_RETRY_MAX_SECONDS"
+            )
+        if self.document_deletion_lease_seconds >= self.document_deletion_stale_seconds:
+            raise ValueError(
+                "DOCUMENT_DELETION_LEASE_SECONDS must be shorter than "
+                "DOCUMENT_DELETION_STALE_SECONDS"
+            )
+        if self.document_retention_enabled:
+            required_retention = {
+                "DOCUMENT_RETENTION_FAILED_RUN_DAYS": self.document_retention_failed_run_days,
+                "DOCUMENT_RETENTION_CANCELLED_RUN_DAYS": (
+                    self.document_retention_cancelled_run_days
+                ),
+                "DOCUMENT_RETENTION_SUPERSEDED_RUN_DAYS": (
+                    self.document_retention_superseded_run_days
+                ),
+                "DOCUMENT_RETENTION_JOB_DAYS": self.document_retention_job_days,
+                "DOCUMENT_RETENTION_MALWARE_EVENT_DAYS": (
+                    self.document_retention_malware_event_days
+                ),
+                "DOCUMENT_RETENTION_TOMBSTONE_DAYS": (self.document_retention_tombstone_days),
+                "DOCUMENT_RETENTION_STALE_WORKSPACE_HOURS": (
+                    self.document_retention_stale_workspace_hours
+                ),
+            }
+            missing = sorted(name for name, value in required_retention.items() if value is None)
+            if missing:
+                raise ValueError(
+                    "Document retention requires explicit approved values for: "
+                    + ", ".join(missing)
+                )
+        if self.document_orphan_cleanup_enabled and self.document_orphan_minimum_age_hours is None:
+            raise ValueError(
+                "DOCUMENT_ORPHAN_MINIMUM_AGE_HOURS is required when orphan cleanup is enabled"
+            )
+        if self.document_max_archive_compressed_bytes > self.max_upload_bytes:
+            raise ValueError("DOCUMENT_MAX_ARCHIVE_COMPRESSED_BYTES cannot exceed MAX_UPLOAD_BYTES")
+        if self.document_max_archive_entry_bytes > self.document_max_archive_uncompressed_bytes:
+            raise ValueError(
+                "DOCUMENT_MAX_ARCHIVE_ENTRY_BYTES cannot exceed "
+                "DOCUMENT_MAX_ARCHIVE_UNCOMPRESSED_BYTES"
+            )
+        if self.document_max_csv_columns > self.document_max_spreadsheet_columns:
+            raise ValueError(
+                "DOCUMENT_MAX_CSV_COLUMNS cannot exceed DOCUMENT_MAX_SPREADSHEET_COLUMNS"
+            )
+        if self.app_env == "development":
+            raise ValueError("Document ingestion may be enabled only in production or test")
+        if not self.sqlalchemy_database_url.startswith("postgresql+asyncpg://"):
+            raise ValueError("DATABASE_URL must use PostgreSQL when document ingestion is enabled")
+        if not self.direct_database_url:
+            raise ValueError("DIRECT_DATABASE_URL is required when document ingestion is enabled")
+        if not self.sqlalchemy_migration_url.startswith("postgresql+asyncpg://"):
+            raise ValueError(
+                "DIRECT_DATABASE_URL must use PostgreSQL when document ingestion is enabled"
+            )
+        if self.sqlalchemy_database_url == self.sqlalchemy_migration_url:
+            raise ValueError(
+                "Document ingestion requires separate runtime and migration database URLs"
+            )
+        if not self.database_runtime_role or not self.database_migration_role:
+            raise ValueError("Document ingestion database URLs must include database roles")
+        if self.database_runtime_role == self.database_migration_role:
+            raise ValueError(
+                "Document ingestion requires separate runtime and migration database roles"
+            )
+        if self.app_env == "production":
+            if not self._is_neon_database_url(self.sqlalchemy_database_url, pooled=True):
+                raise ValueError("DATABASE_URL must use a pooled Neon endpoint for ingestion")
+            if not self._is_neon_database_url(self.sqlalchemy_migration_url, pooled=False):
+                raise ValueError(
+                    "DIRECT_DATABASE_URL must use a direct Neon endpoint for ingestion"
+                )
+        if self.storage_backend != "s3":
+            raise ValueError("STORAGE_BACKEND=s3 is required for document ingestion")
+        if self.tasks_eager:
+            raise ValueError("TASKS_EAGER must be false for document ingestion")
+        if self.auto_create_tables:
+            raise ValueError("AUTO_CREATE_TABLES must be false for document ingestion")
+        if not self._is_release_redis_url(self.redis_url):
+            raise ValueError(
+                "REDIS_URL must be a non-local redis:// or rediss:// URL for document ingestion"
+            )
+        if self.embedding_provider != "fastembed":
+            raise ValueError("EMBEDDING_PROVIDER must be fastembed for document ingestion")
+        if self.embedding_model != "BAAI/bge-small-en-v1.5":
+            raise ValueError(
+                "EMBEDDING_MODEL must be BAAI/bge-small-en-v1.5 for document ingestion"
+            )
+        if self.embedding_dimensions != 384:
+            raise ValueError("EMBEDDING_DIMENSIONS must be 384 for document ingestion")
+        if not self.embedding_model_revision:
+            raise ValueError("EMBEDDING_MODEL_REVISION is required for document ingestion")
+        if not self.embedding_model_manifest_sha256:
+            raise ValueError("EMBEDDING_MODEL_MANIFEST_SHA256 is required for document ingestion")
+        if self.embedding_formatting_version != "bge-small-en-v1.5-format-v1":
+            raise ValueError(
+                "EMBEDDING_FORMATTING_VERSION must use the approved BGE formatting policy"
+            )
+        if not self.embedding_tokenizer_revision or not self.embedding_tokenizer_sha256:
+            raise ValueError("Pinned tokenizer revision and checksum are required")
+        if self.embedding_tokenizer_revision != self.embedding_model_revision:
+            raise ValueError("Tokenizer and embedding model revisions must match")
+        if self.embedding_max_concurrent_batches != 1:
+            raise ValueError(
+                "EMBEDDING_MAX_CONCURRENT_BATCHES must be 1 until release capacity is approved"
+            )
+        if self.document_chunk_overlap_tokens >= self.document_chunk_target_tokens:
+            raise ValueError(
+                "DOCUMENT_CHUNK_OVERLAP_TOKENS must be smaller than DOCUMENT_CHUNK_TARGET_TOKENS"
+            )
+        if self.document_chunk_target_tokens > self.document_chunk_max_tokens:
+            raise ValueError("DOCUMENT_CHUNK_TARGET_TOKENS cannot exceed DOCUMENT_CHUNK_MAX_TOKENS")
+        if self.document_chunk_max_tokens + self.document_chunk_formatting_headroom_tokens > 512:
+            raise ValueError(
+                "DOCUMENT_CHUNK_MAX_TOKENS plus DOCUMENT_CHUNK_FORMATTING_HEADROOM_TOKENS "
+                "must not exceed 512"
+            )
+        if not self._is_absolute_runtime_path(self.embedding_model_path):
+            raise ValueError("EMBEDDING_MODEL_PATH must be an absolute path")
+        if not self.ocr_enabled:
+            raise ValueError("OCR_ENABLED must be true for document ingestion")
+        if self.ocr_languages != "eng":
+            raise ValueError("OCR_LANGUAGES must be eng for the initial document release")
+        if self.ocr_max_temporary_bytes < self.ocr_max_output_bytes:
+            raise ValueError("OCR_MAX_TEMPORARY_BYTES cannot be smaller than OCR_MAX_OUTPUT_BYTES")
+        if not self.malware_scan_required:
+            raise ValueError("MALWARE_SCAN_REQUIRED must be true for document ingestion")
+        if not self._is_valid_service_host(self.clamav_host):
+            raise ValueError("CLAMAV_HOST is required and must be a host name or IP address")
+        if not self._is_absolute_runtime_path(self.document_processing_temp_root):
+            raise ValueError("DOCUMENT_PROCESSING_TEMP_ROOT must be an absolute path")
+        if self._is_filesystem_root(self.document_processing_temp_root):
+            raise ValueError("DOCUMENT_PROCESSING_TEMP_ROOT cannot be a filesystem root")
 
     def _validate_oidc_settings(self) -> None:
         required = {
@@ -433,6 +752,50 @@ class Settings(BaseSettings):
             return False
         return True
 
+    @staticmethod
+    def _is_neon_database_url(value: str, *, pooled: bool) -> bool:
+        hostname = (urlsplit(value).hostname or "").casefold()
+        if not hostname.endswith(".neon.tech"):
+            return False
+        return ("-pooler." in hostname) is pooled
+
+    @staticmethod
+    def _is_release_redis_url(value: str) -> bool:
+        parts = urlsplit(value)
+        if (
+            parts.scheme not in {"redis", "rediss"}
+            or not parts.hostname
+            or parts.fragment
+            or any(character.isspace() for character in parts.hostname)
+        ):
+            return False
+        hostname = parts.hostname.casefold()
+        if hostname in {"localhost", "localhost.localdomain"}:
+            return False
+        try:
+            return not ip_address(hostname).is_loopback
+        except ValueError:
+            return True
+
+    @staticmethod
+    def _is_absolute_runtime_path(value: str) -> bool:
+        return PurePosixPath(value).is_absolute() or PureWindowsPath(value).is_absolute()
+
+    @staticmethod
+    def _is_filesystem_root(value: str) -> bool:
+        for candidate in (PurePosixPath(value), PureWindowsPath(value)):
+            if candidate.is_absolute() and candidate.parent == candidate:
+                return True
+        return False
+
+    @staticmethod
+    def _is_valid_service_host(value: str | None) -> bool:
+        if not value or value != value.strip():
+            return False
+        if any(character.isspace() for character in value):
+            return False
+        return not any(marker in value for marker in ("://", "/", "@", "?", "#"))
+
     def _is_storage_endpoint(self, value: str) -> bool:
         parts = urlsplit(value)
         if (
@@ -457,8 +820,7 @@ class Settings(BaseSettings):
         if not 3 <= len(value) <= 63 or value.startswith("-") or value.endswith("-"):
             return False
         return all(
-            character.islower() or character.isdigit() or character in ".-"
-            for character in value
+            character.islower() or character.isdigit() or character in ".-" for character in value
         )
 
     @staticmethod
@@ -491,6 +853,21 @@ class Settings(BaseSettings):
     @property
     def sqlalchemy_migration_url(self) -> str:
         return self._as_async_sqlalchemy_url(self.direct_database_url or self.database_url)
+
+    @staticmethod
+    def _database_role(value: str | None) -> str | None:
+        if not value:
+            return None
+        username = urlsplit(value).username
+        return unquote(username) if username else None
+
+    @property
+    def database_runtime_role(self) -> str | None:
+        return self._database_role(self.database_url)
+
+    @property
+    def database_migration_role(self) -> str | None:
+        return self._database_role(self.direct_database_url or self.database_url)
 
 
 @lru_cache

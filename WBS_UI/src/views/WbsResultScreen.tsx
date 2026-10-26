@@ -17,10 +17,11 @@ import {
   FileSpreadsheet,
   FileCode,
   Share2,
+  ArrowLeft,
 } from 'lucide-react';
 import { downloadExport, getExport, startExport } from '../services/exportsApi';
 import { pollResource } from '../services/polling';
-import { getLatestWbs, updateWbs } from '../services/wbsApi';
+import { getLatestWbs, getWbsVersion, updateWbs } from '../services/wbsApi';
 import { presentWbs } from '../services/workflowPresentation';
 import type {
   ExportFormat,
@@ -40,7 +41,9 @@ interface WbsResultScreenProps {
   tenantId: string;
   project: ProjectResponse;
   template: TemplateResponse | null;
+  versionId?: string;
   initialTab?: WbsScreenTab;
+  onBack?: () => void;
   onNavigateToValidation?: () => void | Promise<void>;
   onProceedToValidation?: () => void | Promise<void>;
   onRegenerate?: () => void | Promise<void>;
@@ -241,7 +244,9 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
   tenantId,
   project,
   template,
+  versionId,
   initialTab = 'structure',
+  onBack,
   onNavigateToValidation,
   onProceedToValidation,
   onRegenerate,
@@ -298,7 +303,9 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       setIsLoading(true);
       setLoadError(null);
       try {
-        const version = await getLatestWbs(tenantId, project.id);
+        const version = versionId
+          ? await getWbsVersion(tenantId, versionId)
+          : await getLatestWbs(tenantId, project.id);
         const res = presentWbs(version, project, template);
         if (!isMounted) return;
 
@@ -340,7 +347,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [project, reloadNonce, template, tenantId]);
+  }, [project, reloadNonce, template, tenantId, versionId]);
 
   useEffect(() => () => exportControllerRef.current?.abort(), []);
 
@@ -699,6 +706,12 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
   return (
     <div className="wbs-result-container">
+      {onBack && (
+        <button type="button" className="project-back-button" onClick={onBack}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to Project
+        </button>
+      )}
       {actionError && (
         <div className="wbs-action-error-banner">
           <span>{actionError}</span>

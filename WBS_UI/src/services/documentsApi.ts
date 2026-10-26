@@ -1,5 +1,9 @@
 import { apiRequest } from './apiClient';
-import type { DocumentResponse } from './workflowTypes';
+import type {
+  DocumentDeletionStatusResponse,
+  DocumentResponse,
+  JobResponse,
+} from './workflowTypes';
 
 export function uploadProjectDocument(
   tenantId: string,
@@ -15,4 +19,39 @@ export function uploadProjectDocument(
     body,
     signal,
   });
+}
+
+export function listProjectDocuments(
+  tenantId: string,
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<DocumentResponse[]> {
+  return apiRequest(`/tenants/${tenantId}/projects/${projectId}/documents`, { signal });
+}
+
+export function getDocument(
+  tenantId: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DocumentResponse> {
+  return apiRequest(`/tenants/${tenantId}/documents/${documentId}`, { signal });
+}
+
+export function deleteDocument(
+  tenantId: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<JobResponse> {
+  return apiRequest(`/tenants/${tenantId}/documents/${documentId}`, {
+    method: 'DELETE',
+    signal,
+  });
+}
+
+export function getDocumentDeletion(
+  tenantId: string,
+  documentId: string,
+  signal?: AbortSignal,
+): Promise<DocumentDeletionStatusResponse> {
+  return apiRequest(`/tenants/${tenantId}/documents/${documentId}/deletion`, { signal });
 }

@@ -26,9 +26,8 @@ router = APIRouter(
     responses=TENANT_AUTH_RESPONSES,
 )
 logger = logging.getLogger(__name__)
-TEMPLATE_EXTENSIONS = {".xls", ".xlsx", ".csv", ".xml"}
+TEMPLATE_EXTENSIONS = {".xlsx", ".csv", ".xml"}
 TEMPLATE_CONTENT_TYPES = {
-    ".xls": {"application/vnd.ms-excel"},
     ".xlsx": {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"},
     ".csv": {"text/csv", "application/csv", "application/vnd.ms-excel"},
     ".xml": {"application/xml", "text/xml"},

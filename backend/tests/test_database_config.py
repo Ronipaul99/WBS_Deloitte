@@ -11,6 +11,7 @@ def production_values(**overrides):
         "auth_jwt_secret": "a" * 48,
         "auth_audit_secret": "b" * 48,
         "auto_create_tables": False,
+        "tasks_eager": False,
         "auth_cookie_secure": True,
         "dev_user_password": "",
         "password_recovery_enabled": False,
@@ -31,6 +32,33 @@ def production_values(**overrides):
         "aws_secret_access_key": "test-secret-key",
         "aws_region": "us-east-2",
     }
+    values.update(overrides)
+    return values
+
+
+def ingestion_values(**overrides):
+    values = production_values(
+        document_ingestion_enabled=True,
+        database_url=(
+            "postgresql://runtime:database-secret@"
+            "ep-wbs-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"
+        ),
+        direct_database_url=(
+            "postgresql://migration:database-secret@"
+            "ep-wbs.us-east-2.aws.neon.tech/neondb?sslmode=require"
+        ),
+        redis_url="rediss://worker:redis-secret@redis.internal.example.com:6380/0",
+        embedding_model_path="/opt/wbs-models/bge-small-en-v1.5",
+        embedding_model_revision="aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+        embedding_model_manifest_sha256=(
+            "609e3f5b2f42b5c302c9fd86344b7c9f1cb498fa2f29826b1265da284dc18ca0"
+        ),
+        embedding_tokenizer_revision="aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+        embedding_tokenizer_sha256=(
+            "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+        ),
+        clamav_host="clamav.internal.example.com",
+    )
     values.update(overrides)
     return values
 
@@ -267,6 +295,297 @@ def test_valid_production_baseline_is_accepted() -> None:
     assert settings.readiness_require_migration_head is True
 
 
+def test_valid_release_ingestion_configuration_is_accepted() -> None:
+    settings = Settings(_env_file=None, **ingestion_values())
+
+    assert settings.document_ingestion_enabled is True
+    assert settings.database_runtime_role == "runtime"
+    assert settings.database_migration_role == "migration"
+    assert settings.embedding_provider == "fastembed"
+    assert settings.embedding_model == "BAAI/bge-small-en-v1.5"
+    assert settings.embedding_dimensions == 384
+    assert settings.embedding_model_revision == "aa8f8b060edb00e03bfdd08813a2949946c8ba55"
+    assert settings.embedding_max_concurrent_batches == 1
+
+
+def test_ingestion_requires_separate_runtime_and_migration_roles() -> None:
+    with pytest.raises(ValidationError, match="separate runtime and migration database roles"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                direct_database_url=(
+                    "postgresql://runtime:another-secret@"
+                    "ep-wbs.us-east-2.aws.neon.tech/neondb?sslmode=require"
+                )
+            ),
+        )
+
+
+def test_ingestion_cannot_be_enabled_as_a_development_feature() -> None:
+    with pytest.raises(ValidationError, match="only in production or test"):
+        Settings(_env_file=None, **ingestion_values(app_env="development"))
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {
+            "embedding_batch_size": 1,
+            "document_processing_timeout_seconds": 60,
+            "document_max_pdf_pages": 1,
+            "document_max_worksheets": 1,
+            "document_max_rows_per_sheet": 1,
+            "document_max_extracted_characters": 1_000,
+            "document_chunk_target_tokens": 64,
+            "document_chunk_overlap_tokens": 0,
+        },
+        {
+            "embedding_batch_size": 256,
+            "document_processing_timeout_seconds": 3_600,
+            "document_max_pdf_pages": 2_000,
+            "document_max_worksheets": 500,
+            "document_max_rows_per_sheet": 1_000_000,
+            "document_max_extracted_characters": 50_000_000,
+            "document_chunk_target_tokens": 500,
+            "document_chunk_overlap_tokens": 12,
+            "document_chunk_max_tokens": 500,
+            "document_chunk_formatting_headroom_tokens": 12,
+        },
+        {
+            "document_chunk_target_tokens": 384,
+            "document_chunk_overlap_tokens": 128,
+        },
+    ],
+)
+def test_ingestion_reviewed_bounds_are_accepted(overrides) -> None:
+    settings = Settings(_env_file=None, **ingestion_values(**overrides))
+
+    assert settings.document_ingestion_enabled is True
+
+
+def test_production_rejects_eager_tasks() -> None:
+    with pytest.raises(ValidationError, match="TASKS_EAGER must be false in production"):
+        Settings(_env_file=None, **ingestion_values(tasks_eager=True))
+
+
+def test_ingestion_rejects_local_storage() -> None:
+    with pytest.raises(ValidationError, match="STORAGE_BACKEND=s3"):
+        Settings(_env_file=None, **ingestion_values(storage_backend="local"))
+
+
+def test_ingestion_rejects_sqlite() -> None:
+    with pytest.raises(ValidationError, match="DATABASE_URL must use PostgreSQL"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(database_url="sqlite+aiosqlite:///./wbs.db"),
+        )
+
+
+def test_ingestion_requires_direct_database_url() -> None:
+    with pytest.raises(ValidationError, match="DIRECT_DATABASE_URL is required"):
+        Settings(_env_file=None, **ingestion_values(direct_database_url=None))
+
+
+@pytest.mark.parametrize(
+    "redis_url",
+    ["", "https://redis.internal.example.com", "redis://localhost:6379/0", "redis://bad host"],
+)
+def test_ingestion_rejects_missing_or_invalid_redis_url(redis_url: str) -> None:
+    with pytest.raises(ValidationError, match="REDIS_URL must be a non-local"):
+        Settings(_env_file=None, **ingestion_values(redis_url=redis_url))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"embedding_provider": "openai"}, "EMBEDDING_PROVIDER must be fastembed"),
+        ({"embedding_model": "different/model"}, "EMBEDDING_MODEL must be"),
+        ({"embedding_dimensions": 768}, "EMBEDDING_DIMENSIONS must be 384"),
+    ],
+)
+def test_ingestion_rejects_unapproved_embedding_configuration(overrides, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **ingestion_values(**overrides))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"embedding_model_revision": None}, "EMBEDDING_MODEL_REVISION is required"),
+        (
+            {"embedding_model_manifest_sha256": None},
+            "EMBEDDING_MODEL_MANIFEST_SHA256 is required",
+        ),
+        (
+            {"embedding_tokenizer_revision": "b" * 40},
+            "Tokenizer and embedding model revisions must match",
+        ),
+        (
+            {"embedding_formatting_version": "unapproved-v2"},
+            "EMBEDDING_FORMATTING_VERSION must use the approved",
+        ),
+        (
+            {"embedding_max_concurrent_batches": 2},
+            "EMBEDDING_MAX_CONCURRENT_BATCHES must be 1",
+        ),
+    ],
+)
+def test_ingestion_rejects_unpinned_or_unapproved_embedding_runtime(
+    overrides, message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **ingestion_values(**overrides))
+
+
+def test_ingestion_rejects_chunk_window_over_model_limit() -> None:
+    with pytest.raises(ValidationError, match="must not exceed 512"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                document_chunk_max_tokens=500,
+                document_chunk_formatting_headroom_tokens=13,
+            ),
+        )
+
+
+def test_ingestion_rejects_invalid_chunk_relationships() -> None:
+    with pytest.raises(ValidationError, match="OVERLAP_TOKENS must be smaller"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                document_chunk_target_tokens=64,
+                document_chunk_overlap_tokens=64,
+            ),
+        )
+    with pytest.raises(ValidationError, match="TARGET_TOKENS cannot exceed"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                document_chunk_target_tokens=400,
+                document_chunk_max_tokens=399,
+            ),
+        )
+
+
+@pytest.mark.parametrize("clamav_host", [None, "", "https://clamav.internal.example.com"])
+def test_ingestion_requires_valid_clamav_host(clamav_host: str | None) -> None:
+    with pytest.raises(ValidationError, match="CLAMAV_HOST is required"):
+        Settings(_env_file=None, **ingestion_values(clamav_host=clamav_host))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"ocr_enabled": False}, "OCR_ENABLED must be true"),
+        ({"malware_scan_required": False}, "MALWARE_SCAN_REQUIRED must be true"),
+    ],
+)
+def test_ingestion_requires_declared_security_controls(overrides, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **ingestion_values(**overrides))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"ocr_languages": "eng+deu"}, "OCR_LANGUAGES must be eng"),
+        (
+            {"ocr_max_output_bytes": 8192, "ocr_max_temporary_bytes": 4096},
+            "OCR_MAX_TEMPORARY_BYTES cannot be smaller",
+        ),
+    ],
+)
+def test_ingestion_rejects_unsafe_pdf_ocr_configuration(overrides, message: str) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **ingestion_values(**overrides))
+
+
+def test_pdf_ocr_settings_are_typed_and_bounded() -> None:
+    settings = Settings(
+        _env_file=None,
+        ocrmypdf_expected_version="16.10.4",
+        tesseract_expected_version="5.3.0",
+    )
+    assert settings.pdf_native_text_min_characters == 32
+    assert settings.ocr_languages == "eng"
+    assert settings.ocrmypdf_expected_version == "16.10.4"
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, pdf_margin_band_ratio=0.5)
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, ocrmypdf_expected_version="unsafe version")
+
+
+def test_ingestion_requires_absolute_model_path() -> None:
+    with pytest.raises(ValidationError, match="EMBEDDING_MODEL_PATH must be an absolute path"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(embedding_model_path="models/bge-small-en-v1.5"),
+        )
+
+
+@pytest.mark.parametrize(
+    ("database_url", "direct_database_url", "message"),
+    [
+        (
+            "postgresql://runtime:secret@ep-wbs.us-east-2.aws.neon.tech/neondb?sslmode=require",
+            "postgresql://migration:secret@ep-wbs-direct.us-east-2.aws.neon.tech/neondb?sslmode=require",
+            "DATABASE_URL must use a pooled Neon endpoint",
+        ),
+        (
+            "postgresql://runtime:secret@ep-wbs-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+            "postgresql://migration:secret@ep-wbs-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require",
+            "DIRECT_DATABASE_URL must use a direct Neon endpoint",
+        ),
+    ],
+)
+def test_ingestion_requires_pooled_runtime_and_direct_neon_urls(
+    database_url: str,
+    direct_database_url: str,
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                database_url=database_url,
+                direct_database_url=direct_database_url,
+            ),
+        )
+
+
+def test_ingestion_validation_errors_hide_input_secrets() -> None:
+    exposed_secret = "do-not-disclose-this-release-secret"
+
+    with pytest.raises(ValidationError) as error:
+        Settings(
+            _env_file=None,
+            **ingestion_values(
+                embedding_provider="unapproved",
+                redis_url=f"rediss://worker:{exposed_secret}@redis.internal.example.com:6380/0",
+            ),
+        )
+
+    assert exposed_secret not in str(error.value)
+
+
+def test_disabled_ingestion_preserves_local_development_defaults() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.document_ingestion_enabled is False
+    assert settings.storage_backend == "local"
+    assert settings.tasks_eager is True
+
+
+@pytest.mark.parametrize("temp_root", ["relative/processing", "/", "C:\\\\"])
+def test_ingestion_rejects_unsafe_processing_temp_root(temp_root: str) -> None:
+    with pytest.raises(ValidationError, match="DOCUMENT_PROCESSING_TEMP_ROOT"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(document_processing_temp_root=temp_root),
+        )
+
+
 def test_production_rejects_database_without_tls() -> None:
     with pytest.raises(ValidationError, match="DATABASE_URL must require TLS"):
         Settings(
@@ -319,4 +638,35 @@ def test_password_recovery_public_origin_must_be_cors_allowed() -> None:
             cors_origins="https://different.example.com",
             email_provider="test",
             email_from="no-reply@example.com",
+        )
+
+
+def test_document_retention_requires_an_explicit_complete_policy() -> None:
+    with pytest.raises(ValidationError, match="retention requires explicit approved values"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(document_retention_enabled=True),
+        )
+
+    settings = Settings(
+        _env_file=None,
+        **ingestion_values(
+            document_retention_enabled=True,
+            document_retention_failed_run_days=30,
+            document_retention_cancelled_run_days=30,
+            document_retention_superseded_run_days=90,
+            document_retention_job_days=90,
+            document_retention_malware_event_days=365,
+            document_retention_tombstone_days=365,
+            document_retention_stale_workspace_hours=24,
+        ),
+    )
+    assert settings.document_retention_enabled is True
+
+
+def test_destructive_orphan_cleanup_requires_age_threshold() -> None:
+    with pytest.raises(ValidationError, match="MINIMUM_AGE_HOURS is required"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(document_orphan_cleanup_enabled=True),
         )

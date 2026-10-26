@@ -26,6 +26,8 @@ os.environ.update(
         "DIRECT_DATABASE_URL": "",
         "DATABASE_USE_NULL_POOL": "false",
         "UPLOAD_ROOT": str(TEST_UPLOAD_ROOT),
+        "STORAGE_BACKEND": "local",
+        "DOCUMENT_INGESTION_ENABLED": "false",
         "TASKS_EAGER": "true",
         "AUTO_CREATE_TABLES": "true",
     }

@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 from getpass import getpass
+from uuid import UUID
 
 from sqlalchemy import func, select, update
 
@@ -15,9 +16,19 @@ from app.services.auth import (
     normalize_email,
     revoke_all_user_sessions,
 )
+from app.services.document_maintenance import (
+    MaintenanceSafetyError as DocumentMaintenanceSafetyError,
+)
+from app.services.document_maintenance import (
+    reconcile_document_lifecycle,
+    recover_document_deletion_dispatches,
+    run_document_retention,
+)
+from app.services.ingestion.reconciliation import reconcile_ingestion_dispatches
 from app.services.maintenance import run_maintenance
 from app.services.members import cleanup_tenant_invitations
 from app.services.provisioning import AdminProvisioningError, provision_local_administrator
+from app.services.readiness import IngestionReadinessError, worker_ingestion_is_ready
 
 
 async def create_admin(args: argparse.Namespace) -> None:
@@ -83,10 +94,91 @@ def check_production_config() -> None:
                 "migration_readiness": settings.readiness_require_migration_head,
                 "metrics_enabled": settings.metrics_enabled,
                 "trusted_proxy_count": len(settings.forwarded_allow_ip_list),
+                "document_ingestion_enabled": settings.document_ingestion_enabled,
             },
             sort_keys=True,
         )
     )
+
+
+async def check_ingestion_worker_readiness() -> None:
+    settings = get_settings()
+    if not settings.document_ingestion_enabled:
+        raise SystemExit("Document ingestion is disabled.")
+    try:
+        await worker_ingestion_is_ready(settings)
+    except IngestionReadinessError as exc:
+        raise SystemExit(f"Worker ingestion readiness failed: {exc.category}.") from None
+    print(
+        json.dumps(
+            {
+                "status": "ready",
+                "checks": [
+                    "redis",
+                    "malware_scanner",
+                    "embedding_model",
+                    "tokenizer_runtime",
+                    "embedding_runtime",
+                    "ocr_runtime",
+                    "extractor_registry",
+                ],
+            },
+            sort_keys=True,
+        )
+    )
+
+
+async def reconcile_document_ingestion() -> None:
+    settings = get_settings()
+    result = await reconcile_ingestion_dispatches(settings=settings)
+    print(
+        json.dumps(
+            {
+                "status": "ok",
+                "repaired": result.repaired_count,
+                "republished": result.republished_count,
+                "failed": result.failed_count,
+            },
+            sort_keys=True,
+        )
+    )
+
+
+async def reconcile_document_lifecycle_command(args: argparse.Namespace) -> None:
+    apply_changes = bool(args.repair)
+    if apply_changes:
+        require_confirmation(args.confirm, "APPLY_DOCUMENT_REPAIRS")
+    try:
+        result = await reconcile_document_lifecycle(
+            tenant_id=UUID(args.tenant_id) if args.tenant_id else None,
+            apply_changes=apply_changes,
+            approved=apply_changes,
+        )
+    except (ValueError, DocumentMaintenanceSafetyError) as exc:
+        raise SystemExit(str(exc)) from None
+    print(json.dumps(result.as_dict(), sort_keys=True))
+
+
+async def run_document_retention_command(args: argparse.Namespace) -> None:
+    apply_changes = bool(args.execute)
+    if apply_changes:
+        require_confirmation(args.confirm, "APPLY_DOCUMENT_RETENTION")
+    try:
+        result = await run_document_retention(
+            tenant_id=UUID(args.tenant_id) if args.tenant_id else None,
+            apply_changes=apply_changes,
+            approved=apply_changes,
+        )
+    except (ValueError, DocumentMaintenanceSafetyError) as exc:
+        raise SystemExit(str(exc)) from None
+    print(json.dumps(result.as_dict(), sort_keys=True))
+
+
+async def recover_document_deletions_command(args: argparse.Namespace) -> None:
+    result = await recover_document_deletion_dispatches(
+        tenant_id=UUID(args.tenant_id) if args.tenant_id else None,
+    )
+    print(json.dumps(result.as_dict(), sort_keys=True))
 
 
 def require_confirmation(actual: str | None, expected: str) -> None:
@@ -172,6 +264,33 @@ def main() -> None:
         "check-production-config",
         help="Validate production settings and print a secret-free readiness summary",
     )
+    subparsers.add_parser(
+        "check-ingestion-worker-readiness",
+        help="Verify release worker dependencies without loading an embedding model",
+    )
+    subparsers.add_parser(
+        "reconcile-document-ingestion",
+        help="Repair and republish bounded document-ingestion work",
+    )
+    lifecycle = subparsers.add_parser(
+        "reconcile-document-lifecycle",
+        help="Report document lifecycle inconsistencies or apply approved bounded repairs",
+    )
+    lifecycle.add_argument("--tenant-id")
+    lifecycle.add_argument("--repair", action="store_true")
+    lifecycle.add_argument("--confirm")
+    retention = subparsers.add_parser(
+        "run-document-retention",
+        help="Report approved retention candidates or execute approved bounded retention",
+    )
+    retention.add_argument("--tenant-id")
+    retention.add_argument("--execute", action="store_true")
+    retention.add_argument("--confirm")
+    recovery = subparsers.add_parser(
+        "recover-document-deletions",
+        help="Republish bounded pending or stale document cleanup dispatches",
+    )
+    recovery.add_argument("--tenant-id")
     revoke_user = subparsers.add_parser(
         "revoke-user-sessions",
         help="Invalidate every access and refresh session for one user",
@@ -196,6 +315,16 @@ def main() -> None:
             asyncio.run(execute_maintenance())
         elif args.command == "check-production-config":
             check_production_config()
+        elif args.command == "check-ingestion-worker-readiness":
+            asyncio.run(check_ingestion_worker_readiness())
+        elif args.command == "reconcile-document-ingestion":
+            asyncio.run(reconcile_document_ingestion())
+        elif args.command == "reconcile-document-lifecycle":
+            asyncio.run(reconcile_document_lifecycle_command(args))
+        elif args.command == "run-document-retention":
+            asyncio.run(run_document_retention_command(args))
+        elif args.command == "recover-document-deletions":
+            asyncio.run(recover_document_deletions_command(args))
         elif args.command == "revoke-user-sessions":
             asyncio.run(revoke_user_sessions(args))
         elif args.command == "revoke-all-sessions":

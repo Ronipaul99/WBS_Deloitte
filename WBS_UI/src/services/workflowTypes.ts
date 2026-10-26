@@ -18,7 +18,26 @@ export interface DocumentResponse {
   file_name: string;
   content_type: string;
   size_bytes: number;
+  lifecycle_status: 'ACTIVE' | 'DELETING' | 'DELETED';
+  deletion_requested_at: string | null;
+  deletion_completed_at: string | null;
   created_at: string;
+}
+
+export interface DocumentDeletionStatusResponse {
+  document_id: string;
+  job_id: string;
+  status: ProcessingStatus;
+  stage: 'QUEUED' | 'DELETING_OBJECTS' | 'RETRY_WAIT' | 'COMPLETED' | 'FAILED';
+  progress: number;
+  attempt_count: number;
+  lifecycle_status: 'DELETING' | 'DELETED';
+  deletion_requested_at: string;
+  vectors_hidden_at: string;
+  deletion_completed_at: string | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TemplateResponse {
@@ -40,8 +59,50 @@ export interface JobResponse {
   status: ProcessingStatus;
   progress: number;
   current_step: string | null;
+  error_code: string | null;
   error_message: string | null;
+  attempt_count: number;
   result_payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export type IngestionStage =
+  | 'QUEUED'
+  | 'SCANNING'
+  | 'EXTRACTING'
+  | 'CHUNKING'
+  | 'EMBEDDING'
+  | 'PERSISTING'
+  | 'ACTIVATING'
+  | 'RETRY_WAIT'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export interface IngestionStatusResponse {
+  job_id: string;
+  processing_run_id: string;
+  document_id: string;
+  status: string;
+  stage: string;
+  progress: number;
+  attempt_count: number;
+  maximum_attempts: number;
+  page_count: number;
+  worksheet_count: number;
+  block_count: number;
+  chunk_count: number;
+  extractor_name: string | null;
+  extractor_version: string | null;
+  embedding_provider: string | null;
+  embedding_model: string | null;
+  embedding_model_revision: string | null;
+  warning_codes: string[];
+  error_code: string | null;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  failed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -109,7 +170,9 @@ export interface WorkflowSession {
   project: ProjectResponse;
   document: DocumentResponse;
   template: TemplateResponse | null;
-  summaryJobId: string;
+  ingestionJobId: string;
+  processingRunId: string;
+  initialIngestionStatus: IngestionStatusResponse;
   summaryId: string | null;
   generationJobId: string | null;
   wbsVersionId: string | null;
@@ -147,12 +210,17 @@ export interface DocumentFileInfo {
 
 export interface ProcessingDocStatusResponse {
   jobId: string;
+  processingRunId: string;
+  stage: string;
+  progress: number;
   title: string;
   subtitle: string;
+  sideCard: { title: string; description: string };
   projectDoc: DocumentFileInfo;
   templateDoc?: DocumentFileInfo;
   steps: AnalysisStep[];
   overallStatus: 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  errorCode?: string | null;
   errorMessage?: string | null;
 }
 

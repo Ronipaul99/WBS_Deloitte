@@ -110,9 +110,51 @@
   background: #f8fafc;
 }
 
+.project-danger-button,
+.project-icon-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.project-danger-button {
+  padding: 0 10px;
+  border: 1px solid #b42318;
+  background: #b42318;
+  color: #fff;
+}
+
+.project-danger-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.project-icon-button {
+  width: 34px;
+  padding: 0;
+  border: 1px solid #d0d5dd;
+  background: #fff;
+  color: #667085;
+}
+
+.project-icon-button:hover:not(:disabled) {
+  border-color: #f0aaa4;
+  background: #fff6f5;
+  color: #b42318;
+}
+
 .project-back-button:focus-visible,
 .project-primary-button:focus-visible,
 .project-secondary-button:focus-visible,
+.project-danger-button:focus-visible,
+.project-icon-button:focus-visible,
 .project-list-row:focus-visible,
 .project-field input:focus-visible,
 .project-field textarea:focus-visible {
@@ -417,7 +459,7 @@
 
 .project-workspace-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   border-bottom: 1px solid #dfe5ec;
 }
 
@@ -457,6 +499,120 @@
 
 .project-wbs-history {
   margin-top: 26px;
+}
+
+.project-document-history {
+  margin-top: 26px;
+}
+
+.project-document-heading {
+  margin-bottom: 13px;
+}
+
+.project-document-heading h2 {
+  margin: 0;
+  color: #172033;
+  font-size: 15px;
+  line-height: 1.35;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.project-document-heading > div > p:last-child {
+  margin: 4px 0 0;
+  color: #7b8495;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.project-document-list,
+.project-document-state {
+  overflow: hidden;
+  border: 1px solid #dfe5ec;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(22, 34, 51, 0.045);
+}
+
+.project-document-row {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(110px, auto) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.project-document-row:last-child {
+  border-bottom: 0;
+}
+
+.project-document-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: #edf3ff;
+  color: #2859ad;
+}
+
+.project-document-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.project-document-copy strong {
+  overflow: hidden;
+  color: #172033;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-document-copy small {
+  color: #7b8495;
+  font-size: 9.5px;
+}
+
+.project-document-status {
+  justify-self: end;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: #edf6f2;
+  color: #26735b;
+  font-size: 8.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.project-document-status.is-failed {
+  background: #fef2f2;
+  color: #b42318;
+}
+
+.project-document-actions {
+  min-width: 34px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.project-document-state {
+  min-height: 92px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 20px;
+  color: #667085;
+  font-size: 11px;
+  text-align: center;
 }
 
 .project-wbs-heading {
@@ -513,10 +669,30 @@
 }
 
 .project-wbs-row {
+  width: 100%;
   min-height: 68px;
   border-bottom: 1px solid #edf0f4;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: #fff;
   color: #344054;
   font-size: 10.5px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.project-wbs-row:hover {
+  background: #f7faff;
+}
+
+.project-wbs-row:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #2859ad;
+  outline-offset: -2px;
 }
 
 .project-wbs-row:last-child {
@@ -684,6 +860,21 @@
 
   .project-workspace-summary {
     grid-template-columns: 1fr;
+  }
+
+  .project-document-row {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .project-document-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .project-document-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
 
   .project-workspace-summary > div,

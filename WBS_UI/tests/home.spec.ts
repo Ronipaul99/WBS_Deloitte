@@ -24,6 +24,39 @@ const projects = [
 
 test('home is the first authenticated tab and shows live workspace projects', async ({ page }) => {
   await mockAuthenticatedUser(page);
+  await page.route('**/api/v1/tenants/*/wbs/70000000-0000-0000-0000-000000000002', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: '70000000-0000-0000-0000-000000000002',
+      tenant_id: projects[0].tenant_id,
+      project_id: projects[0].id,
+      generation_job_id: null,
+      version_number: 2,
+      status: 'DRAFT',
+      tree: [{
+        id: 'phase-1',
+        code: '1.0',
+        name: 'Delivery',
+        type: 'Phase',
+        parent: 'Root',
+        source: 'Project scope',
+        template: '',
+        confidence: 92,
+        description: 'Project delivery phase',
+        children: [],
+      }],
+      scope_coverage: {
+        overallScore: 92,
+        totalRequirements: 1,
+        mappedCount: 1,
+        gapCount: 0,
+        categories: [],
+      },
+      created_at: '2026-10-23T09:00:00Z',
+      updated_at: '2026-10-23T09:00:00Z',
+    }),
+  }));
   await page.route('**/api/v1/tenants/*/projects/*/wbs/versions', (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -95,6 +128,11 @@ test('home is the first authenticated tab and shows live workspace projects', as
   await expect(page.getByText('WBS version 2')).toBeVisible();
   await expect(page.getByText('WBS version 1')).toBeVisible();
   await expect(page.getByText('92%')).toBeVisible();
+  await page.getByRole('button', { name: 'Open WBS version 2' }).click();
+  await expect(page.getByRole('heading', { name: 'AI WBS Builder' })).toBeVisible();
+  await expect(page.getByText('Draft v2.0')).toBeVisible();
+  await page.getByRole('button', { name: 'Back to Project' }).click();
+  await expect(page.getByText('WBS version 2')).toBeVisible();
   await page.getByRole('button', { name: 'Create new WBS', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'New Office Campus', exact: true })).toBeVisible();

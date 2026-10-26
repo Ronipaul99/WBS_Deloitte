@@ -1,8 +1,10 @@
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.routes import health
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.main import app
+from app.services.storage import get_upload_storage
 
 
 def test_health_endpoints(client):
@@ -60,6 +62,60 @@ def test_readiness_hides_database_failure_details(client, caplog):
     assert "credential-bearing" not in ready.text
     assert "credential-bearing" not in caplog.text
     assert "database unavailable" in caplog.text
+
+
+def test_ingestion_readiness_hides_internal_dependency_details(client, caplog, monkeypatch):
+    private_endpoint = "private-redis.internal.example.test"
+    release_secret = "redis-release-secret"
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        document_ingestion_enabled=True,
+        database_url="postgresql://runtime:secret@db.example.test/wbs",
+        direct_database_url="postgresql://migration:secret@db.example.test/wbs",
+        storage_backend="s3",
+        object_storage_bucket="assets",
+        aws_endpoint_url_s3="https://storage.example.test",
+        aws_access_key_id="test-access-key",
+        aws_secret_access_key="test-secret-key",
+        redis_url=f"rediss://worker:{release_secret}@{private_endpoint}:6380/0",
+        tasks_eager=False,
+        auto_create_tables=False,
+        embedding_model_path="/opt/wbs-models/bge-small-en-v1.5",
+        embedding_model_revision="aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+        embedding_model_manifest_sha256=(
+            "609e3f5b2f42b5c302c9fd86344b7c9f1cb498fa2f29826b1265da284dc18ca0"
+        ),
+        embedding_tokenizer_revision="aa8f8b060edb00e03bfdd08813a2949946c8ba55",
+        embedding_tokenizer_sha256=(
+            "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+        ),
+        clamav_host="clamav.internal.example.test",
+    )
+
+    async def fail_safely(_settings):
+        raise health.IngestionReadinessError("redis")
+
+    class ReadyStorage:
+        async def check(self):
+            return None
+
+    app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_upload_storage] = ReadyStorage
+    monkeypatch.setattr(health, "api_ingestion_is_ready", fail_safely)
+    try:
+        response = client.get("/api/v1/health/ready")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+        app.dependency_overrides.pop(get_upload_storage, None)
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "Service is not ready."}
+    assert "redis unavailable" in caplog.text
+    assert private_endpoint not in response.text
+    assert private_endpoint not in caplog.text
+    assert release_secret not in response.text
+    assert release_secret not in caplog.text
 
 
 def test_development_identity(client, tenant_id):

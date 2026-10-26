@@ -35,6 +35,38 @@
   line-height: 1.5;
 }
 
+.wbs-proc-stage-label {
+  margin-top: 5px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.wbs-proc-progress-value {
+  min-width: 48px;
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.wbs-proc-overall-progress {
+  width: 100%;
+  height: 7px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: #e2e8f0;
+}
+
+.wbs-proc-overall-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 200ms ease;
+}
+
 /* Uploaded Document Cards Banner */
 .wbs-proc-files-banner {
   display: grid;
@@ -277,12 +309,29 @@
   margin: 0;
 }
 
+.wbs-proc-background-note {
+  max-width: 300px;
+  margin: 18px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid #dbe3ee;
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
 /* Footer & Actions */
 .wbs-proc-footer {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 24px;
+}
+
+.wbs-proc-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }
 
 .wbs-proc-back-btn,
@@ -324,5 +373,37 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 560px) {
+  .wbs-proc-container {
+    padding: 18px 14px;
+  }
+
+  .wbs-proc-file-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .wbs-proc-file-name {
+    max-width: calc(100vw - 110px);
+  }
+
+  .wbs-proc-steps-card,
+  .wbs-proc-side-card {
+    padding: 20px 18px;
+  }
+
+  .wbs-proc-footer > button,
+  .wbs-proc-error-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wbs-proc-overall-progress-fill {
+    transition: none;
   }
 }

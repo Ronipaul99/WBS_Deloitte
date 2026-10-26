@@ -15,3 +15,11 @@ export function uploadTemplate(
     signal,
   });
 }
+
+export function getTemplate(
+  tenantId: string,
+  templateId: string,
+  signal?: AbortSignal,
+): Promise<TemplateResponse> {
+  return apiRequest(`/tenants/${tenantId}/templates/${templateId}`, { signal });
+}

@@ -16,6 +16,7 @@ class Permission(StrEnum):
     PROJECT_ARCHIVE = "project:archive"
     DOCUMENT_READ = "document:read"
     DOCUMENT_UPLOAD = "document:upload"
+    DOCUMENT_PROCESS = "document:process"
     SUMMARY_READ = "summary:read"
     SUMMARY_UPDATE = "summary:update"
     SUMMARY_APPROVE = "summary:approve"
@@ -55,6 +56,7 @@ EDITOR_PERMISSIONS: Final = VIEWER_PERMISSIONS | frozenset(
         Permission.PROJECT_CREATE,
         Permission.PROJECT_UPDATE,
         Permission.DOCUMENT_UPLOAD,
+        Permission.DOCUMENT_PROCESS,
         Permission.SUMMARY_UPDATE,
         Permission.SUMMARY_APPROVE,
         Permission.TEMPLATE_MANAGE,

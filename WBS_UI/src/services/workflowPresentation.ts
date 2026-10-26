@@ -2,6 +2,7 @@ import type {
   AnalysisStep,
   DocumentFileInfo,
   DocumentResponse,
+  IngestionStatusResponse,
   JobResponse,
   JobStatusResponse,
   ProcessingDocStatusResponse,
@@ -39,6 +40,55 @@ export function formatBytes(bytes: number): string {
   const units = ['Bytes', 'KB', 'MB', 'GB'];
   const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${Number((bytes / 1024 ** unit).toFixed(1))} ${units[unit]}`;
+}
+
+const INGESTION_ERROR_MESSAGES: Record<string, string> = {
+  DOCUMENT_OBJECT_MISSING: 'The uploaded document is no longer available. Upload it again to continue.',
+  OBJECT_STORAGE_UNAVAILABLE: 'Document storage is temporarily unavailable. Processing will resume automatically when possible.',
+  DOCUMENT_INTEGRITY_FAILED: 'The uploaded document failed its integrity check and cannot be processed.',
+  MALWARE_SCANNER_UNAVAILABLE: 'The document security scanner is temporarily unavailable.',
+  DOCUMENT_REJECTED_MALWARE: 'The document was rejected by the security scan.',
+  UNSUPPORTED_DOCUMENT_FORMAT: 'This document format is not supported.',
+  DOCUMENT_ENCRYPTED: 'Password-protected documents cannot be processed.',
+  DOCUMENT_MALFORMED: 'The document structure could not be read safely.',
+  DOCUMENT_EXTRACTION_LIMIT_EXCEEDED: 'The document exceeds the configured processing limits.',
+  DOCUMENT_NO_EXTRACTABLE_CONTENT: 'No usable text or table content was found in the document.',
+  OCR_UNAVAILABLE: 'Text recognition is temporarily unavailable.',
+  OCR_FAILED: 'Text recognition could not process this document.',
+  DOCUMENT_PARSER_TIMEOUT: 'Document processing took longer than the permitted time.',
+  DOCUMENT_PARSER_RESOURCE_EXHAUSTED: 'The document exceeded the available processing resources.',
+  DOCUMENT_EXTRACTION_FAILED: 'The document content could not be extracted safely.',
+  DOCUMENT_INGESTION_SCOPE_INVALID: 'The document workflow no longer matches this project.',
+  DOCUMENT_INGESTION_STATE_CONFLICT: 'This document is already being processed in another workflow.',
+  DOCUMENT_INGESTION_STATE_INCONSISTENT: 'The document workflow could not be verified.',
+  DOCUMENT_INGESTION_TIMEOUT: 'Document processing timed out before completion.',
+  DOCUMENT_INGESTION_FAILED: 'The document could not be processed.',
+  DOCUMENT_INGESTION_ATTEMPTS_EXHAUSTED: 'Document processing could not recover after several attempts.',
+};
+
+const INGESTION_STAGES = new Set([
+  'QUEUED',
+  'SCANNING',
+  'EXTRACTING',
+  'CHUNKING',
+  'EMBEDDING',
+  'PERSISTING',
+  'ACTIVATING',
+  'RETRY_WAIT',
+  'COMPLETED',
+  'FAILED',
+]);
+
+const INGESTION_STATUSES = new Set(['QUEUED', 'IN_PROGRESS', 'COMPLETED', 'FAILED']);
+
+export function isSupportedIngestionState(status: string, stage: string): boolean {
+  return INGESTION_STATUSES.has(status) && INGESTION_STAGES.has(stage);
+}
+
+export function ingestionErrorMessage(code: string | null): string {
+  return code && INGESTION_ERROR_MESSAGES[code]
+    ? INGESTION_ERROR_MESSAGES[code]
+    : 'The document could not be processed. Return to the project and try another document.';
 }
 
 function documentType(fileName: string): DocumentFileInfo['type'] {
@@ -90,26 +140,85 @@ function stagedSteps(
   });
 }
 
-export function presentSummaryJob(
-  job: JobResponse,
+export function presentIngestionStatus(
+  ingestion: IngestionStatusResponse,
   document: DocumentResponse,
   template: TemplateResponse | null,
+  displayedProgress = ingestion.progress,
 ): ProcessingDocStatusResponse {
-  const failed = job.status === 'FAILED' || job.status === 'CANCELLED';
+  const failed = ingestion.status === 'FAILED' || ingestion.stage === 'FAILED';
+  const completed = ingestion.status === 'COMPLETED' && ingestion.stage === 'COMPLETED';
+  const retryWaiting = ingestion.stage === 'RETRY_WAIT';
+  const progress = Math.max(0, Math.min(100, displayedProgress));
+  const ingestionDefinitions: Array<Omit<AnalysisStep, 'status' | 'progress'>> = [
+    { id: 'upload', stepCode: 'UPLOAD', title: 'Upload verified', description: 'The project document passed server validation.' },
+    { id: 'queue', stepCode: 'QUEUED', title: 'Queue processing', description: 'The worker has accepted the tenant-scoped document.' },
+    { id: 'scan', stepCode: 'SCANNING', title: 'Security scan', description: 'Checking the complete document before it can be read.' },
+    { id: 'extract', stepCode: 'EXTRACTING', title: 'Extract document content', description: 'Reading supported text, tables, and source locations.' },
+    { id: 'chunk', stepCode: 'CHUNKING', title: 'Organize document sections', description: 'Normalizing and grouping content into bounded sections.' },
+    { id: 'embed', stepCode: 'EMBEDDING', title: 'Build search representation', description: 'Creating the local vector representation in bounded batches.' },
+    { id: 'persist', stepCode: 'PERSISTING', title: 'Persist document index', description: 'Saving validated sections to the tenant-scoped index.' },
+    { id: 'activate', stepCode: 'ACTIVATING', title: 'Finalize document', description: 'Reconciling counts and activating the completed processing run.' },
+  ];
+  const activeStageIndex = ingestionDefinitions.findIndex(
+    (definition) => definition.stepCode === ingestion.stage,
+  );
+  const stageSteps = ingestionDefinitions.map((definition, index): AnalysisStep => {
+    let status: AnalysisStep['status'] = 'PENDING';
+    if (completed) status = 'COMPLETED';
+    else if (index === 0 || (activeStageIndex >= 0 && index < activeStageIndex)) status = 'COMPLETED';
+    else if (activeStageIndex === index) status = 'IN_PROGRESS';
+    return { ...definition, status };
+  });
+
+  if (retryWaiting) {
+    stageSteps.push({
+      id: 'retry-wait',
+      stepCode: 'RETRY_WAIT',
+      title: 'Waiting to resume',
+      description: 'The service is managing a bounded automatic retry.',
+      status: 'IN_PROGRESS',
+    });
+  } else if (failed) {
+    stageSteps.push({
+      id: 'failed',
+      stepCode: 'FAILED',
+      title: 'Processing stopped',
+      description: ingestionErrorMessage(ingestion.error_code),
+      status: 'FAILED',
+    });
+  }
   return {
-    jobId: job.id,
-    title: 'Processing Project Document',
-    subtitle: job.current_step ?? `Extracting key scope items from ${document.file_name}`,
+    jobId: ingestion.job_id,
+    processingRunId: ingestion.processing_run_id,
+    stage: ingestion.stage,
+    progress,
+    title: completed ? 'Document processed successfully' : failed ? 'Document processing stopped' : 'Processing project document',
+    subtitle: completed
+      ? 'The document is ready for the next project milestone.'
+      : retryWaiting
+        ? 'Processing is paused while the service prepares an automatic retry.'
+        : 'The secure ingestion pipeline is preparing this document for later WBS generation.',
+    sideCard: completed
+      ? {
+          title: 'Document ready',
+          description: `${ingestion.chunk_count} searchable sections are ready for the next milestone.`,
+        }
+      : retryWaiting
+        ? {
+            title: 'Waiting to resume',
+            description: `Attempt ${Math.min(ingestion.attempt_count, ingestion.maximum_attempts)} of ${ingestion.maximum_attempts} is being managed by the processing service.`,
+          }
+        : {
+            title: 'Building the document index',
+            description: 'The file is scanned, read, organized, and stored securely before it becomes ready.',
+          },
     projectDoc: documentInfo(document),
     ...(template ? { templateDoc: templateInfo(template) } : {}),
-    steps: stagedSteps([
-      { id: 'upload', stepCode: 'UPLOAD', title: 'Upload verified', description: 'The project document passed server validation.' },
-      { id: 'extract', stepCode: 'EXTRACT', title: 'Extract document content', description: 'Reading project scope and technical requirements.' },
-      { id: 'summarize', stepCode: 'SUMMARIZE', title: 'Build project summary', description: 'Organizing extracted content for review.' },
-      { id: 'ready', stepCode: 'READY', title: 'Prepare review draft', description: 'Saving the tenant-scoped summary record.' },
-    ], job.progress, failed),
-    overallStatus: job.status === 'COMPLETED' ? 'COMPLETED' : failed ? 'FAILED' : 'PROCESSING',
-    errorMessage: job.error_message,
+    steps: stageSteps,
+    overallStatus: completed ? 'COMPLETED' : failed ? 'FAILED' : 'PROCESSING',
+    errorCode: ingestion.error_code,
+    errorMessage: failed ? ingestionErrorMessage(ingestion.error_code) : null,
   };
 }
 

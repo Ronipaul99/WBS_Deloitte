@@ -11,6 +11,7 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 import { startWorkflow } from '../services/workflowApi';
+import { ApiError } from '../services/apiClient';
 import type { ProjectResponse, WorkflowSession } from '../services/workflowTypes';
 import { useAuth } from '../auth/authContext';
 import { PERMISSIONS } from '../auth/permissions';
@@ -24,8 +25,20 @@ interface CreateWbsScreenProps {
 
 const MAX_UPLOAD_SIZE_MB = 25;
 
-const ACCEPTED_PROJECT_EXTENSIONS = ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.csv'];
-const ACCEPTED_TEMPLATE_EXTENSIONS = ['.xlsx', '.xls', '.csv', '.xml'];
+const ACCEPTED_PROJECT_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.csv'];
+const ACCEPTED_TEMPLATE_EXTENSIONS = ['.xlsx', '.csv', '.xml'];
+
+const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
+  UNSUPPORTED_DOCUMENT_FORMAT: 'Document format is not supported.',
+  DOCUMENT_TYPE_MISMATCH: 'Uploaded content does not match the declared document type.',
+  DOCUMENT_EMPTY: 'The uploaded document is empty.',
+  DOCUMENT_TOO_LARGE: 'The uploaded document exceeds the configured size limit.',
+  PDF_MALFORMED: 'The PDF structure could not be read.',
+  PDF_ENCRYPTED: 'Password-protected PDFs are not supported.',
+  OBJECT_STORAGE_UNAVAILABLE: 'Document storage is temporarily unavailable.',
+  DOCUMENT_INGESTION_DISABLED: 'Document processing is not enabled for this environment.',
+  DOCUMENT_INGESTION_UNREADY: 'Document processing is temporarily unavailable.',
+};
 
 function extractFileExtension(filename: string): string {
   const parts = filename.split('.');
@@ -40,11 +53,19 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+function submissionErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code) {
+    return UPLOAD_ERROR_MESSAGES[error.code] ?? 'The document upload could not be completed.';
+  }
+  if (error instanceof ApiError) return 'The document upload could not be completed.';
+  return 'The document upload could not be completed. Please try again.';
+}
+
 export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: CreateWbsScreenProps) {
   const { activeTenant, can } = useAuth();
   const canUploadProject = can(PERMISSIONS.DOCUMENT_UPLOAD);
   const canUploadTemplate = can(PERMISSIONS.TEMPLATE_MANAGE);
-  const canGenerate = canUploadProject && can(PERMISSIONS.WBS_GENERATE);
+  const canProcess = canUploadProject && can(PERMISSIONS.DOCUMENT_PROCESS);
   const [projectFile, setProjectFile] = useState<File | null>(null);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
 
@@ -75,6 +96,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
   };
 
   const handleProjectSelect = (file: File) => {
+    if (isSubmitting) return;
     const error = validateFile(file, ACCEPTED_PROJECT_EXTENSIONS);
     if (error) {
       setProjectFile(null);
@@ -87,6 +109,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
   };
 
   const handleTemplateSelect = (file: File) => {
+    if (isSubmitting) return;
     const error = validateFile(file, ACCEPTED_TEMPLATE_EXTENSIONS);
     if (error) {
       setTemplateFile(null);
@@ -112,6 +135,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
 
   const handleDrop = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
     e.preventDefault();
+    if (isSubmitting) return;
     if ((type === 'project' && !canUploadProject) || (type === 'template' && !canUploadTemplate)) return;
     if (type === 'project') setIsDraggingProject(false);
     else setIsDraggingTemplate(false);
@@ -124,7 +148,13 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
   };
 
   const handleGenerateClick = async () => {
-    if (!projectFile || !activeTenant || isSubmitting || !canGenerate) return;
+    if (
+      !projectFile
+      || !activeTenant
+      || isSubmitting
+      || requestControllerRef.current
+      || !canProcess
+    ) return;
 
     setIsSubmitting(true);
     setSubmissionError(null);
@@ -141,15 +171,16 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
       );
       onWorkflowStarted?.(session);
     } catch (err: unknown) {
-      if (controller.signal.aborted) return;
-      setSubmissionError(err instanceof Error ? err.message : 'Failed to initialize AI analysis job.');
-      setIsSubmitting(false);
+      if (!controller.signal.aborted) setSubmissionError(submissionErrorMessage(err));
     } finally {
-      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const isFormValid = Boolean(projectFile && !projectFileError && canGenerate);
+  const isFormValid = Boolean(projectFile && !projectFileError && canProcess);
 
   return (
     <div className="wbs-create-container">
@@ -162,7 +193,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           Create Work Breakdown Structure
         </h1>
         <p className="wbs-create-subtitle">
-          Upload the scope document for <strong>{project.name}</strong> to generate a planner-ready WBS. Add a reference WBS template when you want the generated structure to follow an existing hierarchy.
+          Upload the scope document for <strong>{project.name}</strong> so it can be scanned, read, and prepared securely. Add a reference WBS template when a later generation step should follow an existing hierarchy.
         </p>
       </header>
 
@@ -190,8 +221,21 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
             onDragOver={(e) => handleDragOver(e, 'project')}
             onDragLeave={(e) => handleDragLeave(e, 'project')}
             onDrop={(e) => handleDrop(e, 'project')}
-            onClick={() => canUploadProject && projectInputRef.current?.click()}
-            aria-disabled={!canUploadProject}
+            onClick={() => canUploadProject && !isSubmitting && projectInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (
+                canUploadProject
+                && !isSubmitting
+                && (event.key === 'Enter' || event.key === ' ')
+              ) {
+                event.preventDefault();
+                projectInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={canUploadProject && !isSubmitting ? 0 : -1}
+            aria-label="Upload project scope document"
+            aria-disabled={!canUploadProject || isSubmitting}
             className={`wbs-dropzone ${isDraggingProject ? 'wbs-dropzone-active' : ''}`}
           >
             <FileUp size={34} color="#3B82F6" className="wbs-dropzone-icon" />
@@ -199,14 +243,14 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
               Click to upload or drag & drop
             </p>
             <span className="wbs-dropzone-hint">
-              PDF, DOCX, XLSX up to {MAX_UPLOAD_SIZE_MB}MB
+              PDF, DOCX, XLSX, CSV up to {MAX_UPLOAD_SIZE_MB}MB
             </span>
             <input 
               ref={projectInputRef} 
               type="file" 
               accept={ACCEPTED_PROJECT_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
-              disabled={!canUploadProject}
+              disabled={!canUploadProject || isSubmitting}
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleProjectSelect(e.target.files[0]);
               }}
@@ -223,6 +267,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
               <button 
                 type="button" 
                 aria-label="Remove project file"
+                disabled={isSubmitting}
                 onClick={() => { 
                   setProjectFile(null); 
                   if (projectInputRef.current) projectInputRef.current.value = ''; 
@@ -256,8 +301,21 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
             onDragOver={(e) => handleDragOver(e, 'template')}
             onDragLeave={(e) => handleDragLeave(e, 'template')}
             onDrop={(e) => handleDrop(e, 'template')}
-            onClick={() => canUploadTemplate && templateInputRef.current?.click()}
-            aria-disabled={!canUploadTemplate}
+            onClick={() => canUploadTemplate && !isSubmitting && templateInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (
+                canUploadTemplate
+                && !isSubmitting
+                && (event.key === 'Enter' || event.key === ' ')
+              ) {
+                event.preventDefault();
+                templateInputRef.current?.click();
+              }
+            }}
+            role="button"
+            tabIndex={canUploadTemplate && !isSubmitting ? 0 : -1}
+            aria-label="Upload reference WBS template"
+            aria-disabled={!canUploadTemplate || isSubmitting}
             className={`wbs-dropzone ${isDraggingTemplate ? 'wbs-dropzone-active' : ''}`}
           >
             <FileSpreadsheet size={34} color="#10B981" className="wbs-dropzone-icon" />
@@ -272,7 +330,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
               type="file" 
               accept={ACCEPTED_TEMPLATE_EXTENSIONS.join(',')} 
               className="wbs-file-input-hidden"
-              disabled={!canUploadTemplate}
+              disabled={!canUploadTemplate || isSubmitting}
               onChange={(e: ChangeEvent<HTMLInputElement>) => {
                 if (e.target.files && e.target.files[0]) handleTemplateSelect(e.target.files[0]);
               }}
@@ -289,6 +347,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
               <button 
                 type="button" 
                 aria-label="Remove template file"
+                disabled={isSubmitting}
                 onClick={() => { 
                   setTemplateFile(null); 
                   if (templateInputRef.current) templateInputRef.current.value = ''; 
@@ -321,11 +380,11 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           {isSubmitting ? (
             <>
               <Loader2 size={16} className="wbs-spinner" />
-              <span>Initializing Job...</span>
+              <span>Starting processing...</span>
             </>
           ) : (
             <>
-              <span>Generate Draft WBS</span>
+              <span>Process Document</span>
               <ArrowRight size={16} />
             </>
           )}

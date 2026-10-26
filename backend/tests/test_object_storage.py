@@ -2,12 +2,14 @@ from io import BytesIO
 from uuid import UUID
 
 import pytest
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ConnectTimeoutError
 from fastapi import HTTPException
 from starlette.datastructures import Headers, UploadFile
 
 from app.core.config import Settings
+from app.core.upload_errors import UploadErrorCode
 from app.services.storage import ObjectStorageUnavailableError, S3ObjectStorage
+from tests.pdf_fixtures import pad_pdf_to_size, text_pdf_bytes
 
 TENANT_ID = UUID("00000000-0000-0000-0000-000000000001")
 PROJECT_ID = UUID("00000000-0000-0000-0000-000000000002")
@@ -67,7 +69,7 @@ def _upload(name: str, body: bytes, content_type: str) -> UploadFile:
 async def test_s3_upload_uses_private_generated_tenant_project_key() -> None:
     client = FakeS3Client()
     storage = S3ObjectStorage(_settings(), client=client)
-    body = b"%PDF-1.4\nproject scope"
+    body = text_pdf_bytes()
 
     key, size = await storage.save(
         TENANT_ID,
@@ -100,20 +102,45 @@ async def test_s3_upload_uses_private_generated_tenant_project_key() -> None:
 @pytest.mark.asyncio
 async def test_s3_upload_enforces_actual_size_before_provider_call() -> None:
     client = FakeS3Client()
-    storage = S3ObjectStorage(_settings(max_upload_bytes=8), client=client)
+    base_pdf = text_pdf_bytes()
+    size_limit = len(base_pdf) + 512
+    body = pad_pdf_to_size(base_pdf, size_limit + 1)
+    storage = S3ObjectStorage(_settings(max_upload_bytes=size_limit), client=client)
 
     with pytest.raises(HTTPException) as exc_info:
         await storage.save(
             TENANT_ID,
             "documents",
-            _upload("scope.pdf", b"%PDF-1.4-too-large", "application/pdf"),
+            _upload("scope.pdf", body, "application/pdf"),
             suffix=".pdf",
             content_type="application/pdf",
             project_id=PROJECT_ID,
         )
 
     assert exc_info.value.status_code == 413
+    assert exc_info.value.detail["code"] == UploadErrorCode.DOCUMENT_TOO_LARGE
     assert client.uploads == []
+
+
+@pytest.mark.asyncio
+async def test_s3_upload_accepts_exact_configured_size_boundary() -> None:
+    client = FakeS3Client()
+    base_pdf = text_pdf_bytes()
+    size_limit = len(base_pdf) + 512
+    body = pad_pdf_to_size(base_pdf, size_limit)
+    storage = S3ObjectStorage(_settings(max_upload_bytes=size_limit), client=client)
+
+    _, size = await storage.save(
+        TENANT_ID,
+        "documents",
+        _upload("scope.pdf", body, "application/pdf"),
+        suffix=".pdf",
+        content_type="application/pdf",
+        project_id=PROJECT_ID,
+    )
+
+    assert size == len(body)
+    assert len(client.uploads) == 1
 
 
 @pytest.mark.asyncio
@@ -130,8 +157,33 @@ async def test_s3_provider_errors_are_normalized() -> None:
         await storage.save(
             TENANT_ID,
             "documents",
-            _upload("scope.pdf", b"%PDF-1.4\nscope", "application/pdf"),
+            _upload("scope.pdf", text_pdf_bytes(), "application/pdf"),
             suffix=".pdf",
             content_type="application/pdf",
             project_id=PROJECT_ID,
         )
+
+
+@pytest.mark.asyncio
+async def test_s3_timeout_hides_private_endpoint(caplog) -> None:
+    private_endpoint = "https://private-storage.internal.example.test"
+
+    class TimingOutClient(FakeS3Client):
+        def upload_fileobj(self, *args, **kwargs) -> None:
+            raise ConnectTimeoutError(endpoint_url=private_endpoint)
+
+    storage = S3ObjectStorage(_settings(), client=TimingOutClient())
+    with caplog.at_level("WARNING", logger="app.services.storage"):
+        with pytest.raises(ObjectStorageUnavailableError) as error:
+            await storage.save(
+                TENANT_ID,
+                "documents",
+                _upload("scope.pdf", text_pdf_bytes(), "application/pdf"),
+                suffix=".pdf",
+                content_type="application/pdf",
+                project_id=PROJECT_ID,
+            )
+
+    assert str(error.value) == "Object storage upload failed."
+    assert private_endpoint not in caplog.text
+    assert "ConnectTimeoutError" in caplog.text
