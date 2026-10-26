@@ -120,7 +120,7 @@ From the Windows repository root, create a source-only build bundle and copy it
 to the VM. This bundle excludes environment files and credentials:
 
 ```powershell
-tar -czf deploy/oracle/ingestion-build-files.tar.gz backend/worker-constraints.txt backend/scripts/package_embedding_model.py backend/model-artifacts/bge-small-en-v1.5.manifest.json deploy/oracle/build-ingestion-worker.sh deploy/oracle/verify-worker-runtime.py
+tar -czf deploy/oracle/ingestion-build-files.tar.gz backend/Dockerfile backend/pyproject.toml backend/app backend/migrations backend/alembic.ini backend/worker-constraints.txt backend/scripts/package_embedding_model.py backend/model-artifacts/bge-small-en-v1.5.manifest.json backend/model-artifacts/ms-marco-MiniLM-L-6-v2.manifest.json deploy/oracle/build-ingestion-worker.sh deploy/oracle/verify-worker-runtime.py
 scp -o IdentitiesOnly=yes -i "$env:USERPROFILE\.ssh\id_ed25519" deploy/oracle/ingestion-build-files.tar.gz developer@144.24.43.125:/home/developer/wbs-services/
 ```
 
@@ -146,6 +146,11 @@ OCR executables, English data, and a 384-dimensional embedding with networking
 disabled. It prints the actual runtime OCR version settings; use
 `OCRMYPDF_EXPECTED_VERSION` (without an underscore between OCRMY and PDF), as
 required by the current Settings field.
+
+The worker also packages an integrity-pinned, quantized MiniLM reranker for the
+internal hybrid retriever. It runs through ONNX on one CPU thread, without runtime
+downloads. The image build and runtime verification check passage ordering offline.
+Its raw scores rank candidate evidence; they are not calibrated answer confidence.
 
 The image is `wbs-ingestion-worker:local`, already selected for the worker by
 Compose. The helper does not recreate containers, change credential files, or

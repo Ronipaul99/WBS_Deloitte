@@ -12,7 +12,7 @@ from app.services.readiness import application_migration_heads
 from migrations.versions import a4f9c2d18e76_add_pgvector_ingestion_schema as migration
 
 REVISION = "a4f9c2d18e76"
-APPLICATION_HEAD = "d4e7b2c91a63"
+APPLICATION_HEAD = "e71c4a9b203d"
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]
     / "migrations"

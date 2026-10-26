@@ -14,7 +14,7 @@ import tempfile
 import time
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Protocol
@@ -53,7 +53,7 @@ except ImportError:  # pragma: no cover - Windows does not expose POSIX resource
 OCRMY_PDF_EXECUTABLE = "ocrmypdf"
 TESSERACT_EXECUTABLE = "tesseract"
 PDF_EXTRACTOR_NAME = "pypdf-ocrmypdf"
-PDF_EXTRACTOR_VERSION = "1.0.0"
+PDF_EXTRACTOR_VERSION = "1.1.0"
 _INLINE_IMAGE_OPERATOR = re.compile(rb"(?<!\S)BI(?!\S)")
 _REPEATED_MARGIN_ARTIFACT = re.compile(
     r"(?:\bheader\b|\bfooter\b|\bconfidential\b|\bcopyright\b|\bpage\s+\d+\b)",
@@ -136,6 +136,9 @@ class OcrRunner(Protocol):
 class _ExtractedLine:
     text: str
     method: ExtractionMethod
+    block_type: ExtractedBlockType = ExtractedBlockType.PARAGRAPH
+    heading_path: tuple[str, ...] = ()
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +153,8 @@ class _PageDraft:
     classification: PdfPageClassification
     lines: tuple[_ExtractedLine, ...]
     margin_candidates: frozenset[_MarginCandidate]
+    removed_margins: tuple[str, ...] = ()
+    layout_fallback: bool = False
 
 
 class SubprocessOcrRunner:
@@ -409,6 +414,7 @@ class PdfExtractor:
                 drafts = _merge_ocr_drafts(drafts, ocr_drafts, frozenset(ocr_pages))
 
             drafts, margin_removed = _remove_repeated_margins(drafts, self._policy)
+            drafts = _structure_drafts(trusted_path, drafts, limits, deadline)
             result = _build_result(
                 drafts,
                 source_sha256=source_sha256,
@@ -627,6 +633,7 @@ def _extract_page_text(
     method: ExtractionMethod,
 ) -> tuple[str, frozenset[_MarginCandidate]]:
     candidates: set[_MarginCandidate] = set()
+    fragments = []
     try:
         height = float(page.mediabox.height)
 
@@ -649,10 +656,23 @@ def _extract_page_text(
             else:
                 return
             for line in _text_lines(text):
-                if len(line) <= policy.repeated_margin_maximum_characters:
+                if (
+                    len(line) <= policy.repeated_margin_maximum_characters
+                    and len(fragments) < 10000
+                ):
                     candidates.add(_MarginCandidate(line, region))
+                    fragments.append((region, round(y_position / 3), float(text_matrix[4]), line))
 
         text = page.extract_text(visitor_text=visitor) or ""
+        grouped = {}
+        for region, y, x, value in fragments:
+            grouped.setdefault((region, y), []).append((x, value))
+        for (region, _), values in grouped.items():
+            value = " ".join(part for _, part in sorted(values, key=lambda item: item[0]))
+            if re.fullmatch(r"page\s+[\d ]+\s+of\s+[\d ]+", value, re.I):
+                value = re.sub(r"(?<=\d)\s+(?=\d)", "", value)
+            if len(value) <= policy.repeated_margin_maximum_characters:
+                candidates.add(_MarginCandidate(value, region))
     except (PdfReadError, PyPdfError, OSError, ValueError, TypeError):
         raise ExtractionError(ExtractionErrorCode.DOCUMENT_MALFORMED) from None
     if method not in {ExtractionMethod.NATIVE, ExtractionMethod.OCR}:
@@ -711,9 +731,16 @@ def _remove_repeated_margins(
 ) -> tuple[tuple[_PageDraft, ...], bool]:
     if len(drafts) < policy.repeated_margin_minimum_pages:
         return drafts, False
-    page_counts: Counter[_MarginCandidate] = Counter()
+
+    def identity(candidate: _MarginCandidate) -> tuple[str, str]:
+        value = candidate.text.casefold()
+        if re.fullmatch(r"page\s+\d+\s+of\s+\d+", value):
+            value = re.sub(r"\d+", "#", value)
+        return candidate.region, value
+
+    page_counts: Counter[tuple[str, str]] = Counter()
     for draft in drafts:
-        page_counts.update(draft.margin_candidates)
+        page_counts.update({identity(candidate) for candidate in draft.margin_candidates})
     required = max(
         policy.repeated_margin_minimum_pages,
         math.ceil(len(drafts) * policy.repeated_margin_minimum_ratio),
@@ -721,7 +748,8 @@ def _remove_repeated_margins(
     repeated = {
         candidate
         for candidate, count in page_counts.items()
-        if count >= required and _REPEATED_MARGIN_ARTIFACT.search(candidate.text)
+        if count >= required
+        and (candidate[1] == "page # of #" or _REPEATED_MARGIN_ARTIFACT.search(candidate[1]))
     }
     if not repeated:
         return drafts, False
@@ -729,18 +757,128 @@ def _remove_repeated_margins(
     removed = False
     for draft in drafts:
         lines = list(draft.lines)
-        page_repeated = draft.margin_candidates & repeated
+        removed_text = []
+        page_repeated = {
+            candidate for candidate in draft.margin_candidates if identity(candidate) in repeated
+        }
         for candidate in sorted(page_repeated, key=lambda item: (item.region, item.text)):
             indexes = range(len(lines))
             if candidate.region == "bottom":
                 indexes = range(len(lines) - 1, -1, -1)
             for index in indexes:
                 if lines[index].text == candidate.text:
+                    removed_text.append(lines[index].text)
                     lines.pop(index)
                     removed = True
                     break
-        cleaned.append(replace(draft, lines=lines))
+        cleaned.append(replace(draft, lines=tuple(lines), removed_margins=tuple(removed_text)))
     return tuple(cleaned), removed
+
+
+def _structure_drafts(path, drafts, limits, deadline):
+    import pdfplumber
+
+    from app.services.ingestion.extractors.pdf_layout import page_structure
+
+    structured = []
+    headings = ()
+    previous_table = None
+
+    def table_context(block):
+        context = block.heading_path
+        # A glossary term is row context, not the containing table's identity.
+        if any(label.upper() == "GLOSSARY" for label in context) and len(context) > 1:
+            return context[:-1]
+        return context
+
+    with pdfplumber.open(path) as document:
+        for draft, page in zip(drafts, document.pages, strict=True):
+            _check_deadline(deadline)
+            try:
+                if draft.classification != PdfPageClassification.NATIVE:
+                    structured.append(draft)
+                    previous_table = None
+                    headings = ()
+                    continue
+                blocks, next_headings = page_structure(
+                    page,
+                    source_lines=tuple(line.text for line in draft.lines),
+                    removed_margins=draft.removed_margins,
+                    headings=headings,
+                    maximum_blocks=limits.maximum_blocks,
+                    maximum_characters=limits.maximum_extracted_characters,
+                    maximum_heading_depth=limits.maximum_heading_depth,
+                    maximum_heading_characters=limits.maximum_heading_label_characters,
+                )
+                _check_deadline(deadline)
+                if blocks is None:
+                    structured.append(replace(draft, layout_fallback=True))
+                    previous_table = None
+                    headings = ()
+                else:
+                    table_blocks = [
+                        block
+                        for block in blocks
+                        if block.block_type is ExtractedBlockType.TABLE_ROW
+                    ]
+                    if table_blocks and previous_table:
+                        first = table_blocks[0]
+                        box = first.metadata["coordinates"]
+                        prev_page, prev_meta, prev_heading, prev_height = previous_table
+                        if (
+                            prev_page == draft.page_number - 1
+                            and box[1] < page.height * 0.15
+                            and prev_meta["coordinates"][3] > prev_height * 0.8
+                            and abs(box[0] - prev_meta["coordinates"][0]) < 3
+                            and abs(box[2] - prev_meta["coordinates"][2]) < 3
+                            and first.metadata["column_count"] == prev_meta["column_count"]
+                            and table_context(first) == prev_heading
+                        ):
+                            local_id = first.metadata["table_index"]
+                            blocks = [
+                                replace(
+                                    block,
+                                    metadata={
+                                        **block.metadata,
+                                        "table_index": prev_meta["table_index"],
+                                        "row_index": prev_meta["row_index"]
+                                        + block.metadata["row_index"],
+                                    },
+                                )
+                                if block.metadata.get("table_index") == local_id
+                                else block
+                                for block in blocks
+                            ]
+                    table_blocks = [
+                        block
+                        for block in blocks
+                        if block.block_type is ExtractedBlockType.TABLE_ROW
+                    ]
+                    previous_table = (
+                        (
+                            draft.page_number,
+                            table_blocks[-1].metadata,
+                            table_context(table_blocks[-1]),
+                            page.height,
+                        )
+                        if table_blocks
+                        else None
+                    )
+                    lines = tuple(
+                        _ExtractedLine(
+                            block.text,
+                            ExtractionMethod.NATIVE,
+                            block.block_type,
+                            block.heading_path,
+                            block.metadata,
+                        )
+                        for block in blocks
+                    )
+                    structured.append(replace(draft, lines=lines))
+                    headings = next_headings
+            finally:
+                page.close()
+    return tuple(structured)
 
 
 def _build_result(
@@ -755,6 +893,8 @@ def _build_result(
     native_pages = 0
     ocr_pages = 0
     for draft in drafts:
+        if draft.layout_fallback:
+            _append_warning(warnings, ExtractionWarningCode.PDF_LAYOUT_FALLBACK)
         if draft.classification is PdfPageClassification.BLANK:
             _append_warning(warnings, ExtractionWarningCode.EMPTY_PAGE)
         if draft.classification is PdfPageClassification.MIXED:
@@ -766,15 +906,24 @@ def _build_result(
             ocr_pages += 1
         if any(line.method is ExtractionMethod.NATIVE for line in draft.lines):
             native_pages += 1
-        for line in draft.lines:
+        for line_index, line in enumerate(draft.lines):
             try:
                 blocks.append(
                     ExtractedBlock(
                         ordinal=len(blocks),
                         text=line.text,
-                        block_type=ExtractedBlockType.PARAGRAPH,
+                        block_type=line.block_type,
                         page_number=draft.page_number,
                         extraction_method=line.method,
+                        heading_path=line.heading_path,
+                        metadata={
+                            **line.metadata,
+                            **(
+                                {"removed_margins": list(draft.removed_margins)}
+                                if line_index == 0 and draft.removed_margins
+                                else {}
+                            ),
+                        },
                         limits=limits,
                     )
                 )
@@ -791,8 +940,14 @@ def _build_result(
             detected_format=ConfirmedDocumentFormat.PDF,
             page_count=len(drafts),
             worksheet_count=0,
-            table_count=0,
-            row_count=0,
+            table_count=len(
+                {
+                    block.metadata.get("table_index")
+                    for block in blocks
+                    if block.block_type is ExtractedBlockType.TABLE_ROW
+                }
+            ),
+            row_count=sum(block.block_type is ExtractedBlockType.TABLE_ROW for block in blocks),
             block_count=len(blocks),
             character_count=sum(len(block.text) for block in blocks),
             native_page_count=native_pages,

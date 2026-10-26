@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -385,3 +385,64 @@ async def test_current_or_in_progress_run_cannot_be_deleted(persistence_context)
     with pytest.raises(PersistenceError) as error:
         await repository.delete_superseded_run(scope.document_scope, run.run_id)
     assert error.value.code is PersistenceErrorCode.DOCUMENT_PROCESSING_STATE_CONFLICT
+
+
+@pytest.mark.asyncio
+async def test_rollback_is_scoped_atomic_and_preserves_both_runs(persistence_context):
+    sessions, repository, scope = persistence_context
+    result = embedding_result(2)
+    counts = processing_counts(result)
+    runs = []
+    for version in ("1.0.0", "2.0.0"):
+        identity = processing_identity(chunker_version=version)
+        run = await repository.create_or_resolve_run(scope, identity, counts)
+        await repository.stage_embeddings(scope, run.run_id, result, identity)
+        await repository.activate_run(scope, run.run_id, result, identity, counts)
+        runs.append(run.run_id)
+    with pytest.raises(PersistenceError):
+        await repository.restore_completed_run(
+            scope.document_scope, runs[0], expected_active_run_id=uuid4()
+        )
+    await repository.restore_completed_run(
+        scope.document_scope, runs[0], expected_active_run_id=runs[1]
+    )
+    async with sessions() as session:
+        assert (await session.get(Document, scope.document_id)).current_processing_run_id == runs[0]
+        rows = list((await session.scalars(select(DocumentChunk))).all())
+        assert len(rows) == 4
+    with pytest.raises(PersistenceError):
+        await repository.restore_completed_run(
+            scope.document_scope, runs[1], expected_active_run_id=runs[1]
+        )
+
+
+@pytest.mark.asyncio
+async def test_rollback_rejects_deleting_documents_and_pending_ingestion(persistence_context):
+    sessions, repository, scope = persistence_context
+    result = embedding_result(1)
+    identity = processing_identity()
+    counts = processing_counts(result)
+    run = await repository.create_or_resolve_run(scope, identity, counts)
+    await repository.stage_embeddings(scope, run.run_id, result, identity)
+    await repository.activate_run(scope, run.run_id, result, identity, counts)
+    async with sessions.begin() as session:
+        document = await session.get(Document, scope.document_id)
+        document.lifecycle_status = "DELETING"
+        document.deletion_requested_at = document.processed_at
+        document.vectors_hidden_at = document.processed_at
+    with pytest.raises(PersistenceError):
+        await repository.restore_completed_run(
+            scope.document_scope, run.run_id, expected_active_run_id=run.run_id
+        )
+    async with sessions.begin() as session:
+        document = await session.get(Document, scope.document_id)
+        document.lifecycle_status = "ACTIVE"
+        document.deletion_requested_at = None
+        document.vectors_hidden_at = None
+    await repository.create_or_resolve_run(
+        scope, processing_identity(chunker_version="2.0.0"), counts
+    )
+    with pytest.raises(PersistenceError):
+        await repository.restore_completed_run(
+            scope.document_scope, run.run_id, expected_active_run_id=run.run_id
+        )

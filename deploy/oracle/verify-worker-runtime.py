@@ -15,6 +15,7 @@ from app.services.ingestion.embeddings.base import EmbeddingPolicy, embed_canoni
 from app.services.ingestion.embeddings.fastembed_provider import get_process_embedding_provider
 from app.services.ingestion.extractors.pdf import PdfExtractor
 from app.services.ingestion.tokenizer import LocalBgeTokenizer
+from app.services.ingestion.reranking import get_reranker
 from app.services.ingestion.types import ExtractionLimits
 from app.services.readiness import (
     embedding_model_path_is_ready,
@@ -37,6 +38,13 @@ def main() -> None:
     for name, check in checks:
         check()
         print(json.dumps({name: "passed"}), flush=True)
+
+    scores = get_reranker().score(
+        "What is the capital of France?",
+        ["Paris is the capital of France.", "The bicycle has two wheels."],
+    )
+    assert len(scores) == 2 and scores[0] > scores[1]
+    print(json.dumps({"offline_reranker": "passed"}), flush=True)
 
     root = Path(settings.document_processing_temp_root)
     workspace = root / str(uuid4())

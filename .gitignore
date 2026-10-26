@@ -1,3 +1,4 @@
 .fullstack-runtime/
 backend/.data/
+backend/.test-data/
 backend/*.db

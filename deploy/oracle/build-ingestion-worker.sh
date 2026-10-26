@@ -12,7 +12,8 @@ case "$(docker info --format '{{.Architecture}}')" in
 esac
 
 for source in Dockerfile worker-constraints.txt scripts/package_embedding_model.py \
-    model-artifacts/bge-small-en-v1.5.manifest.json; do
+    model-artifacts/bge-small-en-v1.5.manifest.json \
+    model-artifacts/ms-marco-MiniLM-L-6-v2.manifest.json; do
     if [[ ! -f "$backend_dir/$source" ]]; then
         printf 'Missing build source: %s\n' "$backend_dir/$source" >&2
         exit 1
@@ -81,6 +82,12 @@ model = TextEmbedding(
 vectors = list(model.embed(["ingestion worker installation check"], batch_size=1, parallel=None))
 assert len(vectors) == 1 and len(vectors[0]) == 384
 print("Offline embedding check passed: 384 dimensions")
+from app.services.ingestion.reranking import get_reranker
+scores = get_reranker().score("What is the capital of France?", [
+    "Paris is the capital of France.", "The bicycle has two wheels.",
+])
+assert len(scores) == 2 and scores[0] > scores[1]
+print("Offline reranker check passed")
 '
 
 docker run --rm --network none --entrypoint python "$image" -c '

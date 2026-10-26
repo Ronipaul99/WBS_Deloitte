@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass, replace
 
@@ -29,7 +30,7 @@ from app.services.ingestion.types import (
     ExtractionResult,
 )
 
-CHUNKER_VERSION = "1.0.0"
+CHUNKER_VERSION = "1.1.0"
 _HASH_DOMAIN = "wbs-canonical-chunk-v1"
 _TABLE_TYPES = frozenset({ExtractedBlockType.TABLE_ROW, ExtractedBlockType.WORKSHEET_ROW})
 
@@ -41,6 +42,7 @@ class _NormalizedBlock:
     scope: tuple[object, ...]
     is_header: bool
     header: _NormalizedBlock | None = None
+    context: tuple[_NormalizedBlock, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +136,11 @@ class DocumentChunker:
             ):
                 overlap = self._overlap_segment(groups[ordinal - 1], rendered)
                 if overlap is not None:
-                    insert_at = 1 if rendered[0].role is SourceReferenceRole.HEADER_CONTEXT else 0
+                    insert_at = next(
+                        i
+                        for i, item in enumerate(rendered)
+                        if item.role is SourceReferenceRole.PRIMARY
+                    )
                     rendered.insert(insert_at, overlap)
                     overlap_applications += 1
             chunks.append(
@@ -224,13 +230,72 @@ class DocumentChunker:
             elif is_table and scope in headers:
                 item = replace(item, header=headers[scope])
             normalized.append(item)
-        return normalized, dropped
+        return self._attach_source_context(normalized), dropped
+
+    def _attach_source_context(self, blocks):
+        # Only explicit glossary aliases provide expansions. Ambiguous aliases
+        # are excluded, and context is copied verbatim with its source ordinal.
+        aliases = {}
+        ambiguous = set()
+        for item in blocks:
+            if "GLOSSARY" not in (label.upper() for label in item.block.heading_path):
+                continue
+            match = re.match(r"^(.{3,120}?)\s+or\s+([A-Z][A-Z0-9]{1,11})\s*\|", item.text)
+            if match:
+                alias = match[2]
+                if alias in aliases:
+                    ambiguous.add(alias)
+                elif len(aliases) < 128:
+                    aliases[alias] = item
+        recent = []
+        captions = {}
+        result = []
+        for item in blocks:
+            context = []
+            if item.block.block_type is ExtractedBlockType.TABLE_ROW:
+                if item.scope not in captions:
+                    if recent and recent[-1].text.endswith(":"):
+                        captions[item.scope] = tuple(recent)
+                    else:
+                        captions[item.scope] = ()
+                context.extend(captions[item.scope])
+                if "GLOSSARY" in (label.upper() for label in item.block.heading_path):
+                    for alias, definition in aliases.items():
+                        if (
+                            alias not in ambiguous
+                            and definition is not item
+                            and re.search(r"\b" + re.escape(alias) + r"\b", item.text)
+                        ):
+                            context.append(definition)
+                            if len(context) >= 2:
+                                break
+                recent = []
+            elif item.block.block_type is ExtractedBlockType.PARAGRAPH:
+                if recent and (
+                    recent[-1].block.heading_path != item.block.heading_path
+                    or recent[-1].block.page_number != item.block.page_number
+                ):
+                    recent = []
+                recent = [*recent[-7:], item]
+            else:
+                recent = []
+            selected = []
+            for source in context:
+                proposed = [*selected, source]
+                if self._tokenizer.count("\n".join(x.text for x in proposed)) <= min(
+                    128, self._policy.maximum_content_tokens // 3
+                ):
+                    selected = proposed
+            result.append(replace(item, context=tuple(selected)))
+        return result
 
     def _split_block(self, item: _NormalizedBlock) -> list[_Segment]:
         maximum_tokens = self._policy.maximum_content_tokens
+        sources = list(item.context)
         if item.header is not None and item.header.block.ordinal != item.block.ordinal:
-            header_tokens = self._tokenizer.count(item.header.text + "\n")
-            maximum_tokens -= header_tokens
+            sources.append(item.header)
+        if sources:
+            maximum_tokens -= self._tokenizer.count("\n".join(x.text for x in sources) + "\n")
             if maximum_tokens <= 0:
                 raise ChunkingError(ChunkingErrorCode.DOCUMENT_CHUNK_LIMIT_EXCEEDED)
         if self._tokenizer.count(item.text) <= maximum_tokens:
@@ -335,7 +400,9 @@ class DocumentChunker:
                 current = [segment]
                 continue
             candidate = [*current, segment]
-            candidate_count = self._tokenizer.count(self._render(candidate))
+            candidate_count = self._tokenizer.count(
+                self._render(self._add_header_context(candidate))
+            )
             compatible = self._segments_compatible(current[-1], segment)
             keep_small_group_together = self._tokenizer.count(self._render(current)) < max(
                 1, self._policy.target_tokens // 4
@@ -369,19 +436,20 @@ class DocumentChunker:
     def _add_header_context(self, primary_group: list[_Segment]) -> list[_Segment]:
         first = primary_group[0]
         header = first.source.header
-        if header is None or header.block.ordinal in {
-            segment.source.block.ordinal for segment in primary_group
-        }:
-            return list(primary_group)
-        context = _Segment(
-            source=header,
-            text=header.text,
-            role=SourceReferenceRole.HEADER_CONTEXT,
-        )
-        rendered = [context, *primary_group]
-        if self._tokenizer.count(self._render(rendered)) > self._policy.maximum_content_tokens:
-            raise ChunkingError(ChunkingErrorCode.DOCUMENT_CHUNK_LIMIT_EXCEEDED)
-        return rendered
+        sources = [*first.source.context, *([header] if header is not None else [])]
+        primary_ordinals = {segment.source.block.ordinal for segment in primary_group}
+        unique = {
+            source.block.ordinal: source
+            for source in sources
+            if source.block.ordinal not in primary_ordinals
+        }
+        return [
+            *(
+                _Segment(source=source, text=source.text, role=SourceReferenceRole.HEADER_CONTEXT)
+                for source in unique.values()
+            ),
+            *primary_group,
+        ]
 
     def _overlap_compatible(
         self, previous_group: list[_Segment], current_group: list[_Segment]
@@ -499,6 +567,8 @@ class DocumentChunker:
                     row_start=block.row_start,
                     row_end=block.row_end,
                     extraction_method=block.extraction_method,
+                    table_index=block.metadata.get("table_index"),
+                    row_index=block.metadata.get("row_index"),
                 )
             )
         return tuple(references)

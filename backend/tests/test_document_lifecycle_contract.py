@@ -12,6 +12,7 @@ from app.models.domain import Document, DocumentDeletionOutbox
 from app.services.readiness import application_migration_heads
 
 REVISION = "d4e7b2c91a63"
+APPLICATION_HEAD = "e71c4a9b203d"
 PREVIOUS_REVISION = "c8d4a1e72f09"
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_PATH = (
@@ -52,7 +53,7 @@ def test_step13_models_and_migration_define_scoped_durable_deletion() -> None:
     } <= set(DocumentDeletionOutbox.__table__.c.keys())
 
     source = MIGRATION_PATH.read_text(encoding="utf-8")
-    assert application_migration_heads() == {REVISION}
+    assert application_migration_heads() == {APPLICATION_HEAD}
     assert f'down_revision: str | None = "{PREVIOUS_REVISION}"' in source
     assert "ENABLE ROW LEVEL SECURITY" in source
     assert "FORCE ROW LEVEL SECURITY" in source
@@ -98,7 +99,7 @@ def test_existing_documents_remain_active_after_upgrade(tmp_path, monkeypatch) -
             ).fetchone()
             version = connection.execute("SELECT version_num FROM alembic_version").fetchone()
         assert row == ("ACTIVE", None, None, None, None)
-        assert version == (REVISION,)
+        assert version == (APPLICATION_HEAD,)
     finally:
         get_settings.cache_clear()
 
@@ -113,6 +114,6 @@ def test_clean_upgrade_and_safe_empty_downgrade(tmp_path, monkeypatch) -> None:
         command.upgrade(config, "head")
         with sqlite3.connect(database) as connection:
             version = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-        assert version == (REVISION,)
+        assert version == (APPLICATION_HEAD,)
     finally:
         get_settings.cache_clear()

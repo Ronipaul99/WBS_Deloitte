@@ -46,6 +46,9 @@ ALLOWED_METADATA_KEYS = frozenset(
         "page_label",
         "source_kind",
         "table_index",
+        "row_index",
+        "removed_margins",
+        "column_count",
     }
 )
 
@@ -71,6 +74,7 @@ class ExtractionMethod(StrEnum):
 
 
 class ExtractionWarningCode(StrEnum):
+    PDF_LAYOUT_FALLBACK = "pdf_layout_fallback"
     EMPTY_PAGE = "empty_page"
     OCR_USED = "ocr_used"
     MIXED_PAGE_OCR_USED = "mixed_page_ocr_used"

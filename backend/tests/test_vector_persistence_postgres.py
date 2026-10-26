@@ -52,9 +52,15 @@ async def test_postgresql_transactional_persistence_rls_concurrency_and_exact_qu
     try:
         async with admin_engine.begin() as connection:
             assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "d4e7b2c91a63"
+                "e71c4a9b203d"
             )
             runtime_role = make_url(_async_url(RUNTIME_URL)).username
+            # Legacy application grants are normally provisioned separately;
+            # vector migrations deliberately grant only their protected tables.
+            quoted_runtime = admin_engine.dialect.identifier_preparer.quote(runtime_role)
+            await connection.execute(
+                text(f"GRANT SELECT, UPDATE ON documents, jobs TO {quoted_runtime}")
+            )
             role = (
                 await connection.execute(
                     text("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = :role"),
@@ -145,6 +151,15 @@ async def test_postgresql_transactional_persistence_rls_concurrency_and_exact_qu
             limit=2,
         )
         assert tuple(match.ordinal for match in matches) == (0, 1)
+        semantic, lexical = await repository.active_search_candidates(
+            scope.document_scope,
+            EmbeddingVector(query, dimensions=384),
+            terms=("synthetic", "persistence"),
+            candidate_limit=2,
+        )
+        assert [row["ordinal"] for row in semantic] == [0, 1]
+        assert {row["ordinal"] for row in lexical} == {0, 1}
+        assert all(row["processing_run_id"] == run.run_id for row in semantic + lexical)
 
         failed_identity = processing_identity(chunker_version="2.0.0")
         failed_run = await repository.create_or_resolve_run(scope, failed_identity, counts)
@@ -155,6 +170,13 @@ async def test_postgresql_transactional_persistence_rls_concurrency_and_exact_qu
         )
         active = await repository.load_active_ordered_chunks(scope.document_scope)
         assert {chunk.processing_run_id for chunk in active} == {run.run_id}
+        semantic, lexical = await repository.active_search_candidates(
+            scope.document_scope,
+            EmbeddingVector(query, dimensions=384),
+            terms=("synthetic",),
+            candidate_limit=2,
+        )
+        assert all(row["processing_run_id"] == run.run_id for row in semantic + lexical)
 
         wrong_scope = PersistenceScope(
             tenant_id,
@@ -165,6 +187,27 @@ async def test_postgresql_transactional_persistence_rls_concurrency_and_exact_qu
         with pytest.raises(PersistenceError) as error:
             await repository.create_or_resolve_run(wrong_scope, identity, counts)
         assert error.value.code is PersistenceErrorCode.DOCUMENT_PERSISTENCE_SCOPE_MISMATCH
+
+        with pytest.raises(PersistenceError):
+            await repository.active_search_candidates(
+                wrong_scope.document_scope,
+                EmbeddingVector(query, dimensions=384),
+                terms=("synthetic",),
+            )
+        async with admin_engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE documents SET lifecycle_status='DELETING', "
+                    "deletion_requested_at=now(), vectors_hidden_at=now() WHERE id=:id"
+                ),
+                {"id": document_id},
+            )
+        with pytest.raises(PersistenceError):
+            await repository.active_search_candidates(
+                scope.document_scope,
+                EmbeddingVector(query, dimensions=384),
+                terms=("synthetic",),
+            )
 
         async with RuntimeSession.begin() as session:
             assert await session.scalar(text("SELECT COUNT(*) FROM document_chunks")) == 0

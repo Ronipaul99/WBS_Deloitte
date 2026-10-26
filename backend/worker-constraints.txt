@@ -19,6 +19,9 @@ numpy==2.5.4
 onnxruntime==1.31.0
 packaging==26.3
 pillow==12.3.0
+pdfplumber==0.11.10
+pdfminer.six==20260107
+pypdfium2==5.14.0
 protobuf==7.36.2
 py-rust-stemmers==0.1.8
 pyyaml==6.0.3

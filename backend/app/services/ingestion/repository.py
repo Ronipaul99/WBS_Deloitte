@@ -15,7 +15,8 @@ from types import MappingProxyType
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, select
+from sqlalchemy import Text, and_, delete, func, literal, select
+from sqlalchemy.dialects.postgresql import REGCONFIG
 from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -36,6 +37,7 @@ from app.models.domain import (
 )
 from app.services.ingestion.embeddings.base import EmbeddingBatchResult, EmbeddingVector
 from app.services.ingestion.errors import PersistenceError, PersistenceErrorCode
+from app.services.ingestion.query_aliases import expand_alias_terms
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _SAFE_IDENTITY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
@@ -788,6 +790,182 @@ class VectorPersistenceRepository:
             )
             rows = (await session.execute(statement)).all()
             return tuple(SimilarityMatch(*row) for row in rows)
+
+    async def active_search_candidates(
+        self,
+        scope: DocumentScope,
+        query_vector: EmbeddingVector,
+        *,
+        terms: tuple[str, ...],
+        candidate_limit: int = 30,
+    ):
+        if (
+            not isinstance(query_vector, EmbeddingVector)
+            or not (
+                isinstance(candidate_limit, int)
+                and not isinstance(candidate_limit, bool)
+                and 1 <= candidate_limit <= self._policy.maximum_similarity_results
+            )
+            or len(terms) > 64
+            or any(
+                not isinstance(term, str) or not term.isalnum() or len(term) > 2000
+                for term in terms
+            )
+        ):
+            raise _input_error()
+        vector = _float32_vector(query_vector)
+        async with self._transaction(scope.tenant_id) as session:
+            # Stabilize activation and deletion while collecting both candidate streams.
+            document = await self._locked_document(session, scope)
+            if document.current_processing_run_id is None:
+                return (), ()
+            paths = (
+                await session.scalars(
+                    select(DocumentChunk.heading_path)
+                    .where(
+                        DocumentChunk.tenant_id == scope.tenant_id,
+                        DocumentChunk.project_id == scope.project_id,
+                        DocumentChunk.document_id == scope.document_id,
+                        DocumentChunk.processing_run_id == document.current_processing_run_id,
+                        DocumentChunk.heading_path.cast(Text).ilike("%GLOSSARY%"),
+                    )
+                    .distinct()
+                    .order_by(DocumentChunk.heading_path)
+                    .limit(128)
+                )
+            ).all()
+            terms = expand_alias_terms(terms, paths)
+            distance = DocumentChunk.embedding.cosine_distance(list(vector)).label("distance")
+            search_text = (
+                DocumentChunk.content + literal(" ") + DocumentChunk.heading_path.cast(Text)
+            )
+            configuration = literal("simple").cast(REGCONFIG)
+            search_vector = func.to_tsvector(configuration, search_text)
+            query = func.to_tsquery(configuration, " | ".join(terms))
+            statement = (
+                select(
+                    DocumentChunk.id,
+                    DocumentChunk.processing_run_id,
+                    DocumentChunk.ordinal,
+                    DocumentChunk.content,
+                    DocumentChunk.heading_path,
+                    DocumentChunk.source_metadata,
+                    distance,
+                )
+                .join(
+                    DocumentProcessingRun,
+                    and_(
+                        DocumentProcessingRun.id == DocumentChunk.processing_run_id,
+                        DocumentProcessingRun.tenant_id == DocumentChunk.tenant_id,
+                        DocumentProcessingRun.project_id == DocumentChunk.project_id,
+                        DocumentProcessingRun.document_id == DocumentChunk.document_id,
+                    ),
+                )
+                .where(
+                    DocumentChunk.tenant_id == scope.tenant_id,
+                    DocumentChunk.project_id == scope.project_id,
+                    DocumentChunk.document_id == scope.document_id,
+                    DocumentChunk.processing_run_id == document.current_processing_run_id,
+                    DocumentProcessingRun.status == DocumentProcessingStatus.COMPLETED.value,
+                )
+            )
+            semantic = list(
+                (
+                    await session.execute(
+                        statement.order_by(
+                            distance,
+                            DocumentChunk.ordinal,
+                            DocumentChunk.id,
+                        ).limit(candidate_limit)
+                    )
+                ).mappings()
+            )
+            lexical = (
+                []
+                if not terms
+                else list(
+                    (
+                        await session.execute(
+                            statement.where(
+                                search_vector.op("@@")(query),
+                            )
+                            .order_by(
+                                func.ts_rank_cd(search_vector, query).desc(),
+                                DocumentChunk.ordinal,
+                                DocumentChunk.id,
+                            )
+                            .limit(candidate_limit)
+                        )
+                    ).mappings()
+                )
+            )
+            return semantic, lexical
+
+    async def restore_completed_run(
+        self,
+        scope: DocumentScope,
+        target_run_id: UUID | str,
+        *,
+        expected_active_run_id: UUID | str,
+    ) -> None:
+        """Explicit rollback with compare-and-swap, lifecycle and content checks."""
+        target_id = _validated_uuid(target_run_id)
+        expected_id = _validated_uuid(expected_active_run_id)
+        async with self._transaction(scope.tenant_id) as session:
+            document = await self._locked_document(session, scope)
+            if document.current_processing_run_id != expected_id:
+                raise PersistenceError(PersistenceErrorCode.DOCUMENT_ACTIVATION_CONFLICT)
+            pending = await session.scalar(
+                select(DocumentProcessingRun.id).where(
+                    DocumentProcessingRun.document_id == scope.document_id,
+                    DocumentProcessingRun.tenant_id == scope.tenant_id,
+                    DocumentProcessingRun.project_id == scope.project_id,
+                    DocumentProcessingRun.status.in_(_ACTIVE_STATUSES),
+                )
+            )
+            run = await session.scalar(
+                select(DocumentProcessingRun)
+                .where(
+                    DocumentProcessingRun.id == target_id,
+                    DocumentProcessingRun.document_id == scope.document_id,
+                    DocumentProcessingRun.tenant_id == scope.tenant_id,
+                    DocumentProcessingRun.project_id == scope.project_id,
+                )
+                .with_for_update()
+            )
+            if (
+                pending
+                or run is None
+                or run.status != DocumentProcessingStatus.COMPLETED.value
+                or run.completed_at is None
+                or not all(
+                    getattr(run, key)
+                    for key in (
+                        "extractor_name",
+                        "extractor_version",
+                        "chunker_version",
+                        "embedding_provider",
+                        "embedding_model",
+                        "embedding_model_revision",
+                        "embedding_formatting_version",
+                    )
+                )
+            ):
+                raise PersistenceError(PersistenceErrorCode.DOCUMENT_PROCESSING_STATE_CONFLICT)
+            self._require_document_hash(document, run.document_content_sha256)
+            rows = await self._chunk_rows(session, scope, target_id)
+            if (
+                not rows
+                or len(rows) != run.chunk_count
+                or [row.ordinal for row in rows] != list(range(run.chunk_count))
+            ):
+                raise PersistenceError(PersistenceErrorCode.DOCUMENT_ACTIVATION_CONFLICT)
+            for row in rows:
+                _float32_vector(row.embedding)
+            document.current_processing_run_id = target_id
+            document.processing_status = DocumentProcessingStatus.COMPLETED.value
+            document.processed_at = run.completed_at
+            document.processing_error_code = None
 
     async def list_superseded_runs(
         self,

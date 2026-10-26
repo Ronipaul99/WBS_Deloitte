@@ -4,10 +4,10 @@ from types import MappingProxyType
 
 from app.services.ingestion.types import ConfirmedDocumentFormat
 
-RELEASE_CHUNKER_VERSION = "1.0.0"
+RELEASE_CHUNKER_VERSION = "1.1.0"
 RELEASE_EXTRACTOR_IDENTITIES = MappingProxyType(
     {
-        ConfirmedDocumentFormat.PDF: ("pypdf-ocrmypdf", "1.0.0"),
+        ConfirmedDocumentFormat.PDF: ("pypdf-ocrmypdf", "1.1.0"),
         ConfirmedDocumentFormat.DOCX: ("python-docx", "1.0.0"),
         ConfirmedDocumentFormat.XLSX: ("openpyxl", "1.0.0"),
         ConfirmedDocumentFormat.CSV: ("python-csv", "1.0.0"),

@@ -44,6 +44,10 @@ from app.services.ingestion.orchestrator import (
     OrchestrationDisposition,
 )
 from app.services.ingestion.registry import ExtractorRegistry
+from app.services.ingestion.release_identity import (
+    RELEASE_CHUNKER_VERSION,
+    release_extractor_identity,
+)
 from app.services.ingestion.repository import VectorPersistenceRepository
 from app.services.ingestion.scanning import MalwareScanResult, MalwareScanStatus
 from app.services.ingestion.types import (
@@ -102,7 +106,7 @@ class FakeScanner:
 
 class PdfExtractor:
     name = "pypdf-ocrmypdf"
-    version = "1.0.0"
+    version = release_extractor_identity(ConfirmedDocumentFormat.PDF)[1]
     format_name = ConfirmedDocumentFormat.PDF
 
     def __init__(self, limits: ExtractionLimits) -> None:
@@ -150,7 +154,7 @@ class PdfExtractor:
 
 
 class FakeChunker:
-    version = "1.0.0"
+    version = RELEASE_CHUNKER_VERSION
 
     def chunk(self, extraction: ExtractionResult) -> ChunkingResult:
         policy = ChunkingPolicy(

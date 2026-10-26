@@ -93,6 +93,8 @@ class ChunkSourceReference:
     row_start: int | None
     row_end: int | None
     extraction_method: ExtractionMethod
+    table_index: int | None = None
+    row_index: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.block_ordinal, int) or isinstance(self.block_ordinal, bool):
@@ -103,6 +105,11 @@ class ChunkSourceReference:
             raise ValueError("role must be a source-reference role")
         if not isinstance(self.extraction_method, ExtractionMethod):
             raise ValueError("extraction_method must be allowlisted")
+        for value in (self.table_index, self.row_index):
+            if value is not None and (
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+            ):
+                raise ValueError("table and row identities must be non-negative integers")
 
     def to_jsonable(self) -> dict[str, object]:
         return {
@@ -113,6 +120,8 @@ class ChunkSourceReference:
             "row_start": self.row_start,
             "row_end": self.row_end,
             "extraction_method": self.extraction_method.value,
+            **({"table_index": self.table_index} if self.table_index is not None else {}),
+            **({"row_index": self.row_index} if self.row_index is not None else {}),
         }
 
 

@@ -70,6 +70,49 @@ def test_heading_transition_creates_boundary_and_overlap_does_not_cross_it() -> 
     assert output.chunks[1].overlap_source_block_ordinals == ()
 
 
+def test_glossary_alias_and_table_caption_context_has_explicit_provenance():
+    result = extraction_result(
+        ConfirmedDocumentFormat.PDF,
+        [
+            {
+                "text": "Power Purchase Agreement or PPA | means the agreement.",
+                "block_type": ExtractedBlockType.TABLE_ROW,
+                "heading_path": ("GLOSSARY", "Power Purchase Agreement or PPA"),
+                "page_number": 1,
+                "metadata": {"table_index": 1},
+            },
+            {
+                "text": "Term | means 25 years from PPA execution.",
+                "block_type": ExtractedBlockType.TABLE_ROW,
+                "heading_path": ("GLOSSARY", "Term"),
+                "page_number": 2,
+                "metadata": {"table_index": 1},
+            },
+            {
+                "text": "The earnest money deposit is listed below:",
+                "page_number": 3,
+                "heading_path": ("7. EMD",),
+            },
+            {
+                "text": "One unit | 100 currency units",
+                "page_number": 3,
+                "block_type": ExtractedBlockType.TABLE_ROW,
+                "heading_path": ("7. EMD",),
+                "metadata": {"table_index": 2},
+            },
+        ],
+    )
+    output = chunker(target_tokens=300, maximum_content_tokens=400).chunk(result)
+    term = next(c for c in output.chunks if 1 in c.primary_source_block_ordinals)
+    assert "Power Purchase Agreement or PPA" in term.content
+    assert term.context_source_block_ordinals == (0,)
+    row = next(c for c in output.chunks if 3 in c.primary_source_block_ordinals)
+    assert "earnest money deposit" in row.content
+    assert row.context_source_block_ordinals == (2,)
+    assert all(c.token_count <= 400 for c in output.chunks)
+    assert {i for c in output.chunks for i in c.primary_source_block_ordinals} == {0, 1, 2, 3}
+
+
 def test_oversized_paragraph_splits_without_loss_and_stays_bounded() -> None:
     text = "Requirement one remains. Requirement two remains. Requirement three remains."
     result = extraction_result(ConfirmedDocumentFormat.DOCX, [{"text": text}])

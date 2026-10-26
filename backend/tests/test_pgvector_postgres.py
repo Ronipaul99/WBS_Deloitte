@@ -55,11 +55,13 @@ async def _insert_run(
                 id, tenant_id, project_id, document_id, job_id, status,
                 document_content_sha256, extractor_name, extractor_version,
                 embedding_provider, embedding_model, embedding_dimensions,
+                chunker_version, embedding_model_revision, embedding_formatting_version,
                 page_count, worksheet_count, block_count, chunk_count
             ) VALUES (
                 :id, :tenant_id, :project_id, :document_id, :job_id, :status,
                 :content_hash, 'step3-test', :extractor_version,
-                'fastembed', 'BAAI/bge-small-en-v1.5', 384, 1, 0, 1, 1
+                'fastembed', 'BAAI/bge-small-en-v1.5', 384,
+                '1.0.0', :revision, 'format-v1', 1, 0, 1, 1
             )
             """
         ),
@@ -72,6 +74,7 @@ async def _insert_run(
             "status": status,
             "content_hash": "a" * 64,
             "extractor_version": extractor_version,
+            "revision": "a" * 40,
         },
     )
 
@@ -124,7 +127,7 @@ async def test_postgresql_extension_rls_grants_and_runtime_role() -> None:
             )
             assert (
                 await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == "d4e7b2c91a63"
+                == "e71c4a9b203d"
             )
             vector_type = await connection.scalar(
                 text(
