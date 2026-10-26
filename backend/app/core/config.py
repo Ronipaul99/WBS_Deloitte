@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     database_url: str = "sqlite+aiosqlite:///./wbs.db"
     direct_database_url: str | None = None
+    # Non-secret role identity for development workers that do not hold migration credentials.
+    database_migration_role_name: str | None = Field(default=None, max_length=63)
     database_use_null_pool: bool = False
     database_pool_size: int = 5
     database_max_overflow: int = 5
@@ -49,6 +51,7 @@ class Settings(BaseSettings):
     metrics_enabled: bool = False
     metrics_bearer_token: str = ""
     document_ingestion_enabled: bool = False
+    document_ingestion_local_development: bool = False
     embedding_provider: str = Field(default="fastembed", min_length=1, max_length=40)
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1, max_length=160)
     embedding_dimensions: int = Field(default=384, ge=1, le=4096)
@@ -275,6 +278,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
+        if self.document_ingestion_local_development and self.app_env != "development":
+            raise ValueError("DOCUMENT_INGESTION_LOCAL_DEVELOPMENT is allowed only in development")
         if self.auth_access_token_seconds_override is not None and self.app_env != "test":
             raise ValueError("AUTH_ACCESS_TOKEN_SECONDS_OVERRIDE is allowed only in test")
         if not self.bootstrap_development_data and self.app_env != "test":
@@ -497,23 +502,42 @@ class Settings(BaseSettings):
             raise ValueError(
                 "DOCUMENT_MAX_CSV_COLUMNS cannot exceed DOCUMENT_MAX_SPREADSHEET_COLUMNS"
             )
-        if self.app_env == "development":
-            raise ValueError("Document ingestion may be enabled only in production or test")
+        if self.app_env == "development" and not self.document_ingestion_local_development:
+            raise ValueError(
+                "Document ingestion may be enabled only in production or test unless "
+                "DOCUMENT_INGESTION_LOCAL_DEVELOPMENT is explicitly enabled"
+            )
         if not self.sqlalchemy_database_url.startswith("postgresql+asyncpg://"):
             raise ValueError("DATABASE_URL must use PostgreSQL when document ingestion is enabled")
-        if not self.direct_database_url:
+        runtime_only_development = (
+            self.document_ingestion_local_development and not self.direct_database_url
+        )
+        if not self.direct_database_url and not (
+            runtime_only_development and self.database_migration_role_name
+        ):
             raise ValueError("DIRECT_DATABASE_URL is required when document ingestion is enabled")
         if not self.sqlalchemy_migration_url.startswith("postgresql+asyncpg://"):
             raise ValueError(
                 "DIRECT_DATABASE_URL must use PostgreSQL when document ingestion is enabled"
             )
-        if self.sqlalchemy_database_url == self.sqlalchemy_migration_url:
+        if not runtime_only_development and (
+            self.sqlalchemy_database_url == self.sqlalchemy_migration_url
+        ):
             raise ValueError(
                 "Document ingestion requires separate runtime and migration database URLs"
             )
-        if not self.database_runtime_role or not self.database_migration_role:
+        migration_role = (
+            self.database_migration_role_name
+            if runtime_only_development
+            else self.database_migration_role
+        )
+        if self.direct_database_url and self.database_migration_role_name and (
+            self.database_migration_role_name != self.database_migration_role
+        ):
+            raise ValueError("DATABASE_MIGRATION_ROLE_NAME must match DIRECT_DATABASE_URL")
+        if not self.database_runtime_role or not migration_role:
             raise ValueError("Document ingestion database URLs must include database roles")
-        if self.database_runtime_role == self.database_migration_role:
+        if self.database_runtime_role == migration_role:
             raise ValueError(
                 "Document ingestion requires separate runtime and migration database roles"
             )
@@ -530,7 +554,19 @@ class Settings(BaseSettings):
             raise ValueError("TASKS_EAGER must be false for document ingestion")
         if self.auto_create_tables:
             raise ValueError("AUTO_CREATE_TABLES must be false for document ingestion")
-        if not self._is_release_redis_url(self.redis_url):
+        if self.document_ingestion_local_development:
+            parts = urlsplit(self.redis_url)
+            if (
+                parts.scheme not in {"redis", "rediss"}
+                or not parts.hostname
+                or any(character.isspace() for character in parts.hostname)
+                or parts.fragment
+                or not parts.password
+            ):
+                raise ValueError(
+                    "Local ingestion requires an authenticated redis:// or rediss:// URL"
+                )
+        elif not self._is_release_redis_url(self.redis_url):
             raise ValueError(
                 "REDIS_URL must be a non-local redis:// or rediss:// URL for document ingestion"
             )

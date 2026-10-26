@@ -326,6 +326,73 @@ def test_ingestion_cannot_be_enabled_as_a_development_feature() -> None:
         Settings(_env_file=None, **ingestion_values(app_env="development"))
 
 
+def local_ingestion_values(**overrides):
+    values = ingestion_values(
+        app_env="development",
+        auth_mode="development",
+        document_ingestion_local_development=True,
+        redis_url="redis://:tunnel-secret@127.0.0.1:16379/0",
+    )
+    values.update(overrides)
+    return values
+
+
+def test_local_ingestion_accepts_authenticated_ssh_tunnel() -> None:
+    settings = Settings(_env_file=None, **local_ingestion_values())
+    assert settings.document_ingestion_enabled
+    assert settings.document_ingestion_local_development
+
+
+def test_local_worker_does_not_need_migration_credentials() -> None:
+    settings = Settings(
+        _env_file=None,
+        **local_ingestion_values(
+            direct_database_url=None,
+            database_migration_role_name="migration",
+            redis_url="redis://:worker-secret@redis:6379/0",
+        ),
+    )
+    assert settings.direct_database_url is None
+    assert settings.database_runtime_role == "runtime"
+
+
+@pytest.mark.parametrize("app_env", ["production", "test"])
+def test_local_ingestion_opt_in_cannot_weaken_other_environments(app_env) -> None:
+    with pytest.raises(ValidationError, match="allowed only in development"):
+        Settings(_env_file=None, **local_ingestion_values(app_env=app_env))
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"redis_url": "redis://127.0.0.1:16379/0"}, "authenticated"),
+        ({"redis_url": "https://:secret@localhost"}, "authenticated"),
+        ({"storage_backend": "local"}, "STORAGE_BACKEND=s3"),
+        ({"tasks_eager": True}, "TASKS_EAGER must be false"),
+        ({"auto_create_tables": True}, "AUTO_CREATE_TABLES must be false"),
+        ({"malware_scan_required": False}, "MALWARE_SCAN_REQUIRED"),
+        ({"embedding_tokenizer_sha256": None}, "Pinned tokenizer"),
+        ({"direct_database_url": None}, "DIRECT_DATABASE_URL is required"),
+        (
+            {"direct_database_url": None, "database_migration_role_name": "runtime"},
+            "separate runtime and migration database roles",
+        ),
+        ({"database_migration_role_name": "wrong-role"}, "must match DIRECT_DATABASE_URL"),
+    ],
+)
+def test_local_ingestion_preserves_dependency_guards(overrides, message) -> None:
+    with pytest.raises(ValidationError, match=message):
+        Settings(_env_file=None, **local_ingestion_values(**overrides))
+
+
+def test_migration_role_name_does_not_replace_production_migration_url() -> None:
+    with pytest.raises(ValidationError, match="DIRECT_DATABASE_URL is required"):
+        Settings(
+            _env_file=None,
+            **ingestion_values(direct_database_url=None, database_migration_role_name="migration"),
+        )
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

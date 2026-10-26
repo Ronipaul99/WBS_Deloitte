@@ -28,6 +28,8 @@ os.environ.update(
         "UPLOAD_ROOT": str(TEST_UPLOAD_ROOT),
         "STORAGE_BACKEND": "local",
         "DOCUMENT_INGESTION_ENABLED": "false",
+        "DOCUMENT_INGESTION_LOCAL_DEVELOPMENT": "false",
+        "DATABASE_MIGRATION_ROLE_NAME": "",
         "TASKS_EAGER": "true",
         "AUTO_CREATE_TABLES": "true",
     }

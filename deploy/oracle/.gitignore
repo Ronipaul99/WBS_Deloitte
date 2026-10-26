@@ -1,0 +1,6 @@
+worker.env
+redis.conf
+redis.password
+*.tar.gz
+ocr-package-versions.env
+worker-runtime.env
