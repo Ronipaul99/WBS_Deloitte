@@ -90,6 +90,7 @@ export default function AppLayout({
     { id: 'templates', label: 'Templates', icon: FileSpreadsheet, permission: PERMISSIONS.TEMPLATE_READ },
     { id: 'exports', label: 'Exports', icon: DownloadCloud, permission: PERMISSIONS.EXPORT_READ },
     { id: 'settings', label: 'Settings', icon: Settings, permission: PERMISSIONS.MEMBER_READ },
+    { id: 'ai-models', label: 'AI Models', icon: Sparkles, permission: PERMISSIONS.LLM_MANAGE },
   ].filter((item) => can(item.permission));
 
   return (

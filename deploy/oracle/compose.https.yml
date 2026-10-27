@@ -1,0 +1,18 @@
+# Start only after a trusted certificate has been issued and exported.
+# docker compose -f compose.web.yml -f compose.acme.yml -f compose.https.yml ...
+services:
+  api:
+    environment:
+      AUTH_COOKIE_SECURE: "true"
+      PUBLIC_UI_URL: https://wbsgenie.duckdns.org
+      CORS_ORIGINS: https://wbsgenie.duckdns.org
+
+  ui:
+    ports:
+      - "443:8443"
+    volumes:
+      - ./nginx.https.conf:/etc/nginx/nginx.conf:ro
+      - tls-certificates:/etc/nginx/tls:ro
+    # HTTP liveness stays local; HTTPS is separately checked with certificate validation.
+    healthcheck:
+      test: [CMD, wget, --quiet, --tries=1, --spider, http://127.0.0.1:8080/healthz]

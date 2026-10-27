@@ -9,6 +9,7 @@ from app.api.routes import (
     identity,
     ingestions,
     jobs,
+    llm_settings,
     members,
     projects,
     sso,
@@ -30,6 +31,7 @@ api_router.include_router(ingestions.router)
 api_router.include_router(summaries.router)
 api_router.include_router(templates.router)
 api_router.include_router(jobs.router)
+api_router.include_router(llm_settings.router)
 api_router.include_router(generations.router)
 api_router.include_router(wbs.router)
 api_router.include_router(validations.router)

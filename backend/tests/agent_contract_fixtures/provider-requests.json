@@ -1,0 +1,140 @@
+{
+  "openai": {
+    "schema_version": "1.0",
+    "request_id": "00000000-0000-0000-0000-00000000000f",
+    "profile": {
+      "schema_version": "1.0",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "connection_id": "00000000-0000-0000-0000-000000000005",
+      "profile_id": "00000000-0000-0000-0000-000000000006",
+      "profile_version": 1,
+      "provider": "openai",
+      "protocol": "responses",
+      "model_id": "synthetic-model-not-a-live-model",
+      "capabilities": {
+        "schema_version": "1.0",
+        "qualification": "synthetic_fixture",
+        "qualification_id": "00000000-0000-0000-0000-000000000007",
+        "tested_at": "2026-10-27T00:00:00Z",
+        "context_tokens": 8192,
+        "output_tokens": 2048,
+        "native_tools": "unknown",
+        "json_schema": "supported",
+        "temperature": "supported",
+        "usage": "unknown",
+        "refusal": "unknown",
+        "truncation": "unknown"
+      },
+      "enabled": false,
+      "timeout_seconds": 60,
+      "max_calls": 120,
+      "max_total_tokens": 100000
+    },
+    "messages": [
+      {
+        "schema_version": "1.0",
+        "role": "user",
+        "content": "Return only the synthetic tender fixture."
+      }
+    ],
+    "response_schema": "summary_content.v1",
+    "output_mode": "validated_json",
+    "allowed_tools": [],
+    "input_token_budget": 2048,
+    "max_output_tokens": 2048,
+    "temperature": null,
+    "tool_results": []
+  },
+  "anthropic": {
+    "schema_version": "1.0",
+    "request_id": "00000000-0000-0000-0000-00000000000f",
+    "profile": {
+      "schema_version": "1.0",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "connection_id": "00000000-0000-0000-0000-000000000005",
+      "profile_id": "00000000-0000-0000-0000-000000000006",
+      "profile_version": 1,
+      "provider": "anthropic",
+      "protocol": "anthropic_messages",
+      "model_id": "synthetic-model-not-a-live-model",
+      "capabilities": {
+        "schema_version": "1.0",
+        "qualification": "synthetic_fixture",
+        "qualification_id": "00000000-0000-0000-0000-000000000007",
+        "tested_at": "2026-10-27T00:00:00Z",
+        "context_tokens": 8192,
+        "output_tokens": 2048,
+        "native_tools": "unknown",
+        "json_schema": "supported",
+        "temperature": "supported",
+        "usage": "unknown",
+        "refusal": "unknown",
+        "truncation": "unknown"
+      },
+      "enabled": false,
+      "timeout_seconds": 60,
+      "max_calls": 120,
+      "max_total_tokens": 100000
+    },
+    "messages": [
+      {
+        "schema_version": "1.0",
+        "role": "user",
+        "content": "Return only the synthetic tender fixture."
+      }
+    ],
+    "response_schema": "summary_content.v1",
+    "output_mode": "validated_json",
+    "allowed_tools": [],
+    "input_token_budget": 2048,
+    "max_output_tokens": 2048,
+    "temperature": null,
+    "tool_results": []
+  },
+  "openai_compatible": {
+    "schema_version": "1.0",
+    "request_id": "00000000-0000-0000-0000-00000000000f",
+    "profile": {
+      "schema_version": "1.0",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "connection_id": "00000000-0000-0000-0000-000000000005",
+      "profile_id": "00000000-0000-0000-0000-000000000006",
+      "profile_version": 1,
+      "provider": "openai_compatible",
+      "protocol": "chat_completions",
+      "model_id": "synthetic-model-not-a-live-model",
+      "capabilities": {
+        "schema_version": "1.0",
+        "qualification": "synthetic_fixture",
+        "qualification_id": "00000000-0000-0000-0000-000000000007",
+        "tested_at": "2026-10-27T00:00:00Z",
+        "context_tokens": 8192,
+        "output_tokens": 2048,
+        "native_tools": "unknown",
+        "json_schema": "supported",
+        "temperature": "supported",
+        "usage": "unknown",
+        "refusal": "unknown",
+        "truncation": "unknown"
+      },
+      "enabled": false,
+      "timeout_seconds": 60,
+      "max_calls": 120,
+      "max_total_tokens": 100000
+    },
+    "messages": [
+      {
+        "schema_version": "1.0",
+        "role": "user",
+        "content": "Return only the synthetic tender fixture."
+      }
+    ],
+    "response_schema": "summary_content.v1",
+    "output_mode": "validated_json",
+    "allowed_tools": [],
+    "input_token_budget": 2048,
+    "max_output_tokens": 2048,
+    "temperature": null,
+    "tool_results": []
+  }
+}

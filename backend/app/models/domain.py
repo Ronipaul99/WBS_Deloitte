@@ -151,6 +151,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_documents_tenant_project", "tenant_id", "project_id"),
         UniqueConstraint("id", "tenant_id", "project_id", name="uq_documents_scope"),
+        UniqueConstraint("id", "tenant_id", name="uq_documents_tenant"),
         ForeignKeyConstraint(
             ["current_processing_run_id", "tenant_id", "project_id", "id"],
             [
@@ -353,6 +354,14 @@ class DocumentProcessingRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_chunks"
     __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "tenant_id",
+            "project_id",
+            "document_id",
+            "processing_run_id",
+            name="uq_chunks_full_scope",
+        ),
         ForeignKeyConstraint(
             ["processing_run_id", "tenant_id", "project_id", "document_id"],
             [
@@ -411,6 +420,38 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_summaries"
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", "document_id", name="uq_document_summary_scope"),
+        ForeignKeyConstraint(
+            ["document_id", "tenant_id"],
+            ["documents.id", "documents.tenant_id"],
+            name="fk_summary_document_tenant",
+        ),
+        ForeignKeyConstraint(
+            ["active_revision_id", "tenant_id", "document_id", "id"],
+            [
+                "summary_revisions.id",
+                "summary_revisions.tenant_id",
+                "summary_revisions.document_id",
+                "summary_revisions.summary_id",
+            ],
+            name="fk_summary_active_revision",
+            use_alter=True,
+        ),
+        CheckConstraint(
+            "revision_version >= 0 AND latest_request_sequence >= 0",
+            name="ck_summary_revision_counters",
+        ),
+        CheckConstraint(
+            "content_origin IN ('legacy_unverified', 'agent_draft')",
+            name="ck_summary_content_origin",
+        ),
+        CheckConstraint(
+            "(active_revision_id IS NULL AND content_origin = 'legacy_unverified') OR "
+            "(active_revision_id IS NOT NULL AND content_origin = 'agent_draft')",
+            name="ck_summary_revision_origin",
+        ),
+    )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"), unique=True)
@@ -419,6 +460,14 @@ class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requirements: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    active_revision_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    revision_version: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    latest_request_sequence: Mapped[int] = mapped_column(
+        Integer, server_default="0", nullable=False
+    )
+    content_origin: Mapped[str] = mapped_column(
+        String(24), server_default="legacy_unverified", nullable=False
+    )
 
 
 class WbsTemplate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -437,6 +486,7 @@ class WbsTemplate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class Job(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "jobs"
     __table_args__ = (
+        UniqueConstraint("id", "tenant_id", name="uq_jobs_id_tenant"),
         Index("ix_jobs_tenant_project", "tenant_id", "project_id"),
         UniqueConstraint("id", "tenant_id", "project_id", name="uq_jobs_scope"),
         CheckConstraint("progress >= 0 AND progress <= 100", name="ck_jobs_progress_range"),

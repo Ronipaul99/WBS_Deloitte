@@ -6,10 +6,13 @@ import asyncio
 import math
 import re
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.services.ingestion.embeddings.base import EmbeddingProvider
-from app.services.ingestion.repository import DocumentScope, VectorPersistenceRepository
+
+if TYPE_CHECKING:
+    from app.services.ingestion.repository import DocumentScope, VectorPersistenceRepository
 
 _STOP_WORDS = frozenset(
     (

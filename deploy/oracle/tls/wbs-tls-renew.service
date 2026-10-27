@@ -1,0 +1,14 @@
+[Unit]
+Description=Renew WBS IP certificate and reload Nginx
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=developer
+Group=developer
+SupplementaryGroups=docker
+WorkingDirectory=/home/developer/wbs-web/deploy/oracle
+ExecStart=/bin/sh /home/developer/wbs-web/deploy/oracle/tls/renew-tls.sh
+TimeoutStartSec=15min

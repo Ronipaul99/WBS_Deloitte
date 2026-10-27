@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     readiness_require_migration_head: bool = False
     metrics_enabled: bool = False
     metrics_bearer_token: str = ""
+    # Step 3 primitives only. No LLM routes/workers are enabled by these settings.
+    llm_security_enabled: bool = False
+    llm_management_enabled: bool = False
+    llm_connection_tests_enabled: bool = False
+    # Operator-issued exact-fingerprint test permits and reviewed model limits.
+    llm_test_authorizations: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    llm_test_reviewed_limits: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    llm_worker_identity: str | None = Field(default=None, max_length=80)
+    agentic_summary_enabled: bool = False
+    llm_credentials_keyring: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    llm_credentials_keyring_file: Path | None = Field(default=None, exclude=True, repr=False)
+    llm_credentials_active_key: str | None = Field(default=None, max_length=80)
+    llm_egress_policy: SecretStr | None = Field(default=None, exclude=True, repr=False)
     document_ingestion_enabled: bool = False
     document_ingestion_local_development: bool = False
     embedding_provider: str = Field(default="fastembed", min_length=1, max_length=40)

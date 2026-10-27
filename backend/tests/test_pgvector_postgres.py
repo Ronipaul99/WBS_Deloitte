@@ -127,7 +127,7 @@ async def test_postgresql_extension_rls_grants_and_runtime_role() -> None:
             )
             assert (
                 await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == "e71c4a9b203d"
+                == "e53c7a19b402"
             )
             vector_type = await connection.scalar(
                 text(

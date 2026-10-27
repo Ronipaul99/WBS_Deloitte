@@ -1,0 +1,33 @@
+# Apply with compose.web.yml during bootstrap AND while HTTPS is active.
+services:
+  ui:
+    volumes:
+      - acme-webroot:/var/www/acme:ro
+
+  certbot:
+    image: certbot/certbot:v5.8.0@sha256:f70ad0adbb7e117f0fe42a63c553f28ea451edabc0148757b6efcd9735acaa20
+    profiles: [tls-tools]
+    restart: "no"
+    init: true
+    user: "0:101"
+    read_only: true
+    mem_limit: 256m
+    cpus: 0.25
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/lib/letsencrypt:rw,noexec,nosuid,size=16m,mode=1777
+      - /var/log/letsencrypt:rw,noexec,nosuid,size=16m,mode=1777
+    volumes:
+      - acme-webroot:/var/www/acme
+      - acme-state:/etc/letsencrypt
+      - tls-certificates:/export
+      - ./tls/deploy-cert.sh:/hooks/deploy-cert.sh:ro
+    networks:
+      - web
+
+volumes:
+  acme-webroot:
+  acme-state:
+  tls-certificates:

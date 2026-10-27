@@ -12,7 +12,7 @@ from app.models.domain import Document, DocumentDeletionOutbox
 from app.services.readiness import application_migration_heads
 
 REVISION = "d4e7b2c91a63"
-APPLICATION_HEAD = "e71c4a9b203d"
+APPLICATION_HEAD = "e53c7a19b402"
 PREVIOUS_REVISION = "c8d4a1e72f09"
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_PATH = (

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check WBS certificate renewal every hour
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10min
+Persistent=true
+Unit=wbs-tls-renew.service
+
+[Install]
+WantedBy=timers.target

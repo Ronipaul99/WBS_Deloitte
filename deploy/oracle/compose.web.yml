@@ -1,0 +1,86 @@
+name: wbs-web
+
+x-service: &service
+  restart: unless-stopped
+  init: true
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  api:
+    <<: *service
+    image: wbs-api:local
+    build:
+      context: ../../backend
+      target: runtime
+    env_file:
+      - path: ./worker.env
+        format: raw
+      - path: ./worker-runtime.env
+        format: raw
+      - path: ./api.env
+        format: raw
+    environment:
+      APP_ENV: development
+      AUTH_MODE: local
+      AUTH_COOKIE_SECURE: "false"
+      TASKS_EAGER: "false"
+      AUTO_CREATE_TABLES: "false"
+      READINESS_REQUIRE_MIGRATION_HEAD: "true"
+      PASSWORD_RECOVERY_ENABLED: "false"
+      TENANT_INVITATIONS_ENABLED: "false"
+      DOCUMENT_RETENTION_ENABLED: "false"
+      DOCUMENT_ORPHAN_CLEANUP_ENABLED: "false"
+      DOCUMENT_RECONCILIATION_REPAIRS_ENABLED: "false"
+      UPLOAD_ROOT: /tmp/wbs/uploads
+      FORWARDED_ALLOW_IPS: 172.29.80.0/28
+    command: [uvicorn, app.main:app, --host, 0.0.0.0, --port, "8000", --proxy-headers]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=96m,mode=1777
+    mem_limit: 640m
+    cpus: 0.75
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks:
+      - web
+      - services
+
+  ui:
+    <<: *service
+    image: wbs-web-ui:local
+    build:
+      context: ../../WBS_UI
+      target: http-proxy-runtime
+      args:
+        VITE_API_URL: /api/v1
+        VITE_AUTH_MODE: local
+        VITE_PASSWORD_RECOVERY_ENABLED: "false"
+        VITE_SSO_ENABLED: "false"
+    ports:
+      - "80:8080"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=8m,mode=1777
+      - /var/cache/nginx:rw,noexec,nosuid,size=64m,mode=1777
+    mem_limit: 128m
+    cpus: 0.25
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - web
+
+networks:
+  web:
+    ipam:
+      config:
+        - subnet: 172.29.80.0/28
+  services:
+    external: true
+    name: wbs-services_default

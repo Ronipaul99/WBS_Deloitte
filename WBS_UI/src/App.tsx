@@ -18,6 +18,7 @@ import InvitationAcceptanceScreen from './views/InvitationAcceptanceScreen';
 import SsoCompletionScreen from './views/SsoCompletionScreen';
 import AccountSettingsScreen from './views/AccountSettingsScreen';
 import HomeScreen from './views/HomeScreen';
+import AiModelSettingsScreen from './views/AiModelSettingsScreen';
 import {
   CreateProjectScreen,
   ProjectsScreen,
@@ -273,8 +274,9 @@ function WorkspaceApp({
   canSwitchWorkspace,
   onSwitchWorkspace,
 }: WorkspaceAppProps) {
+  const directModelRoute = window.location.pathname === '/settings/ai-models';
   const directMemberRoute = window.location.pathname === '/settings/members';
-  const [activeTab, setActiveTab] = useState<string>(directMemberRoute ? 'settings' : 'home');
+  const [activeTab, setActiveTab] = useState<string>(directModelRoute ? 'ai-models' : directMemberRoute ? 'settings' : 'home');
   const [projectScreen, setProjectScreen] = useState<
     'list' | 'create' | 'workspace' | 'wbs' | 'result'
   >('list');
@@ -477,6 +479,7 @@ function WorkspaceApp({
       templates: PERMISSIONS.TEMPLATE_READ,
       exports: PERMISSIONS.EXPORT_READ,
       settings: PERMISSIONS.MEMBER_READ,
+      'ai-models': PERMISSIONS.LLM_MANAGE,
     };
     if (!requiredPermissions[tab] || !can(requiredPermissions[tab])) return;
     if (tab === 'projects') {
@@ -487,7 +490,9 @@ function WorkspaceApp({
       setSelectedProject(null);
       setProjectScreen('list');
     }
-    if (tab === 'settings') {
+    if (tab === 'ai-models') {
+      window.history.pushState({}, '', '/settings/ai-models');
+    } else if (tab === 'settings') {
       setSettingsSection('members');
       window.history.pushState({}, '', '/settings/members');
     } else if (window.location.pathname.startsWith('/settings/')) {
@@ -571,6 +576,10 @@ function WorkspaceApp({
           </div>
         </div>
       );
+    }
+
+    if (activeTab === 'ai-models') {
+      return can(PERMISSIONS.LLM_MANAGE) ? <AiModelSettingsScreen key={activeTenant.id} tenantId={activeTenant.id} /> : <p role="alert">You do not have permission to manage AI models.</p>;
     }
 
     if (activeTab === 'settings') {

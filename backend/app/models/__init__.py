@@ -1,3 +1,14 @@
+from app.models import agent_validation as agent_validation  # noqa: F401, E402
+from app.models import llm_management_validation as llm_management_validation  # noqa: F401, E402
+from app.models.agent_workflows import (
+    AgentCheckpoint,
+    AgentStepRun,
+    AgentWorkflowRun,
+    SummaryApprovalEvent,
+    SummaryEvidence,
+    SummaryRevision,
+    WorkflowDispatchOutbox,
+)
 from app.models.auth import (
     AuthEvent,
     AuthIdentity,
@@ -26,8 +37,27 @@ from app.models.domain import (
     WbsTemplate,
     WbsVersion,
 )
+from app.models.llm import (
+    LlmConnection,
+    LlmCredentialVersion,
+    LlmModelProfile,
+    LlmModelProfileVersion,
+)
+from app.models.llm import LlmConnectionTest as LlmConnectionTest
+from app.models.summary_questions import RfpQuestionBank as RfpQuestionBank
 
 __all__ = [
+    "AgentCheckpoint",
+    "AgentStepRun",
+    "AgentWorkflowRun",
+    "SummaryApprovalEvent",
+    "SummaryEvidence",
+    "SummaryRevision",
+    "WorkflowDispatchOutbox",
+    "LlmConnection",
+    "LlmCredentialVersion",
+    "LlmModelProfile",
+    "LlmModelProfileVersion",
     "ACTIVE_DOCUMENT_PROCESSING_STATUSES",
     "AuthEvent",
     "AuthIdentity",

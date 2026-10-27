@@ -36,6 +36,9 @@ class Permission(StrEnum):
     MEMBER_UPDATE = "member:update"
     MEMBER_REMOVE = "member:remove"
     AUDIT_READ = "audit:read"
+    LLM_MANAGE = "llm:manage"
+    LLM_USE = "llm:use"
+    LLM_USAGE_AUDIT = "llm:usage_audit"
 
 
 VIEWER_PERMISSIONS: Final = frozenset(
@@ -58,6 +61,7 @@ EDITOR_PERMISSIONS: Final = VIEWER_PERMISSIONS | frozenset(
         Permission.DOCUMENT_UPLOAD,
         Permission.DOCUMENT_PROCESS,
         Permission.SUMMARY_UPDATE,
+        Permission.LLM_USE,
         Permission.SUMMARY_APPROVE,
         Permission.TEMPLATE_MANAGE,
         Permission.WBS_GENERATE,
@@ -76,6 +80,8 @@ ADMIN_PERMISSIONS: Final = EDITOR_PERMISSIONS | frozenset(
         Permission.MEMBER_UPDATE,
         Permission.MEMBER_REMOVE,
         Permission.AUDIT_READ,
+        Permission.LLM_MANAGE,
+        Permission.LLM_USAGE_AUDIT,
     }
 )
 
@@ -101,3 +107,14 @@ def resolve_membership_role(value: str) -> MembershipRole | None:
 def permissions_for_role(value: str | MembershipRole) -> frozenset[Permission]:
     role = resolve_membership_role(str(value))
     return ROLE_PERMISSIONS.get(role, NO_PERMISSIONS) if role is not None else NO_PERMISSIONS
+
+
+def assert_llm_permission(role: str | MembershipRole, permission: Permission) -> None:
+    """Server-side repository guard; authentication supplies membership identity."""
+    if permission not in {Permission.LLM_MANAGE, Permission.LLM_USE, Permission.LLM_USAGE_AUDIT}:
+        raise ValueError("an LLM permission is required")
+    granted = permissions_for_role(role)
+    if permission not in granted or (
+        permission == Permission.LLM_USE and Permission.SUMMARY_UPDATE not in granted
+    ):
+        raise PermissionError("model access denied")

@@ -1,0 +1,42 @@
+{
+  "baseline_files": 508,
+  "modified_since_initial": [
+    "backend/app/services/agents/state.py",
+    "backend/tests/test_summary_question_bank.py",
+    "backend/app/models/agent_validation.py",
+    "backend/app/services/ingestion/retrieval.py",
+    "backend/tests/test_agent_schema.py",
+    "backend/tests/test_document_lifecycle_contract.py",
+    "backend/tests/test_ingestion_orchestration_contract.py",
+    "backend/tests/test_pgvector_postgres.py",
+    "backend/tests/test_pgvector_schema.py",
+    "backend/tests/test_vector_persistence_contract.py",
+    "backend/tests/test_vector_persistence_postgres.py",
+    "docs/agentic-summary-generation-steps/README.md",
+    "docs/agentic-summary-generation-steps/step-07-pinned-evidence-coverage.md"
+  ],
+  "added_since_initial": [
+    "backend/app/services/agents/budgeting.py",
+    "backend/app/services/agents/coverage.py",
+    "backend/app/services/agents/evidence.py",
+    "backend/app/services/agents/evidence_storage.py",
+    "backend/app/services/agents/evidence_types.py",
+    "backend/app/services/agents/inventory.py",
+    "backend/app/services/agents/tool_budget.py",
+    "backend/app/services/agents/tools.py",
+    "backend/app/services/ingestion/pinned.py",
+    "backend/migrations/versions/e53c7a19b402_add_pinned_evidence_artifacts.py",
+    "backend/tests/agent_evidence_fixtures.py",
+    "backend/tests/test_agent_evidence.py",
+    "backend/tests/test_agent_evidence_postgres.py",
+    "backend/tests/test_agent_evidence_recovery.py",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/implementation-evidence.md",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/persistence-gap.md",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/remaining-inputs.md",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/scope-manifest.json",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/scope-review.md",
+    "docs/agentic-summary-generation-steps/step-07-artifacts/test-results.md"
+  ],
+  "protected_changes_since_initial": [],
+  "question_bank_note": "Implementation/source files unchanged; only expected application head in its test changes for the additive migration."
+}

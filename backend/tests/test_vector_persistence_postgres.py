@@ -52,7 +52,7 @@ async def test_postgresql_transactional_persistence_rls_concurrency_and_exact_qu
     try:
         async with admin_engine.begin() as connection:
             assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "e71c4a9b203d"
+                "e53c7a19b402"
             )
             runtime_role = make_url(_async_url(RUNTIME_URL)).username
             # Legacy application grants are normally provisioned separately;

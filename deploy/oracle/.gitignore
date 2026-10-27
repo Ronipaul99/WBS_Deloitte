@@ -4,3 +4,6 @@ redis.password
 *.tar.gz
 ocr-package-versions.env
 worker-runtime.env
+api.env
+web-admin-credentials.txt
+.tls-renew.lock

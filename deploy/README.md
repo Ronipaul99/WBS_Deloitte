@@ -1,6 +1,6 @@
 # Production Deployment References
 
-The files in this directory are reviewed reference inputs, not a ready-to-run production stack.
+The production reference files in this directory are reviewed inputs, not a ready-to-run production stack.
 Hosting, DNS, TLS, secret manager, WAF, telemetry backend, and Neon projects must be selected before
 they can become platform-specific manifests.
 
@@ -12,6 +12,11 @@ they can become platform-specific manifests.
   `VITE_API_URL=https://<api-host>/api/v1`; run it with `API_ORIGIN=https://<api-host>` so the CSP
   and compiled API destination agree. The image build/runtime reject missing or non-HTTPS public
   API values.
+- The Oracle VM web deployment uses `oracle/compose.web.yml`, `compose.acme.yml`,
+  and `compose.https.yml` together, via `oracle/web-compose.sh`. It serves UI and
+  `/api/v1` on the same HTTPS origin with a trusted IP certificate and automatic
+  renewal. See `oracle/README.md`; its initial HTTP bootstrap remains documented.
+  The VM deployment retains its existing application environment profile.
 - For enterprise SSO, build the UI with matching `VITE_AUTH_MODE`, `VITE_SSO_ENABLED`, and approved
   provider label values. Register the API callback, not the UI completion path, with the provider.
   Review the Phase 9 provider inventory and runbook before changing from `hybrid` to `oidc`.

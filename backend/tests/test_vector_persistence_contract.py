@@ -21,7 +21,7 @@ from app.services.readiness import application_migration_heads
 from migrations.versions import b6e2f719c4d8_add_vector_persistence_identity as migration
 
 REVISION = "b6e2f719c4d8"
-APPLICATION_HEAD = "e71c4a9b203d"
+APPLICATION_HEAD = "e53c7a19b402"
 PREVIOUS_REVISION = "a4f9c2d18e76"
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[1]

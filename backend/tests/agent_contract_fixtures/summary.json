@@ -1,0 +1,274 @@
+{
+  "schema_version": "1.0",
+  "executive_overview": "Synthetic example; details require human review.",
+  "sections": [
+    {
+      "schema_version": "1.0",
+      "category": "overview",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "issuer_parties",
+      "status": "supported",
+      "text": "Issuer: Example Energy Board.",
+      "fact_ids": [
+        "00000000-0000-0000-0000-00000000000b"
+      ],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "scope_deliverables",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "capacity_units",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "eligibility",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "technical",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "dates_milestones",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "financial_commercial",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "securities_emd_pbg",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "submission_evaluation_award",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "obligations_conditions",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "exclusions",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    },
+    {
+      "schema_version": "1.0",
+      "category": "risks_conflicts_questions",
+      "status": "unknown",
+      "text": "Not established.",
+      "fact_ids": [],
+      "requirement_ids": []
+    }
+  ],
+  "key_points": [],
+  "revision_id": "00000000-0000-0000-0000-00000000000a",
+  "workflow": {
+    "schema_version": "1.0",
+    "workflow_run_id": "00000000-0000-0000-0000-000000000008",
+    "scope": {
+      "schema_version": "1.0",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "project_id": "00000000-0000-0000-0000-000000000002",
+      "document_id": "00000000-0000-0000-0000-000000000003",
+      "processing_run_id": "00000000-0000-0000-0000-000000000004",
+      "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "processing_state": "completed",
+    "requested_by": "00000000-0000-0000-0000-000000000009",
+    "profile": {
+      "schema_version": "1.0",
+      "tenant_id": "00000000-0000-0000-0000-000000000001",
+      "connection_id": "00000000-0000-0000-0000-000000000005",
+      "profile_id": "00000000-0000-0000-0000-000000000006",
+      "profile_version": 1,
+      "provider": "openai_compatible",
+      "protocol": "chat_completions",
+      "model_id": "synthetic-model-not-a-live-model",
+      "capabilities": {
+        "schema_version": "1.0",
+        "qualification": "synthetic_fixture",
+        "qualification_id": "00000000-0000-0000-0000-000000000007",
+        "tested_at": "2026-10-27T00:00:00Z",
+        "context_tokens": 8192,
+        "output_tokens": 2048,
+        "native_tools": "unknown",
+        "json_schema": "supported",
+        "temperature": "supported",
+        "usage": "unknown",
+        "refusal": "unknown",
+        "truncation": "unknown"
+      },
+      "enabled": false,
+      "timeout_seconds": 60,
+      "max_calls": 120,
+      "max_total_tokens": 100000
+    },
+    "workflow_version": "summary-v1",
+    "prompt_version": "tender-v1",
+    "output_schema_version": "tender_summary.v1"
+  },
+  "generated_at": "2026-10-27T00:00:00Z",
+  "review_state": "draft",
+  "facts": [
+    {
+      "schema_version": "1.0",
+      "fact_id": "00000000-0000-0000-0000-00000000000b",
+      "category": "issuer_parties",
+      "critical_class": "issuer",
+      "status": "supported",
+      "statement": "Issuer: Example Energy Board.",
+      "original_value": "Example Energy Board",
+      "normalized_number": null,
+      "unit": null,
+      "currency": null,
+      "conditions": [],
+      "alternatives": [],
+      "evidence_ids": [
+        "00000000-0000-0000-0000-00000000000d"
+      ]
+    }
+  ],
+  "requirements": [
+    {
+      "schema_version": "1.0",
+      "requirement_id": "00000000-0000-0000-0000-00000000000c",
+      "display_code": "REQ-001",
+      "obligation": "Submission requirements have not been established.",
+      "status": "unknown",
+      "responsible_party": null,
+      "deliverable": null,
+      "acceptance_criteria": [],
+      "dependency_ids": [],
+      "conditions": [],
+      "evidence_ids": []
+    }
+  ],
+  "evidence": [
+    {
+      "schema_version": "1.0",
+      "evidence_id": "00000000-0000-0000-0000-00000000000d",
+      "scope": {
+        "schema_version": "1.0",
+        "tenant_id": "00000000-0000-0000-0000-000000000001",
+        "project_id": "00000000-0000-0000-0000-000000000002",
+        "document_id": "00000000-0000-0000-0000-000000000003",
+        "processing_run_id": "00000000-0000-0000-0000-000000000004",
+        "source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "chunk_id": "00000000-0000-0000-0000-00000000000e",
+      "chunk_sha256": "3e9f7e073bb4796b3a7230f631f9b1ec4111d5ff70bd6fd55afc0df203ae5bd3",
+      "physical_pages": [
+        1
+      ],
+      "heading_path": [
+        "Synthetic tender"
+      ],
+      "exact_quote": "Issuer: Example Energy Board.",
+      "char_start": 19,
+      "char_end": 48,
+      "offset_unit": "unicode_codepoint",
+      "printed_page_label": null,
+      "table_id": null,
+      "row_id": null
+    }
+  ],
+  "coverage": {
+    "schema_version": "1.0",
+    "primary_chunk_ids": [
+      "00000000-0000-0000-0000-00000000000e"
+    ],
+    "processed_chunk_ids": [
+      "00000000-0000-0000-0000-00000000000e"
+    ],
+    "unprocessed_chunk_ids": [],
+    "failed_chunk_ids": [],
+    "sections": [
+      {
+        "schema_version": "1.0",
+        "section_id": "synthetic-section",
+        "status": "processed"
+      }
+    ],
+    "unresolved_categories": [
+      "overview",
+      "scope_deliverables",
+      "capacity_units",
+      "eligibility",
+      "technical",
+      "dates_milestones",
+      "financial_commercial",
+      "securities_emd_pbg",
+      "submission_evaluation_award",
+      "obligations_conditions",
+      "exclusions",
+      "risks_conflicts_questions"
+    ],
+    "truncated": false
+  },
+  "verification": {
+    "schema_version": "1.0",
+    "checked_claim_ids": [
+      "00000000-0000-0000-0000-00000000000b",
+      "00000000-0000-0000-0000-00000000000c"
+    ],
+    "findings": [],
+    "revision_id": "00000000-0000-0000-0000-00000000000a",
+    "repair_pass": 0,
+    "verdict": "review_required"
+  },
+  "usage": {
+    "schema_version": "1.0",
+    "source": "unknown",
+    "input_tokens": null,
+    "output_tokens": null
+  }
+}

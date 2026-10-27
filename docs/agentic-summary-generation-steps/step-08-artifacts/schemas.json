@@ -1,0 +1,1662 @@
+{
+  "AnalystContent": {
+    "$defs": {
+      "AnalystQuote": {
+        "additionalProperties": false,
+        "description": "Untrusted quote proposal; trusted Step 7 code supplies the final locator.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "quote_id": {
+            "format": "uuid",
+            "title": "Quote Id",
+            "type": "string"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "char_start": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "title": "Char Start",
+            "type": "integer"
+          },
+          "char_end": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Char End",
+            "type": "integer"
+          },
+          "exact_quote": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Exact Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote_id",
+          "chunk_id",
+          "char_start",
+          "char_end",
+          "exact_quote"
+        ],
+        "title": "AnalystQuote",
+        "type": "object"
+      },
+      "CriticalFactClass": {
+        "enum": [
+          "other",
+          "issuer",
+          "capacity",
+          "unit_count",
+          "eligibility",
+          "date",
+          "financial_value",
+          "emd",
+          "pbg",
+          "conditional_rule"
+        ],
+        "title": "CriticalFactClass",
+        "type": "string"
+      },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "critical_class": {
+            "$ref": "#/$defs/CriticalFactClass"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "statement": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Statement",
+            "type": "string"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Original Value"
+          },
+          "normalized_number": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Normalized Number"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fact_id",
+          "category",
+          "critical_class",
+          "status",
+          "statement"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "Requirement": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "requirement_id": {
+            "format": "uuid",
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "display_code": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Code",
+            "type": "string"
+          },
+          "obligation": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Obligation",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "responsible_party": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Responsible Party"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliverable"
+          },
+          "acceptance_criteria": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "dependency_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Dependency Ids",
+            "type": "array"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "display_code",
+          "obligation",
+          "status"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Model-writable extraction only. IDs are proposals, not durable identities.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "facts": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Fact"
+        },
+        "maxItems": 100,
+        "title": "Facts",
+        "type": "array"
+      },
+      "requirements": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Requirement"
+        },
+        "maxItems": 100,
+        "title": "Requirements",
+        "type": "array"
+      },
+      "unresolved_categories": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/TenderCategory"
+        },
+        "maxItems": 13,
+        "title": "Unresolved Categories",
+        "type": "array"
+      },
+      "quotes": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/AnalystQuote"
+        },
+        "maxItems": 128,
+        "title": "Quotes",
+        "type": "array"
+      },
+      "no_facts_reason": {
+        "anyOf": [
+          {
+            "enum": [
+              "irrelevant_material",
+              "no_extractable_tender_facts"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "No Facts Reason"
+      }
+    },
+    "title": "AnalystContent",
+    "type": "object"
+  },
+  "AnalystArtifact": {
+    "$defs": {
+      "AnalystBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "analyst_batch.v1",
+            "default": "analyst_batch.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "batch": {
+            "$ref": "#/$defs/ReadingBatch"
+          },
+          "extraction": {
+            "$ref": "#/$defs/ExtractionRecord"
+          },
+          "completion": {
+            "$ref": "#/$defs/BatchCompletion"
+          }
+        },
+        "required": [
+          "batch",
+          "extraction",
+          "completion"
+        ],
+        "title": "AnalystBatch",
+        "type": "object"
+      },
+      "BatchCompletion": {
+        "additionalProperties": false,
+        "description": "Trusted controller receipt for a validated artifact, never a model assertion.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "inventory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "batch_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Batch Sha256",
+            "type": "string"
+          },
+          "primary_chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Primary Chunk Ids",
+            "type": "array"
+          },
+          "artifact_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Artifact Sha256",
+            "type": "string"
+          },
+          "truncated": {
+            "const": false,
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "inventory_sha256",
+          "batch_sha256",
+          "primary_chunk_ids",
+          "artifact_sha256"
+        ],
+        "title": "BatchCompletion",
+        "type": "object"
+      },
+      "CriticalFactClass": {
+        "enum": [
+          "other",
+          "issuer",
+          "capacity",
+          "unit_count",
+          "eligibility",
+          "date",
+          "financial_value",
+          "emd",
+          "pbg",
+          "conditional_rule"
+        ],
+        "title": "CriticalFactClass",
+        "type": "string"
+      },
+      "EvidenceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/SourceScope"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "chunk_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Chunk Sha256",
+            "type": "string"
+          },
+          "physical_pages": {
+            "items": {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Physical Pages",
+            "type": "array"
+          },
+          "heading_path": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Heading Path",
+            "type": "array"
+          },
+          "exact_quote": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Exact Quote",
+            "type": "string"
+          },
+          "char_start": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "title": "Char Start",
+            "type": "integer"
+          },
+          "char_end": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Char End",
+            "type": "integer"
+          },
+          "offset_unit": {
+            "const": "unicode_codepoint",
+            "default": "unicode_codepoint",
+            "title": "Offset Unit",
+            "type": "string"
+          },
+          "printed_page_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Printed Page Label"
+          },
+          "table_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Table Id"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Row Id"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "scope",
+          "chunk_id",
+          "chunk_sha256",
+          "physical_pages",
+          "exact_quote",
+          "char_start",
+          "char_end"
+        ],
+        "title": "EvidenceReference",
+        "type": "object"
+      },
+      "ExtractionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "extraction.v1",
+            "default": "extraction.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "binding": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Binding",
+            "type": "string"
+          },
+          "origin_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Origin Sha256",
+            "type": "string"
+          },
+          "findings": {
+            "$ref": "#/$defs/FactBatch"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/EvidenceReference"
+            },
+            "maxItems": 128,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "aliases": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FindingAlias"
+            },
+            "maxItems": 200,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "no_facts_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "irrelevant_material",
+                  "no_extractable_tender_facts"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "No Facts Reason"
+          },
+          "semantic_support": {
+            "const": "analyst_asserted_not_independently_verified",
+            "default": "analyst_asserted_not_independently_verified",
+            "title": "Semantic Support",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "origin_sha256",
+          "findings"
+        ],
+        "title": "ExtractionRecord",
+        "type": "object"
+      },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "critical_class": {
+            "$ref": "#/$defs/CriticalFactClass"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "statement": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Statement",
+            "type": "string"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Original Value"
+          },
+          "normalized_number": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Normalized Number"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fact_id",
+          "category",
+          "critical_class",
+          "status",
+          "statement"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
+      "FactBatch": {
+        "additionalProperties": false,
+        "description": "Analyst output; scope and evidence locators are never model-selected.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "facts": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/Fact"
+            },
+            "maxItems": 100,
+            "title": "Facts",
+            "type": "array"
+          },
+          "requirements": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/Requirement"
+            },
+            "maxItems": 100,
+            "title": "Requirements",
+            "type": "array"
+          },
+          "unresolved_categories": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/TenderCategory"
+            },
+            "maxItems": 13,
+            "title": "Unresolved Categories",
+            "type": "array"
+          }
+        },
+        "title": "FactBatch",
+        "type": "object"
+      },
+      "FindingAlias": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "origin_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Origin Sha256",
+            "type": "string"
+          },
+          "proposed_id": {
+            "format": "uuid",
+            "title": "Proposed Id",
+            "type": "string"
+          },
+          "stable_id": {
+            "format": "uuid",
+            "title": "Stable Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "origin_sha256",
+          "proposed_id",
+          "stable_id"
+        ],
+        "title": "FindingAlias",
+        "type": "object"
+      },
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "GapFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "state": {
+            "enum": [
+              "unknown_not_searched",
+              "not_found_within_allowance",
+              "conflicting",
+              "incomplete_reading",
+              "budget_exhausted",
+              "search_unavailable",
+              "candidate_found_unverified"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "absence_proven": {
+            "const": false,
+            "default": false,
+            "title": "Absence Proven",
+            "type": "boolean"
+          },
+          "analyst_reported_unresolved": {
+            "default": false,
+            "title": "Analyst Reported Unresolved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "state"
+        ],
+        "title": "GapFinding",
+        "type": "object"
+      },
+      "GapRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "analyst_gap.v1",
+            "default": "analyst_gap.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "binding": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Binding",
+            "type": "string"
+          },
+          "inventory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "round": {
+            "maximum": 2,
+            "minimum": 0,
+            "title": "Round",
+            "type": "integer"
+          },
+          "requested_categories": {
+            "items": {
+              "$ref": "#/$defs/TenderCategory"
+            },
+            "maxItems": 13,
+            "minItems": 1,
+            "title": "Requested Categories",
+            "type": "array"
+          },
+          "extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExtractionRecord"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "budget_exhausted",
+              "blocked"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/$defs/Usage"
+          }
+        },
+        "required": [
+          "binding",
+          "inventory_sha256",
+          "round",
+          "requested_categories",
+          "outcome"
+        ],
+        "title": "GapRecord",
+        "type": "object"
+      },
+      "ReadingBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "reading_batch.v1",
+            "default": "reading_batch.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "inventory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "budget_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Budget Sha256",
+            "type": "string"
+          },
+          "index": {
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "primary_chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Primary Chunk Ids",
+            "type": "array"
+          },
+          "context_chunk_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Context Chunk Ids",
+            "type": "array"
+          },
+          "section_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "input_estimate": {
+            "minimum": 1,
+            "title": "Input Estimate",
+            "type": "integer"
+          },
+          "accounting": {
+            "enum": [
+              "approved_tokenizer",
+              "utf8_upper_estimate"
+            ],
+            "title": "Accounting",
+            "type": "string"
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "oversized_context",
+                  "run_budget_exhausted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocked Reason"
+          }
+        },
+        "required": [
+          "inventory_sha256",
+          "budget_sha256",
+          "index",
+          "primary_chunk_ids",
+          "section_id",
+          "input_estimate",
+          "accounting"
+        ],
+        "title": "ReadingBatch",
+        "type": "object"
+      },
+      "RegisterPage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "fact_register_page.v1",
+            "default": "fact_register_page.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "binding": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Binding",
+            "type": "string"
+          },
+          "inventory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "section",
+              "document"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Id"
+          },
+          "index": {
+            "maximum": 10000,
+            "minimum": 0,
+            "title": "Index",
+            "type": "integer"
+          },
+          "previous_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Previous Sha256"
+          },
+          "findings": {
+            "$ref": "#/$defs/FactBatch"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/EvidenceReference"
+            },
+            "maxItems": 128,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "aliases": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/FindingAlias"
+            },
+            "maxItems": 1000,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "inputs_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inputs Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "inventory_sha256",
+          "level",
+          "index",
+          "findings",
+          "inputs_sha256"
+        ],
+        "title": "RegisterPage",
+        "type": "object"
+      },
+      "RegisterSeal": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "version": {
+            "const": "fact_register.v1",
+            "default": "fact_register.v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "binding": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Binding",
+            "type": "string"
+          },
+          "inventory_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inventory Sha256",
+            "type": "string"
+          },
+          "inputs_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Inputs Sha256",
+            "type": "string"
+          },
+          "root_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Sha256"
+          },
+          "page_count": {
+            "maximum": 10000,
+            "minimum": 0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "reading_complete": {
+            "title": "Reading Complete",
+            "type": "boolean"
+          },
+          "gaps": {
+            "items": {
+              "$ref": "#/$defs/GapFinding"
+            },
+            "maxItems": 13,
+            "minItems": 13,
+            "title": "Gaps",
+            "type": "array"
+          },
+          "semantic_support": {
+            "const": "not_independently_verified",
+            "default": "not_independently_verified",
+            "title": "Semantic Support",
+            "type": "string"
+          }
+        },
+        "required": [
+          "binding",
+          "inventory_sha256",
+          "inputs_sha256",
+          "root_sha256",
+          "page_count",
+          "reading_complete",
+          "gaps"
+        ],
+        "title": "RegisterSeal",
+        "type": "object"
+      },
+      "Requirement": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "requirement_id": {
+            "format": "uuid",
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "display_code": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Code",
+            "type": "string"
+          },
+          "obligation": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Obligation",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "responsible_party": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Responsible Party"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliverable"
+          },
+          "acceptance_criteria": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "dependency_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Dependency Ids",
+            "type": "array"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "display_code",
+          "obligation",
+          "status"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      },
+      "SourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "processing_run_id": {
+            "format": "uuid",
+            "title": "Processing Run Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "project_id",
+          "document_id",
+          "processing_run_id",
+          "source_sha256"
+        ],
+        "title": "SourceScope",
+        "type": "object"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      },
+      "Usage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source": {
+            "default": "unknown",
+            "enum": [
+              "reported",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          }
+        },
+        "title": "Usage",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Nested in existing orchestration checkpoint; receipt and extraction commit together.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "kind": {
+        "enum": [
+          "analyst_batch.v1",
+          "analyst_gap.v1",
+          "fact_register_page.v1",
+          "fact_register.v1"
+        ],
+        "title": "Kind",
+        "type": "string"
+      },
+      "payload": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AnalystBatch"
+          },
+          {
+            "$ref": "#/$defs/GapRecord"
+          },
+          {
+            "$ref": "#/$defs/RegisterPage"
+          },
+          {
+            "$ref": "#/$defs/RegisterSeal"
+          }
+        ],
+        "title": "Payload"
+      }
+    },
+    "required": [
+      "kind",
+      "payload"
+    ],
+    "title": "AnalystArtifact",
+    "type": "object"
+  },
+  "AnalystPolicy": {
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "version": {
+        "const": "analyst_policy.v1",
+        "default": "analyst_policy.v1",
+        "title": "Version",
+        "type": "string"
+      },
+      "max_tool_rounds": {
+        "default": 2,
+        "maximum": 3,
+        "minimum": 0,
+        "title": "Max Tool Rounds",
+        "type": "integer"
+      },
+      "max_gap_rounds": {
+        "default": 1,
+        "maximum": 3,
+        "minimum": 0,
+        "title": "Max Gap Rounds",
+        "type": "integer"
+      },
+      "max_register_entries": {
+        "default": 2500,
+        "maximum": 5000,
+        "minimum": 1,
+        "title": "Max Register Entries",
+        "type": "integer"
+      },
+      "max_register_bytes": {
+        "default": 4000000,
+        "maximum": 8000000,
+        "minimum": 1024,
+        "title": "Max Register Bytes",
+        "type": "integer"
+      }
+    },
+    "title": "AnalystPolicy",
+    "type": "object"
+  }
+}

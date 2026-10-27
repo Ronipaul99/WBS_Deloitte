@@ -1,0 +1,4347 @@
+{
+  "WorkflowInput": {
+    "$defs": {
+      "APIProtocol": {
+        "enum": [
+          "responses",
+          "anthropic_messages",
+          "chat_completions"
+        ],
+        "title": "APIProtocol",
+        "type": "string"
+      },
+      "ModelProfileSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_version": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/$defs/Provider"
+          },
+          "protocol": {
+            "$ref": "#/$defs/APIProtocol"
+          },
+          "model_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/$defs/ProviderCapabilities"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "timeout_seconds": {
+            "default": 60,
+            "maximum": 600,
+            "minimum": 1,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "max_calls": {
+            "default": 120,
+            "maximum": 120,
+            "minimum": 1,
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "default": 100000,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "connection_id",
+          "profile_id",
+          "profile_version",
+          "provider",
+          "protocol",
+          "model_id",
+          "capabilities"
+        ],
+        "title": "ModelProfileSnapshot",
+        "type": "object"
+      },
+      "Provider": {
+        "enum": [
+          "openai",
+          "anthropic",
+          "openai_compatible"
+        ],
+        "title": "Provider",
+        "type": "string"
+      },
+      "ProviderCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "qualification": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "synthetic_fixture",
+              "live_worker"
+            ],
+            "title": "Qualification",
+            "type": "string"
+          },
+          "qualification_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Qualification Id"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tested At"
+          },
+          "context_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          },
+          "native_tools": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "json_schema": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "temperature": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "usage": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "refusal": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "truncation": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          }
+        },
+        "title": "ProviderCapabilities",
+        "type": "object"
+      },
+      "SourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "processing_run_id": {
+            "format": "uuid",
+            "title": "Processing Run Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "project_id",
+          "document_id",
+          "processing_run_id",
+          "source_sha256"
+        ],
+        "title": "SourceScope",
+        "type": "object"
+      },
+      "Support": {
+        "enum": [
+          "unknown",
+          "supported",
+          "unsupported"
+        ],
+        "title": "Support",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Server-created only. A completion assertion is not a database authorization check.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "workflow_run_id": {
+        "format": "uuid",
+        "title": "Workflow Run Id",
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/$defs/SourceScope"
+      },
+      "processing_state": {
+        "const": "completed",
+        "title": "Processing State",
+        "type": "string"
+      },
+      "requested_by": {
+        "format": "uuid",
+        "title": "Requested By",
+        "type": "string"
+      },
+      "profile": {
+        "$ref": "#/$defs/ModelProfileSnapshot"
+      },
+      "workflow_version": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+        "title": "Workflow Version",
+        "type": "string"
+      },
+      "prompt_version": {
+        "maxLength": 80,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+        "title": "Prompt Version",
+        "type": "string"
+      },
+      "output_schema_version": {
+        "const": "tender_summary.v1",
+        "title": "Output Schema Version",
+        "type": "string"
+      }
+    },
+    "required": [
+      "workflow_run_id",
+      "scope",
+      "processing_state",
+      "requested_by",
+      "profile",
+      "workflow_version",
+      "prompt_version",
+      "output_schema_version"
+    ],
+    "title": "WorkflowInput",
+    "type": "object"
+  },
+  "ModelProfileSnapshot": {
+    "$defs": {
+      "APIProtocol": {
+        "enum": [
+          "responses",
+          "anthropic_messages",
+          "chat_completions"
+        ],
+        "title": "APIProtocol",
+        "type": "string"
+      },
+      "Provider": {
+        "enum": [
+          "openai",
+          "anthropic",
+          "openai_compatible"
+        ],
+        "title": "Provider",
+        "type": "string"
+      },
+      "ProviderCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "qualification": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "synthetic_fixture",
+              "live_worker"
+            ],
+            "title": "Qualification",
+            "type": "string"
+          },
+          "qualification_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Qualification Id"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tested At"
+          },
+          "context_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          },
+          "native_tools": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "json_schema": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "temperature": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "usage": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "refusal": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "truncation": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          }
+        },
+        "title": "ProviderCapabilities",
+        "type": "object"
+      },
+      "Support": {
+        "enum": [
+          "unknown",
+          "supported",
+          "unsupported"
+        ],
+        "title": "Support",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "tenant_id": {
+        "format": "uuid",
+        "title": "Tenant Id",
+        "type": "string"
+      },
+      "connection_id": {
+        "format": "uuid",
+        "title": "Connection Id",
+        "type": "string"
+      },
+      "profile_id": {
+        "format": "uuid",
+        "title": "Profile Id",
+        "type": "string"
+      },
+      "profile_version": {
+        "maximum": 1000000,
+        "minimum": 1,
+        "title": "Profile Version",
+        "type": "integer"
+      },
+      "provider": {
+        "$ref": "#/$defs/Provider"
+      },
+      "protocol": {
+        "$ref": "#/$defs/APIProtocol"
+      },
+      "model_id": {
+        "maxLength": 160,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Model Id",
+        "type": "string"
+      },
+      "capabilities": {
+        "$ref": "#/$defs/ProviderCapabilities"
+      },
+      "enabled": {
+        "default": false,
+        "title": "Enabled",
+        "type": "boolean"
+      },
+      "timeout_seconds": {
+        "default": 60,
+        "maximum": 600,
+        "minimum": 1,
+        "title": "Timeout Seconds",
+        "type": "integer"
+      },
+      "max_calls": {
+        "default": 120,
+        "maximum": 120,
+        "minimum": 1,
+        "title": "Max Calls",
+        "type": "integer"
+      },
+      "max_total_tokens": {
+        "default": 100000,
+        "maximum": 1000000,
+        "minimum": 1,
+        "title": "Max Total Tokens",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "tenant_id",
+      "connection_id",
+      "profile_id",
+      "profile_version",
+      "provider",
+      "protocol",
+      "model_id",
+      "capabilities"
+    ],
+    "title": "ModelProfileSnapshot",
+    "type": "object"
+  },
+  "ProviderCapabilities": {
+    "$defs": {
+      "Support": {
+        "enum": [
+          "unknown",
+          "supported",
+          "unsupported"
+        ],
+        "title": "Support",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "qualification": {
+        "default": "pending",
+        "enum": [
+          "pending",
+          "synthetic_fixture",
+          "live_worker"
+        ],
+        "title": "Qualification",
+        "type": "string"
+      },
+      "qualification_id": {
+        "anyOf": [
+          {
+            "format": "uuid",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Qualification Id"
+      },
+      "tested_at": {
+        "anyOf": [
+          {
+            "format": "date-time",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Tested At"
+      },
+      "context_tokens": {
+        "anyOf": [
+          {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Context Tokens"
+      },
+      "output_tokens": {
+        "anyOf": [
+          {
+            "maximum": 1000000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Output Tokens"
+      },
+      "native_tools": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      },
+      "json_schema": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      },
+      "temperature": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      },
+      "usage": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      },
+      "refusal": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      },
+      "truncation": {
+        "$ref": "#/$defs/Support",
+        "default": "unknown"
+      }
+    },
+    "title": "ProviderCapabilities",
+    "type": "object"
+  },
+  "GenerationRequest": {
+    "$defs": {
+      "APIProtocol": {
+        "enum": [
+          "responses",
+          "anthropic_messages",
+          "chat_completions"
+        ],
+        "title": "APIProtocol",
+        "type": "string"
+      },
+      "LookupDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "lookup_definition",
+            "title": "Name",
+            "type": "string"
+          },
+          "term": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "term"
+        ],
+        "title": "LookupDefinition",
+        "type": "object"
+      },
+      "Message": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "content": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "ModelProfileSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_version": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/$defs/Provider"
+          },
+          "protocol": {
+            "$ref": "#/$defs/APIProtocol"
+          },
+          "model_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/$defs/ProviderCapabilities"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "timeout_seconds": {
+            "default": 60,
+            "maximum": 600,
+            "minimum": 1,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "max_calls": {
+            "default": 120,
+            "maximum": 120,
+            "minimum": 1,
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "default": 100000,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "connection_id",
+          "profile_id",
+          "profile_version",
+          "provider",
+          "protocol",
+          "model_id",
+          "capabilities"
+        ],
+        "title": "ModelProfileSnapshot",
+        "type": "object"
+      },
+      "Provider": {
+        "enum": [
+          "openai",
+          "anthropic",
+          "openai_compatible"
+        ],
+        "title": "Provider",
+        "type": "string"
+      },
+      "ProviderCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "qualification": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "synthetic_fixture",
+              "live_worker"
+            ],
+            "title": "Qualification",
+            "type": "string"
+          },
+          "qualification_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Qualification Id"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tested At"
+          },
+          "context_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          },
+          "native_tools": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "json_schema": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "temperature": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "usage": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "refusal": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "truncation": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          }
+        },
+        "title": "ProviderCapabilities",
+        "type": "object"
+      },
+      "ReadChunkNeighbors": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_chunk_neighbors",
+            "title": "Name",
+            "type": "string"
+          },
+          "chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Chunk Ids",
+            "type": "array"
+          },
+          "radius": {
+            "default": 1,
+            "maximum": 2,
+            "minimum": 0,
+            "title": "Radius",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "chunk_ids"
+        ],
+        "title": "ReadChunkNeighbors",
+        "type": "object"
+      },
+      "ReadSection": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_section",
+            "title": "Name",
+            "type": "string"
+          },
+          "section_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "cursor": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Cursor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "section_id"
+        ],
+        "title": "ReadSection",
+        "type": "object"
+      },
+      "SearchDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "search_document",
+            "title": "Name",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Query",
+            "type": "string"
+          },
+          "section_filter": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Filter"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "query"
+        ],
+        "title": "SearchDocument",
+        "type": "object"
+      },
+      "Support": {
+        "enum": [
+          "unknown",
+          "supported",
+          "unsupported"
+        ],
+        "title": "Support",
+        "type": "string"
+      },
+      "ToolAction": {
+        "additionalProperties": false,
+        "description": "Model-selected arguments only. Trusted code injects authorized run scope.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "call_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Call Id",
+            "type": "string"
+          },
+          "arguments": {
+            "discriminator": {
+              "mapping": {
+                "lookup_definition": "#/$defs/LookupDefinition",
+                "read_chunk_neighbors": "#/$defs/ReadChunkNeighbors",
+                "read_section": "#/$defs/ReadSection",
+                "search_document": "#/$defs/SearchDocument"
+              },
+              "propertyName": "name"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SearchDocument"
+              },
+              {
+                "$ref": "#/$defs/ReadSection"
+              },
+              {
+                "$ref": "#/$defs/ReadChunkNeighbors"
+              },
+              {
+                "$ref": "#/$defs/LookupDefinition"
+              }
+            ],
+            "title": "Arguments"
+          }
+        },
+        "required": [
+          "call_id",
+          "arguments"
+        ],
+        "title": "ToolAction",
+        "type": "object"
+      },
+      "ToolExchange": {
+        "additionalProperties": false,
+        "description": "A completed, trusted tool exchange for protocol replay; never executes a tool.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/$defs/ToolAction"
+          },
+          "output_json": {
+            "maxLength": 64000,
+            "minLength": 2,
+            "title": "Output Json",
+            "type": "string"
+          },
+          "is_error": {
+            "default": false,
+            "title": "Is Error",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "action",
+          "output_json"
+        ],
+        "title": "ToolExchange",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "request_id": {
+        "format": "uuid",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "profile": {
+        "$ref": "#/$defs/ModelProfileSnapshot"
+      },
+      "messages": {
+        "items": {
+          "$ref": "#/$defs/Message"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "title": "Messages",
+        "type": "array"
+      },
+      "response_schema": {
+        "enum": [
+          "facts.v1",
+          "analyst.v1",
+          "writer_fragment.v1",
+          "summary_content.v1",
+          "verification.v1"
+        ],
+        "title": "Response Schema",
+        "type": "string"
+      },
+      "output_mode": {
+        "default": "validated_json",
+        "enum": [
+          "validated_json",
+          "native_json_schema"
+        ],
+        "title": "Output Mode",
+        "type": "string"
+      },
+      "allowed_tools": {
+        "default": [],
+        "items": {
+          "enum": [
+            "search_document",
+            "read_section",
+            "read_chunk_neighbors",
+            "lookup_definition"
+          ],
+          "type": "string"
+        },
+        "maxItems": 4,
+        "title": "Allowed Tools",
+        "type": "array"
+      },
+      "input_token_budget": {
+        "maximum": 1000000,
+        "minimum": 1,
+        "title": "Input Token Budget",
+        "type": "integer"
+      },
+      "max_output_tokens": {
+        "maximum": 1000000,
+        "minimum": 1,
+        "title": "Max Output Tokens",
+        "type": "integer"
+      },
+      "temperature": {
+        "anyOf": [
+          {
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Temperature"
+      },
+      "tool_results": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ToolExchange"
+        },
+        "maxItems": 4,
+        "title": "Tool Results",
+        "type": "array"
+      }
+    },
+    "required": [
+      "request_id",
+      "profile",
+      "messages",
+      "response_schema",
+      "input_token_budget",
+      "max_output_tokens"
+    ],
+    "title": "GenerationRequest",
+    "type": "object"
+  },
+  "GenerationResult": {
+    "$defs": {
+      "FailureCode": {
+        "enum": [
+          "configuration",
+          "provider_unavailable",
+          "context_overflow",
+          "refusal",
+          "truncated",
+          "invalid_schema",
+          "budget_exhausted",
+          "stale_input",
+          "deleting_input",
+          "cancelled",
+          "evidence_verification"
+        ],
+        "title": "FailureCode",
+        "type": "string"
+      },
+      "LookupDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "lookup_definition",
+            "title": "Name",
+            "type": "string"
+          },
+          "term": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "term"
+        ],
+        "title": "LookupDefinition",
+        "type": "object"
+      },
+      "ReadChunkNeighbors": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_chunk_neighbors",
+            "title": "Name",
+            "type": "string"
+          },
+          "chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Chunk Ids",
+            "type": "array"
+          },
+          "radius": {
+            "default": 1,
+            "maximum": 2,
+            "minimum": 0,
+            "title": "Radius",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "chunk_ids"
+        ],
+        "title": "ReadChunkNeighbors",
+        "type": "object"
+      },
+      "ReadSection": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_section",
+            "title": "Name",
+            "type": "string"
+          },
+          "section_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "cursor": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Cursor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "section_id"
+        ],
+        "title": "ReadSection",
+        "type": "object"
+      },
+      "SafeFailure": {
+        "additionalProperties": false,
+        "description": "No upstream message, body, URL, stack trace, or arbitrary metadata.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "code": {
+            "$ref": "#/$defs/FailureCode"
+          },
+          "correlation_id": {
+            "format": "uuid",
+            "title": "Correlation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "correlation_id"
+        ],
+        "title": "SafeFailure",
+        "type": "object"
+      },
+      "SearchDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "search_document",
+            "title": "Name",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Query",
+            "type": "string"
+          },
+          "section_filter": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Filter"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "query"
+        ],
+        "title": "SearchDocument",
+        "type": "object"
+      },
+      "ToolAction": {
+        "additionalProperties": false,
+        "description": "Model-selected arguments only. Trusted code injects authorized run scope.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "call_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Call Id",
+            "type": "string"
+          },
+          "arguments": {
+            "discriminator": {
+              "mapping": {
+                "lookup_definition": "#/$defs/LookupDefinition",
+                "read_chunk_neighbors": "#/$defs/ReadChunkNeighbors",
+                "read_section": "#/$defs/ReadSection",
+                "search_document": "#/$defs/SearchDocument"
+              },
+              "propertyName": "name"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/SearchDocument"
+              },
+              {
+                "$ref": "#/$defs/ReadSection"
+              },
+              {
+                "$ref": "#/$defs/ReadChunkNeighbors"
+              },
+              {
+                "$ref": "#/$defs/LookupDefinition"
+              }
+            ],
+            "title": "Arguments"
+          }
+        },
+        "required": [
+          "call_id",
+          "arguments"
+        ],
+        "title": "ToolAction",
+        "type": "object"
+      },
+      "Usage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source": {
+            "default": "unknown",
+            "enum": [
+              "reported",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          }
+        },
+        "title": "Usage",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "request_id": {
+        "format": "uuid",
+        "title": "Request Id",
+        "type": "string"
+      },
+      "status": {
+        "enum": [
+          "completed",
+          "tool_actions",
+          "refused",
+          "truncated",
+          "failed"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "output_json": {
+        "anyOf": [
+          {
+            "maxLength": 500000,
+            "minLength": 2,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Output Json"
+      },
+      "actions": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/ToolAction"
+        },
+        "maxItems": 4,
+        "title": "Actions",
+        "type": "array"
+      },
+      "failure": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SafeFailure"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "usage": {
+        "$ref": "#/$defs/Usage"
+      },
+      "provider_request_id": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Provider Request Id"
+      }
+    },
+    "required": [
+      "request_id",
+      "status"
+    ],
+    "title": "GenerationResult",
+    "type": "object"
+  },
+  "ToolAction": {
+    "$defs": {
+      "LookupDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "lookup_definition",
+            "title": "Name",
+            "type": "string"
+          },
+          "term": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "term"
+        ],
+        "title": "LookupDefinition",
+        "type": "object"
+      },
+      "ReadChunkNeighbors": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_chunk_neighbors",
+            "title": "Name",
+            "type": "string"
+          },
+          "chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Chunk Ids",
+            "type": "array"
+          },
+          "radius": {
+            "default": 1,
+            "maximum": 2,
+            "minimum": 0,
+            "title": "Radius",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "chunk_ids"
+        ],
+        "title": "ReadChunkNeighbors",
+        "type": "object"
+      },
+      "ReadSection": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "read_section",
+            "title": "Name",
+            "type": "string"
+          },
+          "section_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "cursor": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Cursor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "section_id"
+        ],
+        "title": "ReadSection",
+        "type": "object"
+      },
+      "SearchDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "name": {
+            "const": "search_document",
+            "title": "Name",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Query",
+            "type": "string"
+          },
+          "section_filter": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Filter"
+          },
+          "limit": {
+            "default": 5,
+            "maximum": 20,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "query"
+        ],
+        "title": "SearchDocument",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Model-selected arguments only. Trusted code injects authorized run scope.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "call_id": {
+        "maxLength": 160,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Call Id",
+        "type": "string"
+      },
+      "arguments": {
+        "discriminator": {
+          "mapping": {
+            "lookup_definition": "#/$defs/LookupDefinition",
+            "read_chunk_neighbors": "#/$defs/ReadChunkNeighbors",
+            "read_section": "#/$defs/ReadSection",
+            "search_document": "#/$defs/SearchDocument"
+          },
+          "propertyName": "name"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/SearchDocument"
+          },
+          {
+            "$ref": "#/$defs/ReadSection"
+          },
+          {
+            "$ref": "#/$defs/ReadChunkNeighbors"
+          },
+          {
+            "$ref": "#/$defs/LookupDefinition"
+          }
+        ],
+        "title": "Arguments"
+      }
+    },
+    "required": [
+      "call_id",
+      "arguments"
+    ],
+    "title": "ToolAction",
+    "type": "object"
+  },
+  "EvidenceReference": {
+    "$defs": {
+      "SourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "processing_run_id": {
+            "format": "uuid",
+            "title": "Processing Run Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "project_id",
+          "document_id",
+          "processing_run_id",
+          "source_sha256"
+        ],
+        "title": "SourceScope",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "evidence_id": {
+        "format": "uuid",
+        "title": "Evidence Id",
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/$defs/SourceScope"
+      },
+      "chunk_id": {
+        "format": "uuid",
+        "title": "Chunk Id",
+        "type": "string"
+      },
+      "chunk_sha256": {
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Chunk Sha256",
+        "type": "string"
+      },
+      "physical_pages": {
+        "items": {
+          "maximum": 1000000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "maxItems": 500,
+        "minItems": 1,
+        "title": "Physical Pages",
+        "type": "array"
+      },
+      "heading_path": {
+        "default": [],
+        "items": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Heading Path",
+        "type": "array"
+      },
+      "exact_quote": {
+        "maxLength": 8000,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Exact Quote",
+        "type": "string"
+      },
+      "char_start": {
+        "maximum": 10000000,
+        "minimum": 0,
+        "title": "Char Start",
+        "type": "integer"
+      },
+      "char_end": {
+        "maximum": 1000000,
+        "minimum": 1,
+        "title": "Char End",
+        "type": "integer"
+      },
+      "offset_unit": {
+        "const": "unicode_codepoint",
+        "default": "unicode_codepoint",
+        "title": "Offset Unit",
+        "type": "string"
+      },
+      "printed_page_label": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Printed Page Label"
+      },
+      "table_id": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Table Id"
+      },
+      "row_id": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Row Id"
+      }
+    },
+    "required": [
+      "evidence_id",
+      "scope",
+      "chunk_id",
+      "chunk_sha256",
+      "physical_pages",
+      "exact_quote",
+      "char_start",
+      "char_end"
+    ],
+    "title": "EvidenceReference",
+    "type": "object"
+  },
+  "Fact": {
+    "$defs": {
+      "CriticalFactClass": {
+        "enum": [
+          "other",
+          "issuer",
+          "capacity",
+          "unit_count",
+          "eligibility",
+          "date",
+          "financial_value",
+          "emd",
+          "pbg",
+          "conditional_rule"
+        ],
+        "title": "CriticalFactClass",
+        "type": "string"
+      },
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "fact_id": {
+        "format": "uuid",
+        "title": "Fact Id",
+        "type": "string"
+      },
+      "category": {
+        "$ref": "#/$defs/TenderCategory"
+      },
+      "critical_class": {
+        "$ref": "#/$defs/CriticalFactClass"
+      },
+      "status": {
+        "$ref": "#/$defs/FindingStatus"
+      },
+      "statement": {
+        "maxLength": 8000,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Statement",
+        "type": "string"
+      },
+      "original_value": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Original Value"
+      },
+      "normalized_number": {
+        "anyOf": [
+          {
+            "maxLength": 80,
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Normalized Number"
+      },
+      "unit": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Unit"
+      },
+      "currency": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Z]{3}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Currency"
+      },
+      "conditions": {
+        "default": [],
+        "items": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Conditions",
+        "type": "array"
+      },
+      "alternatives": {
+        "default": [],
+        "items": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 8,
+        "title": "Alternatives",
+        "type": "array"
+      },
+      "evidence_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 32,
+        "title": "Evidence Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "fact_id",
+      "category",
+      "critical_class",
+      "status",
+      "statement"
+    ],
+    "title": "Fact",
+    "type": "object"
+  },
+  "Requirement": {
+    "$defs": {
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "requirement_id": {
+        "format": "uuid",
+        "title": "Requirement Id",
+        "type": "string"
+      },
+      "display_code": {
+        "maxLength": 160,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Display Code",
+        "type": "string"
+      },
+      "obligation": {
+        "maxLength": 8000,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Obligation",
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/$defs/FindingStatus"
+      },
+      "responsible_party": {
+        "anyOf": [
+          {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Responsible Party"
+      },
+      "deliverable": {
+        "anyOf": [
+          {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Deliverable"
+      },
+      "acceptance_criteria": {
+        "default": [],
+        "items": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Acceptance Criteria",
+        "type": "array"
+      },
+      "dependency_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 32,
+        "title": "Dependency Ids",
+        "type": "array"
+      },
+      "conditions": {
+        "default": [],
+        "items": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 16,
+        "title": "Conditions",
+        "type": "array"
+      },
+      "evidence_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 32,
+        "title": "Evidence Ids",
+        "type": "array"
+      }
+    },
+    "required": [
+      "requirement_id",
+      "display_code",
+      "obligation",
+      "status"
+    ],
+    "title": "Requirement",
+    "type": "object"
+  },
+  "TenderSummary": {
+    "$defs": {
+      "APIProtocol": {
+        "enum": [
+          "responses",
+          "anthropic_messages",
+          "chat_completions"
+        ],
+        "title": "APIProtocol",
+        "type": "string"
+      },
+      "CoverageReport": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "primary_chunk_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100000,
+            "minItems": 1,
+            "title": "Primary Chunk Ids",
+            "type": "array"
+          },
+          "processed_chunk_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100000,
+            "title": "Processed Chunk Ids",
+            "type": "array"
+          },
+          "unprocessed_chunk_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100000,
+            "title": "Unprocessed Chunk Ids",
+            "type": "array"
+          },
+          "failed_chunk_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100000,
+            "title": "Failed Chunk Ids",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/$defs/SectionCoverage"
+            },
+            "maxItems": 10000,
+            "minItems": 1,
+            "title": "Sections",
+            "type": "array"
+          },
+          "unresolved_categories": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/TenderCategory"
+            },
+            "maxItems": 13,
+            "title": "Unresolved Categories",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "primary_chunk_ids",
+          "sections"
+        ],
+        "title": "CoverageReport",
+        "type": "object"
+      },
+      "CriticalFactClass": {
+        "enum": [
+          "other",
+          "issuer",
+          "capacity",
+          "unit_count",
+          "eligibility",
+          "date",
+          "financial_value",
+          "emd",
+          "pbg",
+          "conditional_rule"
+        ],
+        "title": "CriticalFactClass",
+        "type": "string"
+      },
+      "EvidenceReference": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/SourceScope"
+          },
+          "chunk_id": {
+            "format": "uuid",
+            "title": "Chunk Id",
+            "type": "string"
+          },
+          "chunk_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Chunk Sha256",
+            "type": "string"
+          },
+          "physical_pages": {
+            "items": {
+              "maximum": 1000000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Physical Pages",
+            "type": "array"
+          },
+          "heading_path": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Heading Path",
+            "type": "array"
+          },
+          "exact_quote": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Exact Quote",
+            "type": "string"
+          },
+          "char_start": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "title": "Char Start",
+            "type": "integer"
+          },
+          "char_end": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Char End",
+            "type": "integer"
+          },
+          "offset_unit": {
+            "const": "unicode_codepoint",
+            "default": "unicode_codepoint",
+            "title": "Offset Unit",
+            "type": "string"
+          },
+          "printed_page_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Printed Page Label"
+          },
+          "table_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Table Id"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Row Id"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "scope",
+          "chunk_id",
+          "chunk_sha256",
+          "physical_pages",
+          "exact_quote",
+          "char_start",
+          "char_end"
+        ],
+        "title": "EvidenceReference",
+        "type": "object"
+      },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "critical_class": {
+            "$ref": "#/$defs/CriticalFactClass"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "statement": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Statement",
+            "type": "string"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Original Value"
+          },
+          "normalized_number": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Normalized Number"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fact_id",
+          "category",
+          "critical_class",
+          "status",
+          "statement"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "ModelProfileSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "connection_id": {
+            "format": "uuid",
+            "title": "Connection Id",
+            "type": "string"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "title": "Profile Id",
+            "type": "string"
+          },
+          "profile_version": {
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Profile Version",
+            "type": "integer"
+          },
+          "provider": {
+            "$ref": "#/$defs/Provider"
+          },
+          "protocol": {
+            "$ref": "#/$defs/APIProtocol"
+          },
+          "model_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Model Id",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/$defs/ProviderCapabilities"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "timeout_seconds": {
+            "default": 60,
+            "maximum": 600,
+            "minimum": 1,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          },
+          "max_calls": {
+            "default": 120,
+            "maximum": 120,
+            "minimum": 1,
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_total_tokens": {
+            "default": 100000,
+            "maximum": 1000000,
+            "minimum": 1,
+            "title": "Max Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "connection_id",
+          "profile_id",
+          "profile_version",
+          "provider",
+          "protocol",
+          "model_id",
+          "capabilities"
+        ],
+        "title": "ModelProfileSnapshot",
+        "type": "object"
+      },
+      "Provider": {
+        "enum": [
+          "openai",
+          "anthropic",
+          "openai_compatible"
+        ],
+        "title": "Provider",
+        "type": "string"
+      },
+      "ProviderCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "qualification": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "synthetic_fixture",
+              "live_worker"
+            ],
+            "title": "Qualification",
+            "type": "string"
+          },
+          "qualification_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Qualification Id"
+          },
+          "tested_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tested At"
+          },
+          "context_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 1000000,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          },
+          "native_tools": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "json_schema": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "temperature": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "usage": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "refusal": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          },
+          "truncation": {
+            "$ref": "#/$defs/Support",
+            "default": "unknown"
+          }
+        },
+        "title": "ProviderCapabilities",
+        "type": "object"
+      },
+      "Requirement": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "requirement_id": {
+            "format": "uuid",
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "display_code": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Code",
+            "type": "string"
+          },
+          "obligation": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Obligation",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "responsible_party": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Responsible Party"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliverable"
+          },
+          "acceptance_criteria": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "dependency_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Dependency Ids",
+            "type": "array"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "display_code",
+          "obligation",
+          "status"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      },
+      "SectionCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "section_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "processed",
+              "partial",
+              "unprocessed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section_id",
+          "status"
+        ],
+        "title": "SectionCoverage",
+        "type": "object"
+      },
+      "SourceScope": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "tenant_id": {
+            "format": "uuid",
+            "title": "Tenant Id",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "processing_run_id": {
+            "format": "uuid",
+            "title": "Processing Run Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tenant_id",
+          "project_id",
+          "document_id",
+          "processing_run_id",
+          "source_sha256"
+        ],
+        "title": "SourceScope",
+        "type": "object"
+      },
+      "SummarySection": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Text",
+            "type": "string"
+          },
+          "fact_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "requirement_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category",
+          "status",
+          "text"
+        ],
+        "title": "SummarySection",
+        "type": "object"
+      },
+      "Support": {
+        "enum": [
+          "unknown",
+          "supported",
+          "unsupported"
+        ],
+        "title": "Support",
+        "type": "string"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      },
+      "Usage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source": {
+            "default": "unknown",
+            "enum": [
+              "reported",
+              "estimated",
+              "unknown"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "maximum": 10000000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output Tokens"
+          }
+        },
+        "title": "Usage",
+        "type": "object"
+      },
+      "VerificationFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "code": {
+            "enum": [
+              "citation_invalid",
+              "scope_mismatch",
+              "unsupported",
+              "contradicted",
+              "numeric_mismatch",
+              "condition_missing",
+              "coverage_incomplete"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Detail",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim_id",
+          "severity",
+          "code",
+          "detail"
+        ],
+        "title": "VerificationFinding",
+        "type": "object"
+      },
+      "VerificationReport": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "checked_claim_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5000,
+            "title": "Checked Claim Ids",
+            "type": "array"
+          },
+          "findings": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/VerificationFinding"
+            },
+            "maxItems": 5000,
+            "title": "Findings",
+            "type": "array"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "repair_pass": {
+            "default": 0,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Repair Pass",
+            "type": "integer"
+          },
+          "verdict": {
+            "enum": [
+              "review_required",
+              "quality_blocked"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checked_claim_ids",
+          "revision_id",
+          "verdict"
+        ],
+        "title": "VerificationReport",
+        "type": "object"
+      },
+      "WorkflowInput": {
+        "additionalProperties": false,
+        "description": "Server-created only. A completion assertion is not a database authorization check.",
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "workflow_run_id": {
+            "format": "uuid",
+            "title": "Workflow Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/$defs/SourceScope"
+          },
+          "processing_state": {
+            "const": "completed",
+            "title": "Processing State",
+            "type": "string"
+          },
+          "requested_by": {
+            "format": "uuid",
+            "title": "Requested By",
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/$defs/ModelProfileSnapshot"
+          },
+          "workflow_version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+            "title": "Workflow Version",
+            "type": "string"
+          },
+          "prompt_version": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]*$",
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "output_schema_version": {
+            "const": "tender_summary.v1",
+            "title": "Output Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workflow_run_id",
+          "scope",
+          "processing_state",
+          "requested_by",
+          "profile",
+          "workflow_version",
+          "prompt_version",
+          "output_schema_version"
+        ],
+        "title": "WorkflowInput",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "executive_overview": {
+        "maxLength": 8000,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Executive Overview",
+        "type": "string"
+      },
+      "sections": {
+        "items": {
+          "$ref": "#/$defs/SummarySection"
+        },
+        "maxItems": 13,
+        "minItems": 13,
+        "title": "Sections",
+        "type": "array"
+      },
+      "key_points": {
+        "default": [],
+        "items": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 30,
+        "title": "Key Points",
+        "type": "array"
+      },
+      "revision_id": {
+        "format": "uuid",
+        "title": "Revision Id",
+        "type": "string"
+      },
+      "workflow": {
+        "$ref": "#/$defs/WorkflowInput"
+      },
+      "generated_at": {
+        "format": "date-time",
+        "title": "Generated At",
+        "type": "string"
+      },
+      "review_state": {
+        "const": "draft",
+        "default": "draft",
+        "title": "Review State",
+        "type": "string"
+      },
+      "facts": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Fact"
+        },
+        "maxItems": 2500,
+        "title": "Facts",
+        "type": "array"
+      },
+      "requirements": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Requirement"
+        },
+        "maxItems": 2500,
+        "title": "Requirements",
+        "type": "array"
+      },
+      "evidence": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/EvidenceReference"
+        },
+        "maxItems": 5000,
+        "title": "Evidence",
+        "type": "array"
+      },
+      "coverage": {
+        "$ref": "#/$defs/CoverageReport"
+      },
+      "verification": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/VerificationReport"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "usage": {
+        "$ref": "#/$defs/Usage"
+      }
+    },
+    "required": [
+      "executive_overview",
+      "sections",
+      "revision_id",
+      "workflow",
+      "generated_at",
+      "coverage"
+    ],
+    "title": "TenderSummary",
+    "type": "object"
+  },
+  "CoverageReport": {
+    "$defs": {
+      "SectionCoverage": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "section_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "processed",
+              "partial",
+              "unprocessed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section_id",
+          "status"
+        ],
+        "title": "SectionCoverage",
+        "type": "object"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "primary_chunk_ids": {
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 100000,
+        "minItems": 1,
+        "title": "Primary Chunk Ids",
+        "type": "array"
+      },
+      "processed_chunk_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 100000,
+        "title": "Processed Chunk Ids",
+        "type": "array"
+      },
+      "unprocessed_chunk_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 100000,
+        "title": "Unprocessed Chunk Ids",
+        "type": "array"
+      },
+      "failed_chunk_ids": {
+        "default": [],
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 100000,
+        "title": "Failed Chunk Ids",
+        "type": "array"
+      },
+      "sections": {
+        "items": {
+          "$ref": "#/$defs/SectionCoverage"
+        },
+        "maxItems": 10000,
+        "minItems": 1,
+        "title": "Sections",
+        "type": "array"
+      },
+      "unresolved_categories": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/TenderCategory"
+        },
+        "maxItems": 13,
+        "title": "Unresolved Categories",
+        "type": "array"
+      },
+      "truncated": {
+        "default": false,
+        "title": "Truncated",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "primary_chunk_ids",
+      "sections"
+    ],
+    "title": "CoverageReport",
+    "type": "object"
+  },
+  "VerificationReport": {
+    "$defs": {
+      "VerificationFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "code": {
+            "enum": [
+              "citation_invalid",
+              "scope_mismatch",
+              "unsupported",
+              "contradicted",
+              "numeric_mismatch",
+              "condition_missing",
+              "coverage_incomplete"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Detail",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim_id",
+          "severity",
+          "code",
+          "detail"
+        ],
+        "title": "VerificationFinding",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "checked_claim_ids": {
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 5000,
+        "title": "Checked Claim Ids",
+        "type": "array"
+      },
+      "findings": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/VerificationFinding"
+        },
+        "maxItems": 5000,
+        "title": "Findings",
+        "type": "array"
+      },
+      "revision_id": {
+        "format": "uuid",
+        "title": "Revision Id",
+        "type": "string"
+      },
+      "repair_pass": {
+        "default": 0,
+        "maximum": 1,
+        "minimum": 0,
+        "title": "Repair Pass",
+        "type": "integer"
+      },
+      "verdict": {
+        "enum": [
+          "review_required",
+          "quality_blocked"
+        ],
+        "title": "Verdict",
+        "type": "string"
+      }
+    },
+    "required": [
+      "checked_claim_ids",
+      "revision_id",
+      "verdict"
+    ],
+    "title": "VerificationReport",
+    "type": "object"
+  },
+  "SummaryContent": {
+    "$defs": {
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "SummarySection": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "text": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Text",
+            "type": "string"
+          },
+          "fact_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Fact Ids",
+            "type": "array"
+          },
+          "requirement_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 1000,
+            "title": "Requirement Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category",
+          "status",
+          "text"
+        ],
+        "title": "SummarySection",
+        "type": "object"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Model-writable writer output. Scope/provenance/evidence locators stay server-owned.\n\nReferences must be resolved against the supplied fact register before assembly.\nSource validity and entailment are later-step responsibilities.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "executive_overview": {
+        "maxLength": 8000,
+        "minLength": 1,
+        "pattern": "\\S",
+        "title": "Executive Overview",
+        "type": "string"
+      },
+      "sections": {
+        "items": {
+          "$ref": "#/$defs/SummarySection"
+        },
+        "maxItems": 13,
+        "minItems": 13,
+        "title": "Sections",
+        "type": "array"
+      },
+      "key_points": {
+        "default": [],
+        "items": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "maxItems": 30,
+        "title": "Key Points",
+        "type": "array"
+      }
+    },
+    "required": [
+      "executive_overview",
+      "sections"
+    ],
+    "title": "SummaryContent",
+    "type": "object"
+  },
+  "FactBatch": {
+    "$defs": {
+      "CriticalFactClass": {
+        "enum": [
+          "other",
+          "issuer",
+          "capacity",
+          "unit_count",
+          "eligibility",
+          "date",
+          "financial_value",
+          "emd",
+          "pbg",
+          "conditional_rule"
+        ],
+        "title": "CriticalFactClass",
+        "type": "string"
+      },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/$defs/TenderCategory"
+          },
+          "critical_class": {
+            "$ref": "#/$defs/CriticalFactClass"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "statement": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Statement",
+            "type": "string"
+          },
+          "original_value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Original Value"
+          },
+          "normalized_number": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Normalized Number"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Currency"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "alternatives": {
+            "default": [],
+            "items": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fact_id",
+          "category",
+          "critical_class",
+          "status",
+          "statement"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
+      "FindingStatus": {
+        "enum": [
+          "supported",
+          "unknown",
+          "conflicting",
+          "unsupported"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "Requirement": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "requirement_id": {
+            "format": "uuid",
+            "title": "Requirement Id",
+            "type": "string"
+          },
+          "display_code": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Display Code",
+            "type": "string"
+          },
+          "obligation": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Obligation",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/FindingStatus"
+          },
+          "responsible_party": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Responsible Party"
+          },
+          "deliverable": {
+            "anyOf": [
+              {
+                "maxLength": 8000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliverable"
+          },
+          "acceptance_criteria": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Acceptance Criteria",
+            "type": "array"
+          },
+          "dependency_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Dependency Ids",
+            "type": "array"
+          },
+          "conditions": {
+            "default": [],
+            "items": {
+              "maxLength": 8000,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Conditions",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requirement_id",
+          "display_code",
+          "obligation",
+          "status"
+        ],
+        "title": "Requirement",
+        "type": "object"
+      },
+      "TenderCategory": {
+        "enum": [
+          "overview",
+          "issuer_parties",
+          "scope_deliverables",
+          "capacity_units",
+          "eligibility",
+          "technical",
+          "dates_milestones",
+          "financial_commercial",
+          "securities_emd_pbg",
+          "submission_evaluation_award",
+          "obligations_conditions",
+          "exclusions",
+          "risks_conflicts_questions"
+        ],
+        "title": "TenderCategory",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Analyst output; scope and evidence locators are never model-selected.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "facts": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Fact"
+        },
+        "maxItems": 100,
+        "title": "Facts",
+        "type": "array"
+      },
+      "requirements": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/Requirement"
+        },
+        "maxItems": 100,
+        "title": "Requirements",
+        "type": "array"
+      },
+      "unresolved_categories": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/TenderCategory"
+        },
+        "maxItems": 13,
+        "title": "Unresolved Categories",
+        "type": "array"
+      }
+    },
+    "title": "FactBatch",
+    "type": "object"
+  },
+  "VerificationContent": {
+    "$defs": {
+      "VerificationFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "schema_version": {
+            "const": "1.0",
+            "default": "1.0",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "claim_id": {
+            "format": "uuid",
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "critical"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "code": {
+            "enum": [
+              "citation_invalid",
+              "scope_mismatch",
+              "unsupported",
+              "contradicted",
+              "numeric_mismatch",
+              "condition_missing",
+              "coverage_incomplete"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Detail",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claim_id",
+          "severity",
+          "code",
+          "detail"
+        ],
+        "title": "VerificationFinding",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "description": "Model verdict inputs; trusted code binds revision, repair count and final gate.",
+    "properties": {
+      "schema_version": {
+        "const": "1.0",
+        "default": "1.0",
+        "title": "Schema Version",
+        "type": "string"
+      },
+      "checked_claim_ids": {
+        "items": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "maxItems": 5000,
+        "title": "Checked Claim Ids",
+        "type": "array"
+      },
+      "findings": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/VerificationFinding"
+        },
+        "maxItems": 5000,
+        "title": "Findings",
+        "type": "array"
+      }
+    },
+    "required": [
+      "checked_claim_ids"
+    ],
+    "title": "VerificationContent",
+    "type": "object"
+  }
+}

@@ -1,7 +1,163 @@
-# Oracle background services
+# Oracle VM services
+
+## Current HTTPS deployment
+
+The live site is `https://wbsgenie.duckdns.org/`, with the API at `/api/v1`.
+The domain A record points to `144.24.43.125`. Old HTTP and HTTPS IP links redirect
+to the domain. No DuckDNS token is needed on the VM for the current DNS record.
+HTTP port 80 redirects to HTTPS on port 443, except for the ACME certificate-validation route
+and a local container liveness route. Both ports must remain allowed in OCI.
+Nginx terminates TLS; the backend and existing services retain private ports.
+
+The current deployment uses all three Compose files, in order:
+`compose.web.yml`, `compose.acme.yml`, and `compose.https.yml`. Always include the
+HTTPS overrides when redeploying. The wrapper keeps these flags together:
+
+```bash
+cd /home/developer/wbs-web/deploy/oracle
+sh web-compose.sh build
+sh web-compose.sh up -d --no-build --wait
+sh web-compose.sh ps
+sh web-compose.sh logs --tail=50 api ui
+curl -f https://wbsgenie.duckdns.org/api/v1/health/ready
+```
+
+The UI still uses `/api/v1` on the same origin. The HTTPS overlay enables secure
+refresh cookies and sets the API's public origin/CORS origin to
+`https://wbsgenie.duckdns.org`. It does not change the application's environment
+profile or migrate background services. `api.env` holds independent signing secrets, and no migration
+owner credentials are copied to the API.
+
+Certbot 5.8.0 is pinned by image digest. The `wbs-domain` lineage contains the
+standard domain certificate; `wbs-ip` retains the roughly six-day `shortlived` IP
+certificate so HTTPS IP redirects remain trusted. The user approved the Subscriber
+Agreement before registration and issuance. Certificate/private-key material and
+ACME account state live only in Docker volumes. Nginx receives a read-only export
+of its certificate/key, not the ACME account keys or Docker socket. The export is
+root-owned, group-readable only by Nginx's GID 101, with private directories.
+Each lineage is exported separately under `/export/wbs-domain/` or `/export/wbs-ip/`,
+so renewing one cannot overwrite the other's certificate. Both are renewed by
+the same timer. Nginx reads the matching lineage for each server name.
+
+`wbs-tls-renew.timer` checks renewal hourly, with up to ten minutes of jitter and
+persistent scheduling across reboots. Its service runs as `developer`, using
+existing Docker group access. Certbot renews only when due; the script validates
+the Nginx configuration and gracefully reloads it afterward. Inspect automation:
+
+```bash
+systemctl list-timers --all wbs-tls-renew.timer
+systemctl status wbs-tls-renew.service
+journalctl -u wbs-tls-renew.service --since today
+# An intentional staging renewal test; the trusted certificate is not replaced:
+sh web-compose.sh run --rm --no-deps certbot renew --dry-run --no-random-sleep-on-renew \
+  --run-deploy-hooks --deploy-hook '/bin/sh /hooks/deploy-cert.sh'
+```
+
+For disaster recovery, restore the volumes `wbs-web_acme-state` and
+`wbs-web_tls-certificates` securely. Avoid deleting them with `down -v`. To issue
+on a fresh VM, first bootstrap HTTP using the two files `compose.web.yml` and
+`compose.acme.yml`, confirm the public ACME webroot works, then obtain a certificate
+after the operator accepts the current Subscriber Agreement:
+
+```bash
+docker compose -f compose.web.yml -f compose.acme.yml run --rm --no-deps certbot \
+  certonly --webroot -w /var/www/acme --ip-address 144.24.43.125 \
+  --preferred-profile shortlived --cert-name wbs-ip \
+  --deploy-hook '/bin/sh /hooks/deploy-cert.sh'
+docker compose -f compose.web.yml -f compose.acme.yml run --rm --no-deps certbot \
+  certonly --webroot -w /var/www/acme -d wbsgenie.duckdns.org \
+  --cert-name wbs-domain --deploy-hook '/bin/sh /hooks/deploy-cert.sh'
+```
+
+Both lineages must be exported before activating `compose.https.yml`.
+
+Install the provided `tls/wbs-tls-renew.service` and `.timer` under
+`/etc/systemd/system/` as root, reload systemd, and enable the timer. Test renewal
+and actual public certificate validation before considering TLS ready. When
+moving to another IP or a domain, update the certificate identifiers, Nginx server
+name/redirect target, API origin/CORS settings, and credentials-file URL together.
+
+## Initial HTTP bootstrap
+
+The commands below document the original bootstrap. For the live deployment,
+use the HTTPS wrapper above.
+
+`compose.web.yml` is a separate `wbs-web` project. Its UI image contains Nginx,
+which serves the compiled React app at `/` and proxies `/api/` unchanged to the
+private API on port 8000. Only Nginx publishes host port 80. The existing
+`wbs-services` project and external Neon database/S3 storage stay in place.
+
+The deployed web checkout is `/home/developer/wbs-web`. It uses the existing
+background-service credentials through these symlinks in `deploy/oracle/`:
+
+```bash
+ln -s /home/developer/wbs-services/deploy/oracle/worker.env worker.env
+ln -s /home/developer/wbs-services/deploy/oracle/worker-runtime.env worker-runtime.env
+```
+
+The separate, owner-only `api.env` follows `api.env.example`. Generate two
+independent signing secrets, set the exact public HTTP origin in `PUBLIC_UI_URL`
+and `CORS_ORIGINS`, and apply `chmod 600 api.env`. Migration-owner credentials do
+not belong in these runtime files. Preserve `api.env` on redeployment so existing
+sessions remain usable. These three files must exist before running Compose.
+
+The API explicitly uses `AUTH_MODE=local`, with an administrator provisioned in
+the existing tenant; it does not expose the private workers' development auth
+bypass. For a new deployment, provision the first account before publishing the UI:
+
+```bash
+cd /home/developer/wbs-web/deploy/oracle
+docker compose -f compose.web.yml build
+docker compose -f compose.web.yml run --rm api python -m app.cli create-admin \
+  --email YOUR_EMAIL --display-name 'Administrator' \
+  --tenant-slug development --tenant-name 'Development Tenant'
+docker compose -f compose.web.yml run --rm --no-deps ui -t
+docker compose -f compose.web.yml up -d --no-build --wait
+```
+
+Use `--link-existing-user` only after verifying an existing account. This command
+does not reset an existing local password. Do not run it again for the already
+provisioned VM account.
+
+For subsequent web-only releases:
+
+```bash
+cd /home/developer/wbs-web/deploy/oracle
+docker compose -f compose.web.yml build
+docker compose -f compose.web.yml up -d --no-build --wait
+docker compose -f compose.web.yml ps
+docker compose -f compose.web.yml logs --tail=50 api ui
+curl -f http://127.0.0.1/api/v1/health/ready
+```
+
+The UI compiles `VITE_API_URL=/api/v1`; it works through the same host as the
+page. The dedicated `http-proxy-runtime` Docker target handles this temporary
+HTTP deployment. The default UI runtime retains its HTTPS-origin validation.
+This HTTP deployment uses `APP_ENV=development` and non-secure refresh cookies
+because the application's production profile requires HTTPS. Passwords, cookies,
+and documents are unencrypted in transit on HTTP. Configure TLS before using it
+for sensitive data. Password recovery and SSO remain disabled.
+
+The API joins `wbs-services_default` for Redis and ClamAV, and a separate
+`172.29.80.0/28` web network for Nginx. This subnet was checked against the current
+VM networks; review it before deploying elsewhere. Only this web subnet is
+trusted for forwarded client headers. Nginx replaces client-supplied forwarding
+headers, limits request bodies to 26 MiB, and does not expose metrics or dotfiles.
+The API and Nginx use non-root users, read-only roots, resource limits, and
+`unless-stopped` restart policies. No API port is published.
+
+In OCI, add a **stateful ingress** rule to the VM's subnet Security List or an
+attached NSG: source `0.0.0.0/0`, protocol TCP, source ports All, destination port
+`80`. Public IPv4 access then uses `http://144.24.43.125/`; API readiness is
+`http://144.24.43.125/api/v1/health/ready`. Keep the existing SSH rule. No public
+rules are needed for ports 8000, 8080, 6379, or 3310. Verify HTTP from outside the
+VM as well as locally; a healthy container alone does not establish public access.
+
+## Existing background services
 
 This Compose project runs Redis, the application's Celery worker, one Celery Beat
-scheduler, and ClamAV on Ubuntu 24.04 ARM64. The API and frontend are not included.
+scheduler, and ClamAV on Ubuntu 24.04 ARM64. They use `compose.services.yml`,
+independently of the web project above.
 The worker uses `wbs-ingestion-worker:local` with the packaged embedding model and
 OCR executables. The scheduler retains the smaller base backend image. Native
 text-PDF extraction, chunking, and embeddings have passed offline verification.

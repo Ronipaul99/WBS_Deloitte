@@ -45,6 +45,67 @@ celery_app.conf.beat_schedule = {
     },
 }
 
+# No second scheduler or worker service. Disabled installs no new periodic work.
+if settings.agentic_summary_enabled:
+    celery_app.conf.worker_concurrency = 1
+    celery_app.conf.beat_schedule["reconcile-agent-workflows"] = {
+        "task": "wbs.reconcile_agent_workflows",
+        "schedule": 30.0,
+    }
+
+
+@celery_app.task(name="wbs.advance_agent_workflow", acks_late=True, reject_on_worker_lost=True)
+def advance_agent_workflow_task(run_id: str, delivery_id: str) -> None:
+    from app.services.agents.worker_runtime import advance
+
+    asyncio.run(advance(settings, UUID(run_id), UUID(delivery_id)))
+
+
+@celery_app.task(name="wbs.reconcile_agent_workflows")
+def reconcile_agent_workflows_task() -> None:
+    from app.services.agents.worker_runtime import reconcile
+
+    asyncio.run(reconcile(settings))
+
+
+@celery_app.task(
+    name="wbs.test_agent_connection", acks_late=True, reject_on_worker_lost=True, ignore_result=True
+)
+def test_agent_connection_task(request_id: str) -> None:
+    from app.services.llm.test_worker import run_test, with_worker_sessions
+
+    asyncio.run(
+        with_worker_sessions(
+            settings, lambda sessions: run_test(sessions, settings, UUID(request_id))
+        )
+    )
+
+
+if settings.llm_connection_tests_enabled:
+    celery_app.conf.worker_concurrency = 1
+    celery_app.conf.beat_schedule["reconcile-llm-connection-tests"] = {
+        "task": "wbs.reconcile_llm_connection_tests",
+        "schedule": 15.0,
+    }
+
+
+@celery_app.task(name="wbs.reconcile_llm_connection_tests")
+def reconcile_llm_connection_tests_task() -> None:
+    from app.services.llm.test_worker import (
+        celery_test_broker,
+        reconcile_tests,
+        with_worker_sessions,
+    )
+
+    async def publish(task, args, identity):
+        await celery_test_broker(celery_app, task, args, identity)
+
+    asyncio.run(
+        with_worker_sessions(
+            settings, lambda sessions: reconcile_tests(sessions, settings, publish)
+        )
+    )
+
 
 @celery_app.task(
     name="wbs.process_document_ingestion",

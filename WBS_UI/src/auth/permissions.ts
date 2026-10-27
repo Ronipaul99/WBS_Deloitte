@@ -25,6 +25,9 @@ export const PERMISSIONS = {
   MEMBER_UPDATE: 'member:update',
   MEMBER_REMOVE: 'member:remove',
   AUDIT_READ: 'audit:read',
+  LLM_MANAGE: 'llm:manage',
+  LLM_USE: 'llm:use',
+  LLM_USAGE_AUDIT: 'llm:usage_audit',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

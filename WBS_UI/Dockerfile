@@ -15,10 +15,25 @@ ENV VITE_API_URL=${VITE_API_URL} \
     VITE_SSO_ENABLED=${VITE_SSO_ENABLED} \
     VITE_SSO_PROVIDER_LABEL=${VITE_SSO_PROVIDER_LABEL}
 RUN if ! printf '%s' "$VITE_API_URL" | \
-    grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/api/v1$'; then \
-    echo "VITE_API_URL must be an HTTPS /api/v1 URL" >&2; exit 1; fi && \
+    grep -Eq '^(/api/v1|https://[A-Za-z0-9.-]+(:[0-9]{1,5})?/api/v1)$'; then \
+    echo "VITE_API_URL must be /api/v1 or an HTTPS /api/v1 URL" >&2; exit 1; fi && \
     if ! printf '%s' "$VITE_AUTH_MODE" | grep -Eq '^(local|oidc|hybrid)$'; then \
     echo "VITE_AUTH_MODE must be local, oidc, or hybrid" >&2; exit 1; fi && npm run build
+
+# Explicit HTTP deployment target for the temporary Oracle VM setup.
+# The default runtime below retains its HTTPS-origin validation.
+FROM nginx:stable-alpine AS http-proxy-runtime
+
+COPY nginx.http.conf /etc/nginx/nginx.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+RUN mkdir -p /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp && \
+    chown -R nginx:nginx /var/cache/nginx /usr/share/nginx/html
+USER nginx
+EXPOSE 8080
+ENTRYPOINT ["nginx"]
+CMD ["-g", "daemon off;"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8080/"]
 
 FROM nginx:1.27-alpine AS runtime
 
