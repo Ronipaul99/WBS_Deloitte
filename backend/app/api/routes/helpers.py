@@ -76,7 +76,13 @@ async def require_ready_active_run(
             )
             or 0
         )
-    if run is None or run.chunk_count < 1 or chunk_count != run.chunk_count:
+    from app.core.config import get_settings
+    from app.services.ingestion.release_identity import matches_release_identity
+
+    settings = get_settings()
+    release_mismatch = bool(settings.document_workflow_resume_enabled and run
+                            and not matches_release_identity(document, run, settings))
+    if run is None or run.chunk_count < 1 or chunk_count != run.chunk_count or release_mismatch:
         raise HTTPException(
             status_code=409,
             detail={

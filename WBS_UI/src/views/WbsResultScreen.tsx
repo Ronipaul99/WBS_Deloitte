@@ -42,6 +42,7 @@ interface WbsResultScreenProps {
   project: ProjectResponse;
   template: TemplateResponse | null;
   versionId?: string;
+  historicalOutput?: boolean;
   initialTab?: WbsScreenTab;
   onBack?: () => void;
   onNavigateToValidation?: () => void | Promise<void>;
@@ -246,6 +247,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
   template,
   versionId,
   initialTab = 'structure',
+  historicalOutput = false,
   onBack,
   onNavigateToValidation,
   onProceedToValidation,
@@ -706,6 +708,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
   return (
     <div className="wbs-result-container">
+      {historicalOutput && <p role="status">This saved WBS uses earlier inputs. Your saved edits are preserved. Regenerate explicitly to use the current inputs.</p>}
       {onBack && (
         <button type="button" className="project-back-button" onClick={onBack}>
           <ArrowLeft size={15} aria-hidden="true" />

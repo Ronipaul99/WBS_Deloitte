@@ -155,6 +155,10 @@ export async function mockWorkflowApi(
     const method = request.method();
     state.requestPaths.push(path);
 
+    if (method === 'GET' && path.endsWith('/document-workflows/capabilities')) {
+      return json(route, { resume_enabled: false, reuse_enabled: false, max_upload_bytes: 25 * 1024 * 1024 });
+    }
+
     if (method === 'GET' && path.endsWith('/projects')) {
       return json(route, []);
     }

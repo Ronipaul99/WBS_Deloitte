@@ -9,7 +9,8 @@ from xml.etree import ElementTree
 from sqlalchemy import func, select
 
 from app.core.config import get_settings
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, set_local_tenant_context
+from app.models.document_workflows import DocumentWorkflow
 from app.models.domain import (
     Document,
     DocumentSummary,
@@ -42,8 +43,8 @@ async def _set_job(
 
 async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
     async with SessionLocal() as db:
-        job = await db.get(Job, job_id)
-        if job is None:
+        job = await db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None or job.status != ProcessingStatus.QUEUED:
             return
         document = await db.scalar(
             select(Document).where(
@@ -68,9 +69,15 @@ async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
                     DocumentSummary.tenant_id == job.tenant_id,
                 )
             )
+            await db.refresh(job, with_for_update=True)
+            if job.status != ProcessingStatus.IN_PROGRESS:
+                await db.rollback()
+                return
             if summary is None:
                 summary = DocumentSummary(tenant_id=document.tenant_id, document_id=document.id)
                 db.add(summary)
+            else:
+                summary.revision += 1
 
             summary.summary_text = (
                 f"Placeholder summary for {document.file_name}. Replace the summary processor "
@@ -92,6 +99,15 @@ async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
             summary.is_approved = False
             summary.approved_at = None
             await db.flush()
+
+            if job.workflow_id:
+                await set_local_tenant_context(db, job.tenant_id)
+                workflow = await db.get(DocumentWorkflow, job.workflow_id)
+                if workflow is None or workflow.summary_job_id != job.id:
+                    raise RuntimeError("Summary attempt was superseded")
+                workflow.summary_id = summary.id
+                workflow.summary_revision = summary.revision
+                workflow.checkpoint_revision += 1
 
             await _set_job(
                 job,
@@ -118,8 +134,8 @@ async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
 
 async def process_wbs_generation(job_id: UUID) -> None:
     async with SessionLocal() as db:
-        job = await db.get(Job, job_id)
-        if job is None or job.project_id is None:
+        job = await db.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None or job.project_id is None or job.status != ProcessingStatus.QUEUED:
             return
         project = await db.scalar(
             select(Project).where(
@@ -138,6 +154,12 @@ async def process_wbs_generation(job_id: UUID) -> None:
             )
             await db.commit()
 
+            await db.refresh(project, with_for_update=True)
+            await db.refresh(job, with_for_update=True)
+            if job.status != ProcessingStatus.IN_PROGRESS:
+                await db.rollback()
+                return
+
             last_version = await db.scalar(
                 select(func.max(WbsVersion.version_number)).where(
                     WbsVersion.tenant_id == job.tenant_id,
@@ -148,6 +170,7 @@ async def process_wbs_generation(job_id: UUID) -> None:
                 tenant_id=job.tenant_id,
                 project_id=project.id,
                 generation_job_id=job.id,
+                workflow_id=job.workflow_id,
                 version_number=(last_version or 0) + 1,
                 tree=[
                     {
@@ -179,6 +202,13 @@ async def process_wbs_generation(job_id: UUID) -> None:
             )
             db.add(version)
             await db.flush()
+            if job.workflow_id:
+                await set_local_tenant_context(db, job.tenant_id)
+                workflow = await db.get(DocumentWorkflow, job.workflow_id)
+                if workflow is None or workflow.generation_job_id != job.id:
+                    raise RuntimeError("Generation attempt was superseded")
+                workflow.wbs_version_id = version.id
+                workflow.checkpoint_revision += 1
             await _set_job(
                 job,
                 status=ProcessingStatus.COMPLETED,
@@ -212,8 +242,10 @@ def _flatten_tree(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 async def process_validation(validation_id: UUID) -> None:
     async with SessionLocal() as db:
-        validation = await db.get(ValidationRun, validation_id)
-        if validation is None:
+        validation = await db.scalar(select(ValidationRun).where(
+            ValidationRun.id == validation_id,
+        ).with_for_update())
+        if validation is None or validation.status != ProcessingStatus.QUEUED:
             return
         version = await db.scalar(
             select(WbsVersion).where(
@@ -224,7 +256,8 @@ async def process_validation(validation_id: UUID) -> None:
         if version is None:
             return
 
-        nodes = _flatten_tree(version.tree)
+        snapshot = validation.wbs_snapshot
+        nodes = _flatten_tree(snapshot["tree"] if snapshot is not None else version.tree)
         codes = [str(node.get("code", "")) for node in nodes]
         duplicate_codes = sorted({code for code in codes if code and codes.count(code) > 1})
         blank_names = [node.get("id") for node in nodes if not str(node.get("name", "")).strip()]
@@ -246,9 +279,16 @@ async def process_validation(validation_id: UUID) -> None:
                     "details": blank_names,
                 },
             ],
-            "scopeCoverage": version.scope_coverage,
+            "scopeCoverage": snapshot["scope_coverage"]
+            if snapshot is not None
+            else version.scope_coverage,
         }
         validation.status = ProcessingStatus.COMPLETED
+        if version.workflow_id:
+            await set_local_tenant_context(db, validation.tenant_id)
+            workflow = await db.get(DocumentWorkflow, version.workflow_id)
+            if workflow and workflow.validation_id == validation.id:
+                workflow.checkpoint_revision += 1
         await db.commit()
 
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     auth,
+    document_workflows,
     documents,
     exports,
     generations,
@@ -26,6 +27,7 @@ api_router.include_router(identity.router)
 api_router.include_router(members.router)
 api_router.include_router(projects.router)
 api_router.include_router(documents.router)
+api_router.include_router(document_workflows.router)
 api_router.include_router(ingestions.router)
 api_router.include_router(summaries.router)
 api_router.include_router(templates.router)

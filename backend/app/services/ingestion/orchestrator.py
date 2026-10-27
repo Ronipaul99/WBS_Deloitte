@@ -557,6 +557,10 @@ class DocumentIngestionOrchestrator:
                     run.failed_at = now
                 document.processing_status = run_status.value
                 document.processing_error_code = failure.error_code
+                if failure.error_code == "DOCUMENT_REJECTED_MALWARE":
+                    from app.services.document_content import record_content_rejection
+
+                    await record_content_rejection(session, document, failure.error_code)
                 if retryable:
                     outbox = await session.scalar(
                         select(JobDispatchOutbox)

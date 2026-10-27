@@ -792,3 +792,17 @@ Replace the placeholder implementations in `app/services/workflows.py` with:
 
 Keep the job lifecycle and persisted result contracts stable so the React UI can poll jobs without
 depending on the underlying AI provider.
+
+
+## Document content reuse and saved workflows
+
+Verified SHA-256 reuse and durable workflow recovery are controlled by the default-off
+`DOCUMENT_WORKFLOW_RESUME_ENABLED` and `DOCUMENT_UPLOAD_REUSE_ENABLED` settings. Reuse requires
+resume; resume enabled with reuse disabled pauses new uploads while preserving saved-work reads.
+The current migration head is `c92e6b4a710d`, merging the recovered question-bank history
+(`a13d9e7b602c`) and deduplication schema (`f31a0d8c72e9`). No revision stamping is needed.
+The additive schema, bounded backfill/cleanup commands, test evidence, external release gates and
+rollback order are documented in the
+[implementation evidence and runbook](../docs/document-deduplication-workflow-resume-implementation-evidence.md).
+Do not enable this feature before verifying the PostgreSQL migration, tenant backfill and
+object-storage behavior in isolated resources.

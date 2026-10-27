@@ -30,7 +30,8 @@ import { enterpriseSignInUrl } from './services/apiClient';
 import { ApiError } from './services/apiClient';
 import { startGeneration } from './services/generationsApi';
 import { startValidation } from './services/validationsApi';
-import { restoreWorkflow } from './services/workflowApi';
+import { restoreWorkflow, resumeWorkflow } from './services/workflowApi';
+import WorkflowCheckpointScreen from './views/WorkflowCheckpointScreen';
 import {
   clearWorkflowContext,
   readWorkflowContext,
@@ -86,6 +87,7 @@ function getInitialPublicAuthRoute(): PublicAuthRoute {
 
 export type ScreenType =
   | 'create'
+  | 'checkpoint'
   | 'doc_processing'
   | 'doc_summary'
   | 'analyzing'
@@ -308,7 +310,8 @@ function WorkspaceApp({
         setWorkflow(session);
         setActiveTab('projects');
         setProjectScreen('wbs');
-        setCurrentScreen('doc_processing');
+        setCurrentScreen(session.recovery?.resume_screen ?? 'doc_processing');
+        saveWorkflowContext(activeTenant.id, session);
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
@@ -393,7 +396,18 @@ function WorkspaceApp({
     saveWorkflowContext(activeTenant.id, session);
     setSelectedProject(session.project);
     setWorkflow(session);
-    setCurrentScreen('doc_processing');
+    setCurrentScreen(session.recovery?.resume_screen ?? 'doc_processing');
+  };
+
+  const handleLoadSavedWorkflow = async (workflowId: string) => {
+    try {
+      const session = await resumeWorkflow(activeTenant.id, workflowId);
+      handleWorkflowStarted(session);
+      setActiveTab('projects');
+      setProjectScreen('wbs');
+    } catch (reason) {
+      setRestoreError(reason instanceof Error ? reason.message : 'The saved workflow is unavailable.');
+    }
   };
 
   // 3. Step 3 (Review Summary) -> Step 4 (Decomposition Pipeline Analysis)
@@ -404,6 +418,10 @@ function WorkspaceApp({
 
   // 4. Step 4 (Pipeline Analysis Complete) -> Step 5 (WBS Result Screen)
   const handleAnalysisComplete = (wbsVersionId: string) => {
+    if (workflow?.workflowId) {
+      void handleLoadSavedWorkflow(workflow.workflowId);
+      return;
+    }
     setWorkflow((current) => current ? { ...current, wbsVersionId } : current);
     setTargetResultTab('structure');
     setCurrentScreen('results');
@@ -438,7 +456,13 @@ function WorkspaceApp({
       documentId: workflow.document.id,
       summaryId: workflow.summaryId,
       templateId: workflow.template?.id ?? null,
+      workflowId: workflow.workflowId,
+      regenerate: Boolean(workflow.workflowId),
     });
+    if (job.workflow_id) {
+      await handleLoadSavedWorkflow(job.workflow_id);
+      return;
+    }
     setWorkflow((current) => current ? {
       ...current,
       generationJobId: job.id,
@@ -624,6 +648,7 @@ function WorkspaceApp({
             onCreateWbs={showWbsUpload}
             onResumeIngestion={handleResumeIngestion}
             onOpenWbs={openExistingWbs}
+            onResumeWorkflow={(id) => void handleLoadSavedWorkflow(id)}
           />
         );
       }
@@ -669,6 +694,9 @@ function WorkspaceApp({
       }
 
       if (currentScreen === 'doc_processing') {
+        if (!workflow.ingestionJobId || !workflow.processingRunId || !workflow.initialIngestionStatus) {
+          return renderMissingJobIdError();
+        }
         return (
           <ProcessingProjectDocumentScreen
             tenantId={activeTenant.id}
@@ -678,6 +706,7 @@ function WorkspaceApp({
             template={workflow.template}
             initialStatus={workflow.initialIngestionStatus}
             onBack={handleLeaveProcessing}
+            onContinue={workflow.workflowId ? () => void handleLoadSavedWorkflow(workflow.workflowId!) : undefined}
           />
         );
       }
@@ -689,10 +718,17 @@ function WorkspaceApp({
             project={workflow.project}
             document={workflow.document}
             template={workflow.template}
+            workflowId={workflow.workflowId}
             onProceedToAnalyze={handleProceedToAnalyze}
             onDiscard={handleBackToUpload}
           />
         );
+      }
+
+      if (currentScreen === 'checkpoint' && workflow.recovery) {
+        return <WorkflowCheckpointScreen tenantId={activeTenant.id} state={workflow.recovery}
+          onResumed={handleWorkflowStarted} onBack={handleBackToProject}
+          onViewWbs={() => setCurrentScreen('results')} />;
       }
 
       if (currentScreen === 'analyzing') {
@@ -729,6 +765,7 @@ function WorkspaceApp({
           project={workflow.project}
           template={workflow.template}
           versionId={workflow.wbsVersionId ?? undefined}
+          historicalOutput={Boolean(workflow.recovery && workflow.recovery.input_compatibility !== 'CURRENT')}
           initialTab={targetResultTab}
           onBack={handleBackToProject}
           onRegenerate={handleRegenerate}

@@ -27,6 +27,7 @@ import type {
   WbsVersionResponse,
 } from '../services/workflowTypes';
 import './ProjectScreens.css';
+import SavedDocumentWorkflows from '../components/SavedDocumentWorkflows';
 
 interface CreateProjectScreenProps {
   tenantId: string;
@@ -51,6 +52,7 @@ interface ProjectWorkspaceScreenProps {
   onCreateWbs: () => void;
   onResumeIngestion?: () => void;
   onOpenWbs: (versionId: string) => void;
+  onResumeWorkflow?: (workflowId: string) => void;
 }
 
 function countWbsItems(nodes: Array<Record<string, unknown>>): number {
@@ -297,6 +299,7 @@ export function ProjectWorkspaceScreen({
   canCreateWbs,
   canDeleteDocument,
   hasActiveIngestion = false,
+  onResumeWorkflow,
   onBack,
   onCreateWbs,
   onResumeIngestion,
@@ -445,6 +448,7 @@ export function ProjectWorkspaceScreen({
       </header>
 
       <section className="project-workspace-summary" aria-label="Project details">
+        {onResumeWorkflow && <SavedDocumentWorkflows tenantId={tenantId} projectId={project.id} onContinue={onResumeWorkflow} />}
         <div>
           <CalendarDays size={17} aria-hidden="true" />
           <span><small>Created</small><strong>{formatDate(project.created_at)}</strong></span>

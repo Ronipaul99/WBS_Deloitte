@@ -13,7 +13,7 @@ import {
   getValidation,
   startValidation,
 } from '../services/validationsApi';
-import { getLatestWbs } from '../services/wbsApi';
+import { getWbsVersion } from '../services/wbsApi';
 import { pollResource } from '../services/polling';
 import { presentValidation, presentWbs } from '../services/workflowPresentation';
 import type {
@@ -43,8 +43,6 @@ async function fetchCompletedValidation(
   template: TemplateResponse | null,
   signal: AbortSignal,
 ): Promise<WbsValidationPayload> {
-  const version = await getLatestWbs(tenantId, project.id, signal);
-  const wbs = presentWbs(version, project, template);
   const validation = await pollResource({
     signal,
     request: (pollSignal) => getValidation(tenantId, validationId, pollSignal),
@@ -53,6 +51,8 @@ async function fetchCompletedValidation(
   if (validation.status !== 'COMPLETED') {
     throw new Error('Validation was cancelled or failed.');
   }
+  const version = await getWbsVersion(tenantId, validation.wbs_version_id, signal);
+  const wbs = presentWbs(version, project, template);
   return presentValidation(validation, wbs);
 }
 
@@ -121,8 +121,8 @@ export default function WbsValidationScreen({
 
     try {
       const controller = new AbortController();
-      const version = await getLatestWbs(tenantId, project.id, controller.signal);
-      const started = await startValidation(tenantId, version.id, controller.signal);
+      const previous = await getValidation(tenantId, validationId, controller.signal);
+      const started = await startValidation(tenantId, previous.wbs_version_id, controller.signal, true);
       const res = await fetchCompletedValidation(
         tenantId,
         started.id,

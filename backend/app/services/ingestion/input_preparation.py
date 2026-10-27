@@ -152,6 +152,7 @@ def _validate_download(
     ):
         _fail_integrity()
     expected_hashes = (
+        _validated_expected_sha256(getattr(document, "upload_sha256", None)),
         _validated_expected_sha256(document.content_sha256),
         metadata.checksum_sha256,
     )

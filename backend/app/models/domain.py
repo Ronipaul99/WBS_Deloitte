@@ -150,6 +150,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "documents"
     __table_args__ = (
         Index("ix_documents_tenant_project", "tenant_id", "project_id"),
+        Index("ix_documents_upload_fingerprint", "tenant_id", "upload_sha256", "size_bytes"),
         UniqueConstraint("id", "tenant_id", "project_id", name="uq_documents_scope"),
         ForeignKeyConstraint(
             ["current_processing_run_id", "tenant_id", "project_id", "id"],
@@ -205,6 +206,7 @@ class Document(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     storage_key: Mapped[str] = mapped_column(String(600), unique=True)
     content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    upload_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     current_processing_run_id: Mapped[UUID | None] = mapped_column(nullable=True)
     processing_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -411,6 +413,9 @@ class DocumentChunk(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_summaries"
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", "document_id", name="uq_summary_document_scope"),
+    )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id"), unique=True)
@@ -419,10 +424,12 @@ class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     requirements: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
 
 
 class WbsTemplate(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "wbs_templates"
+    __table_args__ = (UniqueConstraint("id", "tenant_id", name="uq_template_tenant_scope"),)
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     uploaded_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
@@ -439,11 +446,22 @@ class Job(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         Index("ix_jobs_tenant_project", "tenant_id", "project_id"),
         UniqueConstraint("id", "tenant_id", "project_id", name="uq_jobs_scope"),
+        ForeignKeyConstraint(
+            ["workflow_id", "tenant_id", "project_id"],
+            [
+                "document_workflows.id",
+                "document_workflows.tenant_id",
+                "document_workflows.project_id",
+            ],
+            name="fk_job_workflow_scope",
+            use_alter=True,
+        ),
         CheckConstraint("progress >= 0 AND progress <= 100", name="ck_jobs_progress_range"),
         CheckConstraint("attempt_count >= 0", name="ck_jobs_attempt_count_nonnegative"),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
+    workflow_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
     project_id: Mapped[UUID | None] = mapped_column(ForeignKey("projects.id"), nullable=True)
     created_by: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     job_type: Mapped[str] = mapped_column(String(40))
@@ -559,11 +577,26 @@ class DocumentDeletionOutbox(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class WbsVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "wbs_versions"
-    __table_args__ = (Index("ix_wbs_versions_tenant_project", "tenant_id", "project_id"),)
+    __table_args__ = (
+        Index("ix_wbs_versions_tenant_project", "tenant_id", "project_id"),
+        UniqueConstraint("id", "tenant_id", "project_id", name="uq_wbs_project_scope"),
+        ForeignKeyConstraint(
+            ["workflow_id", "tenant_id", "project_id"],
+            [
+                "document_workflows.id",
+                "document_workflows.tenant_id",
+                "document_workflows.project_id",
+            ],
+            name="fk_wbs_workflow_scope",
+            use_alter=True,
+        ),
+    )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     project_id: Mapped[UUID] = mapped_column(ForeignKey("projects.id"), index=True)
     generation_job_id: Mapped[UUID | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+    workflow_id: Mapped[UUID | None] = mapped_column(nullable=True, index=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     version_number: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="DRAFT")
     tree: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list)
@@ -572,9 +605,14 @@ class WbsVersion(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ValidationRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "validation_runs"
+    __table_args__ = (
+        UniqueConstraint("id", "tenant_id", "wbs_version_id", name="uq_validation_wbs_scope"),
+    )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
     wbs_version_id: Mapped[UUID] = mapped_column(ForeignKey("wbs_versions.id"), index=True)
+    wbs_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    wbs_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default=ProcessingStatus.QUEUED)
     result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
 

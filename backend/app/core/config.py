@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     metrics_enabled: bool = False
     metrics_bearer_token: str = ""
     document_ingestion_enabled: bool = False
+    document_workflow_resume_enabled: bool = False
+    document_upload_reuse_enabled: bool = False
+    document_upload_lease_seconds: int = Field(default=120, ge=15, le=3600)
     document_ingestion_local_development: bool = False
     embedding_provider: str = Field(default="fastembed", min_length=1, max_length=40)
     embedding_model: str = Field(default="BAAI/bge-small-en-v1.5", min_length=1, max_length=160)
@@ -278,6 +281,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_security_settings(self) -> "Settings":
+        if self.document_upload_reuse_enabled and not self.document_workflow_resume_enabled:
+            raise ValueError(
+                "Document upload reuse requires document workflow resume to be enabled"
+            )
         if self.document_ingestion_local_development and self.app_env != "development":
             raise ValueError("DOCUMENT_INGESTION_LOCAL_DEVELOPMENT is allowed only in development")
         if self.auth_access_token_seconds_override is not None and self.app_env != "test":

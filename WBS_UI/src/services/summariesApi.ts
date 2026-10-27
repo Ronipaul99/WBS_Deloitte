@@ -5,8 +5,9 @@ export function startSummary(
   tenantId: string,
   documentId: string,
   signal?: AbortSignal,
+  workflowId?: string,
 ): Promise<JobResponse> {
-  return apiRequest(`/tenants/${tenantId}/documents/${documentId}/summary`, {
+  return apiRequest(`/tenants/${tenantId}/documents/${documentId}/summary${workflowId ? `?workflow_id=${workflowId}` : ''}`, {
     method: 'POST',
     signal,
   });

@@ -1,14 +1,15 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_project, get_tenant_wbs_version
 from app.core.permissions import Permission
-from app.db.session import get_db
+from app.db.session import get_db, set_local_tenant_context
+from app.models.document_workflows import DocumentWorkflow
 from app.models.domain import WbsVersion
 from app.schemas.domain import WbsVersionResponse, WbsVersionUpdate
 
@@ -67,9 +68,17 @@ async def update_wbs(
     db: AsyncSession = Depends(get_db),
 ) -> WbsVersion:
     version = await get_tenant_wbs_version(db, context.tenant.id, version_id)
+    await db.refresh(version, with_for_update=True)
     version.tree = payload.tree
+    version.revision += 1
     if payload.scope_coverage is not None:
         version.scope_coverage = payload.scope_coverage
+    if version.workflow_id:
+        await set_local_tenant_context(db, context.tenant.id)
+        await db.execute(update(DocumentWorkflow).where(
+            DocumentWorkflow.id == version.workflow_id,
+            DocumentWorkflow.tenant_id == context.tenant.id,
+        ).values(checkpoint_revision=DocumentWorkflow.checkpoint_revision + 1))
     await db.commit()
     await db.refresh(version)
     return version

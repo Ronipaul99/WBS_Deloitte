@@ -47,6 +47,13 @@ class DownloadResult:
 
 
 @dataclass(frozen=True, slots=True)
+class PreparedUpload:
+    sha256: str
+    size_bytes: int
+    storage_key: str
+
+
+@dataclass(frozen=True, slots=True)
 class StoredObjectEntry:
     storage_key: str
     updated_at: datetime
@@ -66,6 +73,7 @@ class UploadObjectStorage(Protocol):
         suffix: str,
         content_type: str,
         project_id: UUID | None = None,
+        prepared: PreparedUpload | None = None,
     ) -> tuple[str, int]: ...
 
     async def delete_object(self, storage_key: str) -> None: ...
@@ -267,6 +275,22 @@ async def _measure_upload(upload: UploadFile, max_upload_bytes: int) -> int:
     return size
 
 
+async def prepare_upload(
+    upload: UploadFile, *, suffix: str, settings: Settings,
+    tenant_id: UUID, project_id: UUID,
+) -> PreparedUpload:
+    """Validate and hash a bounded spooled upload before any permanent object write."""
+    size = await _validate_content(upload, suffix, settings.max_upload_bytes)
+    digest = hashlib.sha256()
+    await upload.seek(0)
+    while chunk := await upload.read(CHUNK_SIZE):
+        digest.update(chunk)
+    await upload.seek(0)
+    return PreparedUpload(
+        digest.hexdigest(), size, _object_key(tenant_id, "documents", suffix, project_id)
+    )
+
+
 def _validate_pdf(file: Any) -> None:
     try:
         reader = PdfReader(file, strict=True)
@@ -362,14 +386,17 @@ class LocalObjectStorage:
         suffix: str,
         content_type: str,
         project_id: UUID | None = None,
+        prepared: PreparedUpload | None = None,
     ) -> tuple[str, int]:
         del content_type
         try:
-            size = await _validate_content(upload, suffix, self.max_upload_bytes)
+            size = (prepared.size_bytes if prepared else
+                    await _validate_content(upload, suffix, self.max_upload_bytes))
         except Exception:
             await upload.close()
             raise
-        storage_key = _object_key(tenant_id, category, suffix, project_id)
+        storage_key = (prepared.storage_key if prepared else
+                       _object_key(tenant_id, category, suffix, project_id))
         destination = (self.root / storage_key).resolve()
         if self.root not in destination.parents:
             await upload.close()
@@ -520,13 +547,16 @@ class S3ObjectStorage:
         suffix: str,
         content_type: str,
         project_id: UUID | None = None,
+        prepared: PreparedUpload | None = None,
     ) -> tuple[str, int]:
         try:
-            size = await _validate_content(upload, suffix, self.max_upload_bytes)
+            size = (prepared.size_bytes if prepared else
+                    await _validate_content(upload, suffix, self.max_upload_bytes))
         except Exception:
             await upload.close()
             raise
-        storage_key = _object_key(tenant_id, category, suffix, project_id)
+        storage_key = (prepared.storage_key if prepared else
+                       _object_key(tenant_id, category, suffix, project_id))
         try:
             await run_in_threadpool(
                 partial(

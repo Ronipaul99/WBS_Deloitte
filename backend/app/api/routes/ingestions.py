@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import PurePosixPath
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -36,10 +35,9 @@ from app.schemas.domain import IngestionStatusResponse, JobResponse
 from app.services.dispatcher import INGESTION_TASK_NAME, publish_ingestion_dispatch
 from app.services.ingestion.chunk_types import ChunkWarningCode
 from app.services.ingestion.release_identity import (
-    RELEASE_CHUNKER_VERSION,
-    release_extractor_identity,
+    matches_release_identity as _matches_release_identity,
 )
-from app.services.ingestion.types import ExtractionWarningCode, confirmed_format_from_suffix
+from app.services.ingestion.types import ExtractionWarningCode
 
 SAFE_WARNING_CODES = frozenset(code.value for code in (*ExtractionWarningCode, *ChunkWarningCode))
 
@@ -48,37 +46,6 @@ router = APIRouter(
     tags=["document-ingestion"],
     responses=TENANT_AUTH_RESPONSES,
 )
-
-
-def _matches_release_identity(
-    document: Document,
-    run: DocumentProcessingRun,
-    settings: Settings,
-) -> bool:
-    try:
-        confirmed_format = confirmed_format_from_suffix(
-            PurePosixPath(document.storage_key).suffix.casefold()
-        )
-        extractor_name, extractor_version = release_extractor_identity(confirmed_format)
-    except ValueError:
-        return False
-    return all(
-        (
-            document.current_processing_run_id == run.id,
-            document.content_sha256 is not None,
-            document.content_sha256 == run.document_content_sha256,
-            run.status == DocumentProcessingStatus.COMPLETED.value,
-            run.chunk_count > 0,
-            run.extractor_name == extractor_name,
-            run.extractor_version == extractor_version,
-            run.chunker_version == RELEASE_CHUNKER_VERSION,
-            run.embedding_provider == settings.embedding_provider,
-            run.embedding_model == settings.embedding_model,
-            run.embedding_model_revision == settings.embedding_model_revision,
-            run.embedding_dimensions == settings.embedding_dimensions,
-            run.embedding_formatting_version == settings.embedding_formatting_version,
-        )
-    )
 
 
 async def _scoped_document_for_update(
@@ -143,7 +110,17 @@ async def start_ingestion(
             raise HTTPException(status_code=409, detail="Document ingestion state is inconsistent.")
         return existing_job
 
-    if document.current_processing_run_id is not None:
+    latest_failed = False
+    if settings.document_workflow_resume_enabled:
+        latest_status = await db.scalar(
+            select(DocumentProcessingRun.status).where(
+                DocumentProcessingRun.tenant_id == context.tenant.id,
+                DocumentProcessingRun.document_id == document.id,
+            ).order_by(DocumentProcessingRun.created_at.desc(),
+                       DocumentProcessingRun.id.desc()).limit(1)
+        )
+        latest_failed = latest_status in {"FAILED", "CANCELLED"}
+    if document.current_processing_run_id is not None and not latest_failed:
         completed_run = await db.scalar(
             select(DocumentProcessingRun).where(
                 DocumentProcessingRun.id == document.current_processing_run_id,

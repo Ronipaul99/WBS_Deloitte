@@ -165,10 +165,13 @@ async def request_document_deletion(
     document.processing_status = DocumentProcessingStatus.CANCELLED.value
     document.processing_error_code = DELETION_REQUESTED_CODE
     document.lifecycle_status = DocumentLifecycleStatus.DELETING.value
+    from app.services.document_content import mark_content_deleting
+
     document.deletion_requested_at = now
     document.vectors_hidden_at = now
     document.deletion_completed_at = None
     document.deletion_error_code = None
+    await mark_content_deleting(db, document)
     await db.execute(
         delete(DocumentChunk).where(
             DocumentChunk.tenant_id == tenant_id,
@@ -478,7 +481,10 @@ async def process_document_deletion(
             )
             document.current_processing_run_id = None
             document.lifecycle_status = DocumentLifecycleStatus.DELETED.value
+            from app.services.document_content import release_deleted_content
+
             document.deletion_completed_at = completed_at
+            await release_deleted_content(session, document)
             document.deletion_error_code = None
             document.file_name = "deleted"
             document.content_type = "application/octet-stream"

@@ -5,8 +5,9 @@ export function startValidation(
   tenantId: string,
   versionId: string,
   signal?: AbortSignal,
+  rerun = false,
 ): Promise<ValidationResponse> {
-  return apiRequest(`/tenants/${tenantId}/wbs/${versionId}/validations`, {
+  return apiRequest(`/tenants/${tenantId}/wbs/${versionId}/validations${rerun ? '?rerun=true' : ''}`, {
     method: 'POST',
     signal,
   });

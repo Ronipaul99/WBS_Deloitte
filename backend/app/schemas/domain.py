@@ -121,6 +121,8 @@ class JobResponse(ORMModel):
     id: UUID
     tenant_id: UUID
     project_id: UUID | None
+    workflow_id: UUID | None = None
+    workflow_id: UUID | None = None
     job_type: str
     status: str
     progress: int
@@ -165,6 +167,10 @@ class GenerationCreate(BaseModel):
     document_id: UUID
     template_id: UUID | None = None
     summary_id: UUID
+    workflow_id: UUID | None = None
+    regenerate: bool = False
+    request_key: UUID | None = None
+    expected_revision: int | None = Field(default=None, ge=1)
 
 
 class WbsVersionUpdate(BaseModel):

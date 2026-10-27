@@ -2,14 +2,17 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
 from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_document, get_tenant_project
+from app.core.config import Settings, get_settings
 from app.core.observability import record_document_upload
 from app.core.permissions import Permission
 from app.core.upload_errors import UploadErrorCode, upload_error_code, upload_http_error
@@ -17,6 +20,7 @@ from app.db.session import get_db, set_local_tenant_context
 from app.models.domain import Document, DocumentKind, DocumentLifecycleStatus, Job
 from app.schemas.domain import DocumentDeletionStatusResponse, DocumentResponse, JobResponse
 from app.services.dispatcher import publish_deletion_dispatch
+from app.services.document_content import upload_or_reuse
 from app.services.document_lifecycle import request_document_deletion
 from app.services.storage import (
     ObjectStorageUnavailableError,
@@ -100,10 +104,12 @@ async def _persist_document(
 )
 async def upload_document(
     request: Request,
+    response: Response,
     project_id: UUID,
     context: TenantContext = Depends(require_permission(Permission.DOCUMENT_UPLOAD)),
     db: AsyncSession = Depends(get_db),
     storage: UploadObjectStorage = Depends(get_upload_storage),
+    settings: Settings = Depends(get_settings),
 ) -> Document:
     await get_tenant_project(db, context.tenant.id, project_id)
     form = await request.form()
@@ -144,6 +150,31 @@ async def upload_document(
     normalized_content_type = "application/pdf" if suffix == ".pdf" else content_type
 
     file_name = Path(file.filename or "upload.bin").name
+    if settings.document_workflow_resume_enabled and not settings.document_upload_reuse_enabled:
+        await file.close()
+        raise HTTPException(
+            409, detail="New uploads are temporarily paused; saved work remains available."
+        )
+    if settings.document_upload_reuse_enabled:
+        try:
+            disposition, document, _, handle = await upload_or_reuse(
+                db, context=context, project_id=project_id, file=file, suffix=suffix,
+                content_type=normalized_content_type, storage=storage, settings=settings,
+                client_sha256=form.get("sha256"),
+                idempotency_key=request.headers.get("Idempotency-Key"),
+            )
+            if disposition == "UPLOAD_PENDING":
+                return JSONResponse(status_code=202, headers={"Retry-After": "2"}, content={
+                    "disposition": disposition, "upload_handle": str(handle) if handle else None,
+                })
+            response.status_code = 201 if disposition == "CREATED" else 200
+            return document
+        except ObjectStorageUnavailableError:
+            raise upload_http_error(UploadErrorCode.OBJECT_STORAGE_UNAVAILABLE) from None
+        except SQLAlchemyError:
+            raise HTTPException(503, detail="Saved work is temporarily unavailable.") from None
+        finally:
+            await file.close()
     try:
         storage_key, size = await storage.save(
             context.tenant.id,

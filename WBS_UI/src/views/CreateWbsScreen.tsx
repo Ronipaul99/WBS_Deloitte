@@ -10,9 +10,12 @@ import {
   Loader2,
   ArrowLeft,
 } from 'lucide-react';
-import { startWorkflow } from '../services/workflowApi';
+import { resumeWorkflow, sessionFromState, startWorkflow } from '../services/workflowApi';
+import { configureWorkflowTemplate, getWorkflow, resolveDocument, workflowCapabilities } from '../services/documentWorkflowsApi';
+import { createWorkflowRequestKey, documentFingerprint } from '../services/documentFingerprint';
+import { uploadTemplate } from '../services/templatesApi';
 import { ApiError } from '../services/apiClient';
-import type { ProjectResponse, WorkflowSession } from '../services/workflowTypes';
+import type { ProjectResponse, WorkflowCandidate, WorkflowSession } from '../services/workflowTypes';
 import { useAuth } from '../auth/authContext';
 import { PERMISSIONS } from '../auth/permissions';
 import './CreateWbsScreen.css';
@@ -53,7 +56,10 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+class ContentLookupError extends Error {}
+
 function submissionErrorMessage(error: unknown): string {
+  if (error instanceof ContentLookupError) return error.message;
   if (error instanceof ApiError && error.code) {
     return UPLOAD_ERROR_MESSAGES[error.code] ?? 'The document upload could not be completed.';
   }
@@ -77,10 +83,14 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<WorkflowCandidate[]>([]);
+  const [checkingContent, setCheckingContent] = useState(false);
+  const [fingerprintFallback, setFingerprintFallback] = useState(false);
 
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
+  const requestKeyRef = useRef(createWorkflowRequestKey());
 
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
@@ -97,6 +107,8 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
 
   const handleProjectSelect = (file: File) => {
     if (isSubmitting) return;
+    setCandidates([]);
+    requestKeyRef.current = createWorkflowRequestKey();
     const error = validateFile(file, ACCEPTED_PROJECT_EXTENSIONS);
     if (error) {
       setProjectFile(null);
@@ -162,16 +174,66 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
     requestControllerRef.current = controller;
 
     try {
+      const capabilities = await workflowCapabilities(activeTenant.id, controller.signal);
+      let sha256: string | null = null;
+      if (capabilities.resume_enabled) {
+        setCheckingContent(true);
+        sha256 = await documentFingerprint(projectFile, capabilities.max_upload_bytes);
+        if (controller.signal.aborted) return;
+        setFingerprintFallback(!sha256);
+        if (sha256) {
+          const resolved = await resolveDocument(activeTenant.id, project.id, sha256, projectFile.size, controller.signal);
+          if (resolved.candidates.length) {
+            setCandidates(resolved.candidates);
+            return;
+          }
+          if (resolved.disposition === 'TEMPORARILY_UNAVAILABLE') {
+            throw new ContentLookupError('The existing content index is unavailable. Try again after the documents are indexed or available.');
+          }
+          if (resolved.disposition === 'UPLOAD_PENDING') {
+            throw new ContentLookupError('This document is already being uploaded. Check again shortly to continue it.');
+          }
+        }
+      }
+      setCheckingContent(false);
       const session = await startWorkflow(
         activeTenant.id,
         project,
         projectFile,
         templateFile,
         controller.signal,
+        sha256,
+        requestKeyRef.current,
       );
       onWorkflowStarted?.(session);
     } catch (err: unknown) {
       if (!controller.signal.aborted) setSubmissionError(submissionErrorMessage(err));
+    } finally {
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setIsSubmitting(false);
+        setCheckingContent(false);
+      }
+    }
+  };
+
+  const continueExisting = async (candidate: WorkflowCandidate, useSelectedTemplate: boolean) => {
+    if (!activeTenant || !candidate.workflow_id || isSubmitting) return;
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      if (useSelectedTemplate && templateFile) {
+        const original = await getWorkflow(activeTenant.id, candidate.workflow_id, controller.signal);
+        const template = await uploadTemplate(activeTenant.id, templateFile, controller.signal);
+        const fork = await configureWorkflowTemplate(activeTenant.id, original, template.id, true, controller.signal);
+        onWorkflowStarted?.(await sessionFromState(activeTenant.id, fork, controller.signal));
+      } else {
+        onWorkflowStarted?.(await resumeWorkflow(activeTenant.id, candidate.workflow_id, controller.signal));
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) setSubmissionError(submissionErrorMessage(error));
     } finally {
       if (requestControllerRef.current === controller) {
         requestControllerRef.current = null;
@@ -202,6 +264,30 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           <ShieldAlert size={18} />
           <span>{submissionError}</span>
         </div>
+      )}
+
+      {fingerprintFallback && <p role="status">Browser fingerprinting is unavailable. The server will check the uploaded content before saving it.</p>}
+      {checkingContent && <p role="status">Checking existing documents…</p>}
+      {candidates.length > 0 && (
+        <section className="app-missing-job-card" aria-labelledby="duplicate-document-heading">
+          <h2 id="duplicate-document-heading">This document already exists. Continue previous work?</h2>
+          <p>The existing document and saved work will be reused.</p>
+          {templateFile && <p>Continuing keeps the saved template. Choose a new generation to use your selected template.</p>}
+          {candidates.map((candidate) => (
+            <div key={candidate.workflow_id ?? candidate.document_id} className="wbs-proc-file-card">
+              <p><strong>{candidate.file_name}</strong> · {candidate.project_name} · {candidate.stage.replaceAll('_', ' ').toLowerCase()}</p>
+              <p>Saved {new Date(candidate.updated_at).toLocaleString()}</p>
+              {candidate.requires_project_switch && <p>Continuing opens the original project.</p>}
+              <button type="button" className="app-missing-job-btn" disabled={isSubmitting || !candidate.workflow_id}
+                onClick={() => void continueExisting(candidate, false)}>Continue previous work</button>
+              {templateFile && can(PERMISSIONS.WBS_GENERATE) && (
+                <button type="button" disabled={isSubmitting || !candidate.workflow_id}
+                  onClick={() => void continueExisting(candidate, true)}>Use selected template for new generation</button>
+              )}
+            </div>
+          ))}
+          <button type="button" disabled={isSubmitting} onClick={() => setCandidates([])}>Cancel</button>
+        </section>
       )}
 
       {/* Upload Columns */}

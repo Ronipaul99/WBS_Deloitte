@@ -34,6 +34,7 @@ const localPython = process.platform === 'win32'
 const pythonCommand = existsSync(localPython)
   ? localPython
   : (process.platform === 'win32' ? 'python' : 'python3');
+const documentWorkflows = process.argv.includes('--document-workflows');
 const children = [];
 let composeStarted = false;
 let cleaning = false;
@@ -246,6 +247,9 @@ try {
     AUTO_CREATE_TABLES: 'false',
     BOOTSTRAP_DEVELOPMENT_DATA: 'false',
     TASKS_EAGER: 'true',
+    DOCUMENT_WORKFLOW_RESUME_ENABLED: documentWorkflows ? 'true' : 'false',
+    DOCUMENT_UPLOAD_REUSE_ENABLED: documentWorkflows ? 'true' : 'false',
+    ...(documentWorkflows ? { STORAGE_BACKEND: 'local', DOCUMENT_INGESTION_ENABLED: 'false', DOCUMENT_INGESTION_LOCAL_DEVELOPMENT: 'false' } : {}),
     UPLOAD_ROOT: uploadRoot,
     CORS_ORIGINS: uiOrigin,
     PUBLIC_UI_URL: uiOrigin,
@@ -307,7 +311,8 @@ try {
   console.log('[fullstack] Running live Playwright suite');
   run(
     process.execPath,
-    [playwrightEntry, 'test', '--config', 'playwright.fullstack.config.ts'],
+    [playwrightEntry, 'test', '--config', 'playwright.fullstack.config.ts',
+      ...(documentWorkflows ? ['document-workflows.spec.ts'] : [])],
     { cwd: uiDir, env: environment },
   );
   exitCode = 0;

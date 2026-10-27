@@ -55,6 +55,7 @@ export interface JobResponse {
   id: string;
   tenant_id: string;
   project_id: string | null;
+  workflow_id?: string | null;
   job_type: string;
   status: ProcessingStatus;
   progress: number;
@@ -170,13 +171,68 @@ export interface WorkflowSession {
   project: ProjectResponse;
   document: DocumentResponse;
   template: TemplateResponse | null;
-  ingestionJobId: string;
-  processingRunId: string;
-  initialIngestionStatus: IngestionStatusResponse;
+  ingestionJobId: string | null;
+  processingRunId: string | null;
+  initialIngestionStatus: IngestionStatusResponse | null;
   summaryId: string | null;
   generationJobId: string | null;
   wbsVersionId: string | null;
   validationId: string | null;
+  workflowId?: string;
+  recovery?: WorkflowState;
+}
+
+export type WorkflowStage = 'DOCUMENT_READY' | 'INGESTING' | 'INGESTED' | 'SUMMARIZING'
+  | 'SUMMARY_REVIEW' | 'SUMMARY_APPROVED' | 'GENERATING' | 'WBS_READY'
+  | 'VALIDATING' | 'VALIDATED' | 'FAILED' | 'CANCELLED';
+
+export interface WorkflowState {
+  workflow_id: string;
+  project_id: string;
+  document_id: string;
+  checkpoint_revision: number;
+  stage: WorkflowStage;
+  resume_screen: 'checkpoint' | 'doc_processing' | 'doc_summary' | 'analyzing' | 'results' | 'validation';
+  project: ProjectResponse;
+  document: DocumentResponse;
+  template: TemplateResponse | null;
+  processing_run_id: string | null;
+  ingestion_job_id: string | null;
+  summary_id: string | null;
+  summary_revision: number | null;
+  summary_job_id: string | null;
+  generation_job_id: string | null;
+  wbs_version_id: string | null;
+  validation_id: string | null;
+  validation_stale: boolean;
+  input_compatibility: 'CURRENT' | 'CHANGED' | 'UNKNOWN';
+  source_requires_processing?: boolean;
+  job: JobResponse | null;
+  failed_stage: 'ingestion' | 'summary' | 'generation' | 'validation' | null;
+  allowed_actions: string[];
+}
+
+export interface WorkflowCandidate {
+  workflow_id: string | null;
+  document_id: string;
+  project_id: string;
+  project_name: string;
+  file_name: string;
+  stage: WorkflowStage;
+  updated_at: string;
+  requires_project_switch: boolean;
+}
+
+export interface ResolveDocumentResponse {
+  disposition: 'NEW' | 'MATCH' | 'MULTIPLE_MATCHES' | 'UPLOAD_PENDING' | 'TEMPORARILY_UNAVAILABLE';
+  candidates: WorkflowCandidate[];
+  upload_handle: string | null;
+}
+
+export interface UploadWorkflowResponse {
+  disposition: 'CREATED' | 'REUSED' | 'UPLOAD_PENDING';
+  workflow: WorkflowState | null;
+  upload_handle: string | null;
 }
 
 export type StepStatus = 'COMPLETED' | 'IN_PROGRESS' | 'PENDING' | 'FAILED';

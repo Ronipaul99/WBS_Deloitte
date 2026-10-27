@@ -33,6 +33,7 @@ interface ProcessingProjectDocumentScreenProps {
   template: TemplateResponse | null;
   initialStatus: IngestionStatusResponse;
   onBack: (completed: boolean) => void;
+  onContinue?: () => void;
 }
 
 function safeConnectionMessage(reason: unknown): string {
@@ -75,6 +76,7 @@ export default function ProcessingProjectDocumentScreen({
   template,
   initialStatus,
   onBack,
+  onContinue,
 }: ProcessingProjectDocumentScreenProps) {
   const initialStatusIsValid = initialStatus.document_id === document.id
     && initialStatus.job_id === jobId
@@ -310,6 +312,9 @@ export default function ProcessingProjectDocumentScreen({
       </div>
 
       <div className="wbs-proc-footer">
+        {data.overallStatus === 'COMPLETED' && onContinue && (
+          <button type="button" className="app-missing-job-btn" onClick={onContinue}>Continue saved work</button>
+        )}
         <button
           type="button"
           onClick={() => onBack(data.overallStatus === 'COMPLETED')}

@@ -18,7 +18,7 @@ from app.services.ingestion.errors import (
 from app.services.readiness import application_migration_heads
 
 REVISION = "c8d4a1e72f09"
-APPLICATION_HEAD = "e71c4a9b203d"
+APPLICATION_HEAD = "c92e6b4a710d"
 PREVIOUS_REVISION = "b6e2f719c4d8"
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_PATH = (

@@ -3,7 +3,7 @@ import type { WorkflowSession } from './workflowTypes';
 const STORAGE_PREFIX = 'wbs.ingestion.v1';
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export interface StoredWorkflowContext {
+interface LegacyWorkflowContext {
   version: 1;
   tenantId: string;
   projectId: string;
@@ -12,6 +12,13 @@ export interface StoredWorkflowContext {
   processingRunId: string;
   templateId: string | null;
 }
+
+export type StoredWorkflowContext = LegacyWorkflowContext | {
+  version: 2;
+  tenantId: string;
+  projectId: string;
+  workflowId: string;
+};
 
 function activeKey(tenantId: string): string {
   return `${STORAGE_PREFIX}:${tenantId}:active`;
@@ -27,7 +34,11 @@ function isIdentifier(value: unknown): value is string {
 
 function isStoredContext(value: unknown): value is StoredWorkflowContext {
   if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<StoredWorkflowContext>;
+  const candidate = value as Partial<LegacyWorkflowContext> & { workflowId?: unknown };
+  if ((value as { version?: unknown }).version === 2) {
+    return isIdentifier(candidate.tenantId) && isIdentifier(candidate.projectId)
+      && isIdentifier(candidate.workflowId);
+  }
   return candidate.version === 1
     && isIdentifier(candidate.tenantId)
     && isIdentifier(candidate.projectId)
@@ -38,13 +49,16 @@ function isStoredContext(value: unknown): value is StoredWorkflowContext {
 }
 
 export function saveWorkflowContext(tenantId: string, session: WorkflowSession): void {
-  const context: StoredWorkflowContext = {
+  if (!session.workflowId && (!session.ingestionJobId || !session.processingRunId)) return;
+  const context: StoredWorkflowContext = session.workflowId ? {
+    version: 2, tenantId, projectId: session.project.id, workflowId: session.workflowId,
+  } : {
     version: 1,
     tenantId,
     projectId: session.project.id,
     documentId: session.document.id,
-    ingestionJobId: session.ingestionJobId,
-    processingRunId: session.processingRunId,
+    ingestionJobId: session.ingestionJobId!,
+    processingRunId: session.processingRunId!,
     templateId: session.template?.id ?? null,
   };
   try {

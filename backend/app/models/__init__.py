@@ -6,6 +6,14 @@ from app.models.auth import (
     RefreshSession,
     TenantInvitation,
 )
+from app.models.document_workflows import (
+    DocumentContentClaim,
+    DocumentContentRejection,
+    DocumentUploadAttempt,
+    DocumentWorkflow,
+    WorkflowDispatch,
+    WorkflowRequestKey,
+)
 from app.models.domain import (
     ACTIVE_DOCUMENT_PROCESSING_STATUSES,
     Document,
@@ -33,6 +41,12 @@ __all__ = [
     "AuthIdentity",
     "OidcAuthorizationState",
     "Document",
+    "DocumentContentClaim",
+    "DocumentContentRejection",
+    "DocumentUploadAttempt",
+    "DocumentWorkflow",
+    "WorkflowRequestKey",
+    "WorkflowDispatch",
     "DocumentChunk",
     "DocumentDeletionOutbox",
     "DocumentLifecycleStatus",

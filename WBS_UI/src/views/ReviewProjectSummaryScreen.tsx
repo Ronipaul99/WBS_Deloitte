@@ -32,6 +32,7 @@ export type ReviewProjectSummaryScreenProps = {
   project: ProjectResponse;
   document: DocumentResponse;
   template: TemplateResponse | null;
+  workflowId?: string;
   onProceedToAnalyze?: (generationJobId: string, summaryId: string) => void;
   onDiscard?: () => void;
 };
@@ -70,6 +71,7 @@ export default function ReviewProjectSummaryScreen({
   project,
   document,
   template,
+  workflowId,
   onProceedToAnalyze,
   onDiscard,
 }: ReviewProjectSummaryScreenProps) {
@@ -206,6 +208,7 @@ export default function ReviewProjectSummaryScreen({
         documentId: document.id,
         summaryId: approved.id || updated.id,
         templateId: template?.id ?? null,
+        workflowId,
       });
       onProceedToAnalyze?.(generation.id, approved.id);
     } catch (err: unknown) {

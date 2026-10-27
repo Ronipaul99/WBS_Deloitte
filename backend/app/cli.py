@@ -235,9 +235,54 @@ async def revoke_every_session(args: argparse.Namespace) -> None:
     print(json.dumps({"status": "ok", "users_invalidated": user_count or 0}, sort_keys=True))
 
 
+async def document_workflow_maintenance(args: argparse.Namespace) -> None:
+    from app.services.document_workflow_backfill import backfill_workflows, reconcile_uploads
+    from app.services.storage import get_upload_storage
+
+    if args.apply:
+        require_confirmation(args.confirm, "APPLY_DOCUMENT_WORKFLOW_MAINTENANCE")
+    if args.command == "reconcile-document-workflow-dispatches":
+        from app.services.document_workflow_dispatch import reconcile_dispatches
+
+        result = await reconcile_dispatches(UUID(args.tenant_id), apply=args.apply,
+                                            limit=args.batch_size)
+    elif args.command == "backfill-document-workflows":
+        result = await backfill_workflows(
+            tenant_id=UUID(args.tenant_id), storage=get_upload_storage(), settings=get_settings(),
+            apply=args.apply, batch_size=args.batch_size,
+            after=UUID(args.after) if args.after else None,
+        )
+    else:
+        result = await reconcile_uploads(
+            tenant_id=UUID(args.tenant_id), storage=get_upload_storage(),
+            apply=args.apply, batch_size=args.batch_size,
+        )
+    print(json.dumps(result, sort_keys=True))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="WBS backend administration commands")
     subparsers = parser.add_subparsers(dest="command", required=True)
+    for name, help_text in (
+        (
+            "backfill-document-workflows",
+            "Verify stored content and recover unambiguous workflow lineage",
+        ),
+        (
+            "reconcile-document-uploads",
+            "Reconcile expired upload ownership and owned orphan objects",
+        ),
+        (
+            "reconcile-document-workflow-dispatches",
+            "Republish pending workflow attempts after failure",
+        ),
+    ):
+        command = subparsers.add_parser(name, help=help_text)
+        command.add_argument("--tenant-id", required=True)
+        command.add_argument("--batch-size", type=int, default=100)
+        command.add_argument("--after")
+        command.add_argument("--apply", action="store_true")
+        command.add_argument("--confirm")
     create = subparsers.add_parser("create-admin", help="Provision a local administrator")
     create.add_argument("--email", required=True)
     create.add_argument("--display-name", required=True)
@@ -305,7 +350,10 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        if args.command == "create-admin":
+        if args.command in {"backfill-document-workflows", "reconcile-document-uploads",
+                             "reconcile-document-workflow-dispatches"}:
+            asyncio.run(document_workflow_maintenance(args))
+        elif args.command == "create-admin":
             asyncio.run(create_admin(args))
         elif args.command == "cleanup-password-reset-tokens":
             asyncio.run(cleanup_reset_tokens())

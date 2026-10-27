@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
@@ -12,9 +13,12 @@ from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_job
 from app.core.permissions import Permission
 from app.db.session import SessionLocal, get_db
+from app.models.document_workflows import DocumentWorkflow
 from app.models.domain import Job, JobType, ProcessingStatus
 from app.schemas.domain import JobResponse
 from app.services.dispatcher import dispatch_generation, dispatch_summary
+from app.services.document_workflow_dispatch import enqueue_dispatch, publish_dispatch
+from app.services.document_workflow_resume import scoped_document
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}/jobs", tags=["jobs"], responses=TENANT_AUTH_RESPONSES
@@ -37,6 +41,7 @@ async def cancel_job(
     db: AsyncSession = Depends(get_db),
 ) -> Job:
     job = await get_tenant_job(db, context.tenant.id, job_id)
+    await db.refresh(job, with_for_update=True)
     if job.job_type == JobType.DOCUMENT_INGESTION:
         raise HTTPException(
             status_code=409,
@@ -69,6 +74,45 @@ async def retry_job(
     if job.job_type not in {JobType.DOCUMENT_SUMMARY, JobType.WBS_GENERATION}:
         raise HTTPException(status_code=409, detail="This job type cannot be retried.")
 
+    outbox_id = None
+    if job.workflow_id:
+        await scoped_document(db, context.tenant.id, UUID(job.request_payload["document_id"]),
+                              lock=True)
+        retried = await db.scalar(select(Job).where(
+            Job.tenant_id == context.tenant.id, Job.workflow_id == job.workflow_id,
+            Job.request_payload["retry_of"].as_string() == str(job.id),
+        ).order_by(Job.created_at.desc()).limit(1))
+        if retried:
+            return retried
+        workflow = await db.get(DocumentWorkflow, job.workflow_id)
+        current_id = (workflow.summary_job_id if job.job_type == JobType.DOCUMENT_SUMMARY
+                      else workflow.generation_job_id)
+        if current_id != job.id:
+            raise HTTPException(409, detail="A newer workflow attempt already exists.")
+        replacement = Job(
+            tenant_id=job.tenant_id, project_id=job.project_id, created_by=context.user.id,
+            workflow_id=job.workflow_id, job_type=job.job_type,
+            request_payload={**job.request_payload, "retry_of": str(job.id)},
+            attempt_count=job.attempt_count + 1, current_step="Queued for retry",
+        )
+        db.add(replacement)
+        await db.flush()
+        if job.job_type == JobType.DOCUMENT_SUMMARY:
+            workflow.summary_job_id = replacement.id
+        else:
+            workflow.generation_job_id = replacement.id
+            # Historical output remains attached to its original attempt/workflow.
+            workflow.wbs_version_id = None
+            workflow.validation_id = None
+        workflow.checkpoint_revision += 1
+        job = replacement
+        outbox_id = await enqueue_dispatch(
+            db,
+            workflow,
+            kind="summary" if job.job_type == JobType.DOCUMENT_SUMMARY else "generation",
+            job_id=job.id,
+        )
+
     job.status = ProcessingStatus.QUEUED
     job.progress = 0
     job.current_step = "Queued for retry"
@@ -76,7 +120,9 @@ async def retry_job(
     await db.commit()
     await db.refresh(job)
 
-    if job.job_type == JobType.DOCUMENT_SUMMARY:
+    if outbox_id:
+        await publish_dispatch(context.tenant.id, outbox_id, background_tasks)
+    elif job.job_type == JobType.DOCUMENT_SUMMARY:
         document_id = UUID(job.request_payload["document_id"])
         dispatch_summary(background_tasks, job.id, document_id)
     elif job.job_type == JobType.WBS_GENERATION:
