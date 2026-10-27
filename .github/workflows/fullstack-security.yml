@@ -142,7 +142,7 @@ jobs:
           WBS_UI
 
       - name: Scan backend container
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: wbs-api-ci:${{ github.sha }}
           format: table
@@ -151,7 +151,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan frontend container
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: wbs-ui-ci:${{ github.sha }}
           format: table
@@ -163,14 +163,14 @@ jobs:
         run: mkdir -p release-evidence
 
       - name: Generate backend SBOM
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: wbs-api-ci:${{ github.sha }}
           format: cyclonedx
           output: release-evidence/backend-sbom.cdx.json
 
       - name: Generate frontend SBOM
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@v0.33.1
         with:
           image-ref: wbs-ui-ci:${{ github.sha }}
           format: cyclonedx
