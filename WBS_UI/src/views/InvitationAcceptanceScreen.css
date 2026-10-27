@@ -1,0 +1,197 @@
+.invite-acceptance-shell {
+  min-height: 100vh;
+  background: #f4f7f5;
+  color: #17201d;
+}
+
+.invite-acceptance-header {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #dfe5e1;
+  padding: 0 clamp(18px, 4vw, 54px);
+  background: #101827;
+  color: #ffffff;
+}
+
+.invite-acceptance-header div,
+.invite-acceptance-header button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.invite-acceptance-header div { font-size: 15px; font-weight: 700; }
+
+.invite-acceptance-header button {
+  border: 0;
+  background: transparent;
+  color: #dbe4df;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.invite-acceptance-content {
+  width: min(calc(100% - 32px), 500px);
+  margin: clamp(42px, 9vh, 86px) auto;
+  border: 1px solid #dce3df;
+  border-radius: 8px;
+  padding: clamp(24px, 5vw, 38px);
+  background: #ffffff;
+  box-shadow: 0 12px 34px rgb(22 35 29 / 8%);
+}
+
+.invite-acceptance-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 18px;
+  place-items: center;
+  border-radius: 7px;
+  background: #e9f2ed;
+  color: #2d7358;
+}
+
+.invite-acceptance-eyebrow,
+.invite-acceptance-content h1,
+.invite-acceptance-intro,
+.invite-acceptance-state p { margin: 0; }
+
+.invite-acceptance-eyebrow {
+  margin-bottom: 5px;
+  color: #2f765c;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.invite-acceptance-content h1 {
+  font-size: 25px;
+  letter-spacing: 0;
+}
+
+.invite-acceptance-intro,
+.invite-acceptance-state p {
+  margin-top: 8px;
+  color: #68746f;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.invite-acceptance-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 24px;
+  border-bottom: 1px solid #dfe5e1;
+}
+
+.invite-acceptance-modes button {
+  min-height: 42px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #69736f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.invite-acceptance-modes button[aria-selected='true'] {
+  border-bottom-color: #2f765c;
+  color: #245e48;
+}
+
+.invite-acceptance-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.invite-acceptance-form label {
+  display: grid;
+  gap: 7px;
+  color: #3f4b46;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.invite-acceptance-form label > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  height: 42px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid #cfd8d3;
+  border-radius: 6px;
+  padding: 0 11px;
+  background: #fbfcfb;
+  color: #74807b;
+}
+
+.invite-acceptance-form label > span:focus-within {
+  border-color: #4d806d;
+  box-shadow: 0 0 0 3px rgb(47 118 92 / 12%);
+}
+
+.invite-acceptance-form input {
+  min-width: 0;
+  height: 38px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17201d;
+  font-size: 13px;
+}
+
+.invite-acceptance-form > button,
+.invite-acceptance-state > button,
+.invite-acceptance-enterprise {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 16px;
+  background: #17201d;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.invite-acceptance-form > button:disabled,
+.invite-acceptance-state > button:disabled,
+.invite-acceptance-enterprise:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.invite-acceptance-enterprise { width: 100%; margin-bottom: 18px; }
+
+.invite-acceptance-error {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #b64045;
+  background: #fff4f4;
+  color: #963237;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.invite-acceptance-state {
+  display: grid;
+  gap: 14px;
+}
+
+.invite-acceptance-state > button { margin-top: 6px; }
+.invite-acceptance-success { color: #2f765c; }
+.invite-acceptance-spinner { animation: invite-acceptance-spin 800ms linear infinite; }
+
+@keyframes invite-acceptance-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 520px) {
+  .invite-acceptance-header { min-height: 54px; }
+  .invite-acceptance-content { margin-top: 28px; }
+  .invite-acceptance-content h1 { font-size: 22px; }
+}

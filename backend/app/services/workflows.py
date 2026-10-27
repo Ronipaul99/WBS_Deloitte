@@ -43,8 +43,15 @@ async def _set_job(
 async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
     async with SessionLocal() as db:
         job = await db.get(Job, job_id)
-        document = await db.get(Document, document_id)
-        if job is None or document is None:
+        if job is None:
+            return
+        document = await db.scalar(
+            select(Document).where(
+                Document.id == document_id,
+                Document.tenant_id == job.tenant_id,
+            )
+        )
+        if document is None:
             return
         try:
             await _set_job(
@@ -56,7 +63,10 @@ async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
             await db.commit()
 
             summary = await db.scalar(
-                select(DocumentSummary).where(DocumentSummary.document_id == document.id)
+                select(DocumentSummary).where(
+                    DocumentSummary.document_id == document.id,
+                    DocumentSummary.tenant_id == job.tenant_id,
+                )
             )
             if summary is None:
                 summary = DocumentSummary(tenant_id=document.tenant_id, document_id=document.id)
@@ -111,7 +121,12 @@ async def process_wbs_generation(job_id: UUID) -> None:
         job = await db.get(Job, job_id)
         if job is None or job.project_id is None:
             return
-        project = await db.get(Project, job.project_id)
+        project = await db.scalar(
+            select(Project).where(
+                Project.id == job.project_id,
+                Project.tenant_id == job.tenant_id,
+            )
+        )
         if project is None:
             return
         try:
@@ -200,7 +215,12 @@ async def process_validation(validation_id: UUID) -> None:
         validation = await db.get(ValidationRun, validation_id)
         if validation is None:
             return
-        version = await db.get(WbsVersion, validation.wbs_version_id)
+        version = await db.scalar(
+            select(WbsVersion).where(
+                WbsVersion.id == validation.wbs_version_id,
+                WbsVersion.tenant_id == validation.tenant_id,
+            )
+        )
         if version is None:
             return
 
@@ -239,7 +259,12 @@ async def process_export(export_id: UUID) -> None:
         export = await db.get(ExportFile, export_id)
         if export is None:
             return
-        version = await db.get(WbsVersion, export.wbs_version_id)
+        version = await db.scalar(
+            select(WbsVersion).where(
+                WbsVersion.id == export.wbs_version_id,
+                WbsVersion.tenant_id == export.tenant_id,
+            )
+        )
         if version is None:
             return
 

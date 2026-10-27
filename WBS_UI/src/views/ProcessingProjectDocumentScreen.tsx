@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   Loader2,
@@ -7,120 +7,127 @@ import {
   FileSpreadsheet,
   ArrowLeft,
   RefreshCw,
+  ShieldCheck,
 } from 'lucide-react';
+import { ApiError } from '../services/apiClient';
+import { getCurrentIngestion } from '../services/ingestionApi';
+import { PollingTimeoutError, pollResource } from '../services/polling';
 import {
-  getProcessingDocStatus,
+  isSupportedIngestionState,
+  presentIngestionStatus,
+} from '../services/workflowPresentation';
+import type {
+  DocumentResponse,
+  IngestionStatusResponse,
   ProcessingDocStatusResponse,
   StepStatus,
-} from '../services/wbsService';
+  TemplateResponse,
+} from '../services/workflowTypes';
 import './ProcessingProjectDocumentScreen.css';
 
 interface ProcessingProjectDocumentScreenProps {
+  tenantId: string;
   jobId: string;
-  onProcessingComplete?: () => void;
-  onBack?: () => void;
-  onCancel?: () => void;
+  processingRunId: string;
+  document: DocumentResponse;
+  template: TemplateResponse | null;
+  initialStatus: IngestionStatusResponse;
+  onBack: (completed: boolean) => void;
 }
 
-const BASE_POLL_INTERVAL_MS = 1400;
-const MAX_NETWORK_RETRIES = 4;
-const MAX_BACKOFF_INTERVAL_MS = 5000;
+function safeConnectionMessage(reason: unknown): string {
+  if (reason instanceof PollingTimeoutError) {
+    return 'Processing is taking longer than expected. Check the status again in a moment.';
+  }
+  if (reason instanceof ApiError) {
+    if (reason.status === 401) return 'Your session expired. Sign in again to check processing status.';
+    if (reason.status === 403 || reason.status === 404) {
+      return 'This document workflow is no longer available in the current workspace.';
+    }
+  }
+  return 'The latest processing status is temporarily unavailable. Your ingestion has not been restarted.';
+}
+
+function validateStatus(
+  value: IngestionStatusResponse,
+  documentId: string,
+  jobId: string,
+  processingRunId: string,
+): IngestionStatusResponse {
+  if (
+    value.document_id !== documentId
+    || value.job_id !== jobId
+    || value.processing_run_id !== processingRunId
+  ) {
+    throw new Error('The processing status did not match the active document workflow.');
+  }
+  if (!isSupportedIngestionState(value.status, value.stage)) {
+    throw new Error('The processing service returned an unsupported state.');
+  }
+  return value;
+}
 
 export default function ProcessingProjectDocumentScreen({
+  tenantId,
   jobId,
-  onProcessingComplete,
+  processingRunId,
+  document,
+  template,
+  initialStatus,
   onBack,
-  onCancel,
 }: ProcessingProjectDocumentScreenProps) {
-  const [data, setData] = useState<ProcessingDocStatusResponse | null>(null);
-  const [isFatalError, setIsFatalError] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [retryTrigger, setRetryTrigger] = useState<number>(0);
+  const initialStatusIsValid = initialStatus.document_id === document.id
+    && initialStatus.job_id === jobId
+    && initialStatus.processing_run_id === processingRunId
+    && isSupportedIngestionState(initialStatus.status, initialStatus.stage);
+  const [data, setData] = useState<ProcessingDocStatusResponse | null>(() => (
+    initialStatusIsValid
+      ? presentIngestionStatus(initialStatus, document, template, initialStatus.progress)
+      : null
+  ));
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
+  const highestProgress = useRef(initialStatusIsValid ? initialStatus.progress : 0);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
 
-  const onProcessingCompleteRef = useRef(onProcessingComplete);
   useEffect(() => {
-    onProcessingCompleteRef.current = onProcessingComplete;
-  }, [onProcessingComplete]);
+    headingRef.current?.focus();
+  }, []);
 
   useEffect(() => {
-    if (!jobId || jobId.trim() === '') return;
-
-    let isActive = true;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let consecutiveErrors = 0;
-    let isFetching = false;
-
-    const clearTimer = () => {
-      if (timerId) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    };
-
-    const poll = async () => {
-      if (!isActive || isFetching) return;
-      isFetching = true;
-
+    const controller = new AbortController();
+    const run = async () => {
       try {
-        const response = await getProcessingDocStatus(jobId);
-        if (!isActive) return;
-
-        consecutiveErrors = 0;
-        setData(response);
-
-        if (response.overallStatus === 'COMPLETED') {
-          clearTimer();
-          isActive = false;
-          if (onProcessingCompleteRef.current) {
-            onProcessingCompleteRef.current();
-          }
-          return;
-        }
-
-        if (response.overallStatus === 'FAILED') {
-          clearTimer();
-          isActive = false;
-          setIsFatalError(true);
-          setErrorMessage(response.errorMessage || 'Document processing failed.');
-          return;
-        }
-
-        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
-      } catch (err: unknown) {
-        if (!isActive) return;
-
-        consecutiveErrors += 1;
-        if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
-          clearTimer();
-          isActive = false;
-          setIsFatalError(true);
-          setErrorMessage(
-            err instanceof Error ? err.message : 'Lost connection to document processing engine.'
-          );
-          return;
-        }
-
-        const backoffMs = Math.min(
-          BASE_POLL_INTERVAL_MS * Math.pow(1.5, consecutiveErrors),
-          MAX_BACKOFF_INTERVAL_MS
-        );
-        timerId = setTimeout(poll, backoffMs);
-      } finally {
-        isFetching = false;
+        setConnectionError(null);
+        const status = await pollResource({
+          signal: controller.signal,
+          request: async (signal) => {
+            const next = validateStatus(
+              await getCurrentIngestion(tenantId, document.id, signal),
+              document.id,
+              jobId,
+              processingRunId,
+            );
+            highestProgress.current = Math.max(highestProgress.current, next.progress);
+            setData(presentIngestionStatus(next, document, template, highestProgress.current));
+            return next;
+          },
+          isTerminal: (value) => value.status === 'COMPLETED' || value.status === 'FAILED',
+        });
+        if (controller.signal.aborted) return;
+        highestProgress.current = Math.max(highestProgress.current, status.progress);
+        setData(presentIngestionStatus(status, document, template, highestProgress.current));
+      } catch (reason: unknown) {
+        if (controller.signal.aborted) return;
+        setConnectionError(safeConnectionMessage(reason));
       }
     };
+    void run();
+    return () => controller.abort();
+  }, [document, jobId, processingRunId, retryTrigger, template, tenantId]);
 
-    poll();
-
-    return () => {
-      isActive = false;
-      clearTimer();
-    };
-  }, [jobId, retryTrigger]);
-
-  const handleManualRetry = () => {
-    setIsFatalError(false);
-    setErrorMessage(null);
+  const handleCheckAgain = () => {
+    setConnectionError(null);
     setRetryTrigger((prev) => prev + 1);
   };
 
@@ -149,23 +156,21 @@ export default function ProcessingProjectDocumentScreen({
     return <div className="wbs-proc-indicator wbs-proc-indicator-pending" aria-label="Pending" />;
   };
 
-  if (isFatalError) {
+  if (connectionError) {
     return (
       <div className="wbs-proc-container">
-        <div className="app-missing-job-card">
+        <div className="app-missing-job-card" role="alert">
           <div className="app-missing-job-icon-box" style={{ backgroundColor: '#fee2e2', color: '#dc2626' }}>
             <AlertTriangle size={24} />
           </div>
-          <h2 className="app-missing-job-title">Document Extraction Interrupted</h2>
-          <p className="app-missing-job-desc">{errorMessage}</p>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            {onCancel && (
-              <button type="button" onClick={onCancel} className="wbs-proc-cancel-btn">
-                Cancel
-              </button>
-            )}
-            <button type="button" onClick={handleManualRetry} className="app-missing-job-btn">
-              <RefreshCw size={14} /> Retry
+          <h2 className="app-missing-job-title">Processing status unavailable</h2>
+          <p className="app-missing-job-desc">{connectionError}</p>
+          <div className="wbs-proc-error-actions">
+            <button type="button" onClick={handleCheckAgain} className="app-missing-job-btn">
+              <RefreshCw size={14} /> Check status again
+            </button>
+            <button type="button" onClick={() => onBack(false)} className="wbs-proc-back-btn">
+              <ArrowLeft size={14} /> Back to project
             </button>
           </div>
         </div>
@@ -175,9 +180,26 @@ export default function ProcessingProjectDocumentScreen({
 
   if (!data) {
     return (
-      <div className="wbs-state-loading">
+      <div className="wbs-state-loading" role="status" aria-live="polite">
         <Loader2 size={34} color="#0284C7" className="wbs-spinner" />
-        <span className="wbs-state-loading-text">Connecting to extraction pipeline...</span>
+        <span className="wbs-state-loading-text">Checking document processing status...</span>
+      </div>
+    );
+  }
+
+  if (data.overallStatus === 'FAILED') {
+    return (
+      <div className="wbs-proc-container">
+        <div className="app-missing-job-card" role="alert">
+          <div className="app-missing-job-icon-box" style={{ backgroundColor: '#fee2e2', color: '#dc2626' }}>
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="app-missing-job-title">Document processing stopped</h2>
+          <p className="app-missing-job-desc">{data.errorMessage}</p>
+          <button type="button" onClick={() => onBack(false)} className="app-missing-job-btn">
+            <ArrowLeft size={14} /> Back to project
+          </button>
+        </div>
       </div>
     );
   }
@@ -186,19 +208,25 @@ export default function ProcessingProjectDocumentScreen({
     <div className="wbs-proc-container">
       <header className="wbs-proc-header">
         <div className="wbs-proc-header-row">
-          <h1 className="wbs-proc-title">Processing Project Document</h1>
-          {onCancel && (
-            <button type="button" onClick={onCancel} className="wbs-proc-cancel-btn">
-              Cancel
-            </button>
-          )}
+          <div>
+            <h1 ref={headingRef} tabIndex={-1} className="wbs-proc-title">{data.title}</h1>
+            <div className="wbs-proc-stage-label">{data.stage.replace('_', ' ').toLowerCase()}</div>
+          </div>
+          <span className="wbs-proc-progress-value">{data.progress}%</span>
         </div>
-        <p className="wbs-proc-subtitle">
-          We are extracting key information from your uploaded project file to prepare an editable summary.
-        </p>
+        <p className="wbs-proc-subtitle" aria-live="polite">{data.subtitle}</p>
+        <div
+          className="wbs-proc-overall-progress"
+          role="progressbar"
+          aria-label="Document processing progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={data.progress}
+        >
+          <div className="wbs-proc-overall-progress-fill" style={{ width: `${data.progress}%` }} />
+        </div>
       </header>
 
-      {/* Uploaded Documents Status Banner */}
       <div className="wbs-proc-files-banner">
         <div className="wbs-proc-file-card">
           <div className="wbs-proc-file-left">
@@ -239,7 +267,6 @@ export default function ProcessingProjectDocumentScreen({
         )}
       </div>
 
-      {/* Stepper & Side Card */}
       <div className="wbs-proc-grid">
         <div className="wbs-proc-steps-card">
           <h2 className="wbs-proc-steps-title">Processing Steps</h2>
@@ -268,24 +295,28 @@ export default function ProcessingProjectDocumentScreen({
           </div>
         </div>
 
-        {/* Side Card Matching Reference Exactly */}
         <div className="wbs-proc-side-card">
           <div className="wbs-proc-side-illustration">
-            <FileText size={56} color="#2563EB" strokeWidth={1.5} />
+            {data.overallStatus === 'COMPLETED'
+              ? <ShieldCheck size={56} color="#16803c" strokeWidth={1.5} />
+              : <FileText size={56} color="#2563EB" strokeWidth={1.5} />}
           </div>
-          <h2 className="wbs-proc-side-title">Preparing your summary draft</h2>
-          <p className="wbs-proc-side-desc">
-            This may take a few moments depending on file size and complexity.
-          </p>
+          <h2 className="wbs-proc-side-title">{data.sideCard.title}</h2>
+          <p className="wbs-proc-side-desc">{data.sideCard.description}</p>
+          {data.overallStatus === 'PROCESSING' && (
+            <p className="wbs-proc-background-note">You can leave this page and return without restarting processing.</p>
+          )}
         </div>
       </div>
 
       <div className="wbs-proc-footer">
-        {onBack && (
-          <button type="button" onClick={onBack} className="wbs-proc-back-btn">
-            <ArrowLeft size={14} /> Back
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => onBack(data.overallStatus === 'COMPLETED')}
+          className={data.overallStatus === 'COMPLETED' ? 'app-missing-job-btn' : 'wbs-proc-back-btn'}
+        >
+          <ArrowLeft size={14} /> Back to project
+        </button>
       </div>
     </div>
   );

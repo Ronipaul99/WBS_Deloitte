@@ -4,14 +4,18 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import TenantContext, require_tenant_member
+from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
+from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_wbs_version
+from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import ValidationRun
 from app.schemas.domain import ValidationResponse
 from app.services.dispatcher import dispatch_validation
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["validation"])
+router = APIRouter(
+    prefix="/tenants/{tenant_id}", tags=["validation"], responses=TENANT_AUTH_RESPONSES
+)
 
 
 @router.post(
@@ -22,7 +26,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}", tags=["validation"])
 async def create_validation(
     version_id: UUID,
     background_tasks: BackgroundTasks,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.VALIDATION_RUN)),
     db: AsyncSession = Depends(get_db),
 ) -> ValidationRun:
     await get_tenant_wbs_version(db, context.tenant.id, version_id)
@@ -37,7 +41,7 @@ async def create_validation(
 @router.get("/validations/{validation_id}", response_model=ValidationResponse)
 async def get_validation(
     validation_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.VALIDATION_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> ValidationRun:
     validation = await db.scalar(

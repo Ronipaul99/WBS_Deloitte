@@ -1,0 +1,31 @@
+export const PERMISSIONS = {
+  PROJECT_READ: 'project:read',
+  PROJECT_CREATE: 'project:create',
+  PROJECT_UPDATE: 'project:update',
+  PROJECT_ARCHIVE: 'project:archive',
+  DOCUMENT_READ: 'document:read',
+  DOCUMENT_UPLOAD: 'document:upload',
+  DOCUMENT_PROCESS: 'document:process',
+  SUMMARY_READ: 'summary:read',
+  SUMMARY_UPDATE: 'summary:update',
+  SUMMARY_APPROVE: 'summary:approve',
+  TEMPLATE_READ: 'template:read',
+  TEMPLATE_MANAGE: 'template:manage',
+  WBS_READ: 'wbs:read',
+  WBS_GENERATE: 'wbs:generate',
+  WBS_UPDATE: 'wbs:update',
+  VALIDATION_READ: 'validation:read',
+  VALIDATION_RUN: 'validation:run',
+  EXPORT_READ: 'export:read',
+  EXPORT_CREATE: 'export:create',
+  JOB_READ: 'job:read',
+  JOB_MANAGE: 'job:manage',
+  MEMBER_READ: 'member:read',
+  MEMBER_INVITE: 'member:invite',
+  MEMBER_UPDATE: 'member:update',
+  MEMBER_REMOVE: 'member:remove',
+  AUDIT_READ: 'audit:read',
+} as const;
+
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+

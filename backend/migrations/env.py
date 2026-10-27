@@ -7,13 +7,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models import domain  # noqa: F401
+from app.models import auth, domain  # noqa: F401
 
 config = context.config
-migration_url = get_settings().sqlalchemy_migration_url.replace("%", "%%")
+settings = get_settings()
+migration_url = settings.sqlalchemy_migration_url.replace("%", "%%")
 config.set_main_option("sqlalchemy.url", migration_url)
+config.attributes["runtime_database_role"] = settings.database_runtime_role
+config.attributes["migration_database_role"] = settings.database_migration_role
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

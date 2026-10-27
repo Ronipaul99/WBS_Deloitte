@@ -4,19 +4,21 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.dependencies import TenantContext, require_tenant_member
+from app.api.authorization import TENANT_AUTH_RESPONSES, require_permission
+from app.api.dependencies import TenantContext
 from app.api.routes.helpers import get_tenant_project, get_tenant_wbs_version
+from app.core.permissions import Permission
 from app.db.session import get_db
 from app.models.domain import WbsVersion
 from app.schemas.domain import WbsVersionResponse, WbsVersionUpdate
 
-router = APIRouter(prefix="/tenants/{tenant_id}", tags=["wbs"])
+router = APIRouter(prefix="/tenants/{tenant_id}", tags=["wbs"], responses=TENANT_AUTH_RESPONSES)
 
 
 @router.get("/projects/{project_id}/wbs/latest", response_model=WbsVersionResponse)
 async def latest_wbs(
     project_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.WBS_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> WbsVersion:
     await get_tenant_project(db, context.tenant.id, project_id)
@@ -36,7 +38,7 @@ async def latest_wbs(
 @router.get("/projects/{project_id}/wbs/versions", response_model=list[WbsVersionResponse])
 async def list_wbs_versions(
     project_id: UUID,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.WBS_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> list[WbsVersion]:
     await get_tenant_project(db, context.tenant.id, project_id)
@@ -48,11 +50,20 @@ async def list_wbs_versions(
     return list(result)
 
 
+@router.get("/wbs/{version_id}", response_model=WbsVersionResponse)
+async def get_wbs_version(
+    version_id: UUID,
+    context: TenantContext = Depends(require_permission(Permission.WBS_READ)),
+    db: AsyncSession = Depends(get_db),
+) -> WbsVersion:
+    return await get_tenant_wbs_version(db, context.tenant.id, version_id)
+
+
 @router.put("/wbs/{version_id}", response_model=WbsVersionResponse)
 async def update_wbs(
     version_id: UUID,
     payload: WbsVersionUpdate,
-    context: TenantContext = Depends(require_tenant_member),
+    context: TenantContext = Depends(require_permission(Permission.WBS_UPDATE)),
     db: AsyncSession = Depends(get_db),
 ) -> WbsVersion:
     version = await get_tenant_wbs_version(db, context.tenant.id, version_id)

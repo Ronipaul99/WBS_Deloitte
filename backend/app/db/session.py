@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -28,6 +29,17 @@ def _engine_options() -> dict[str, object]:
 
 engine = create_async_engine(settings.sqlalchemy_database_url, **_engine_options())
 SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+async def set_local_tenant_context(session: AsyncSession, tenant_id: UUID | str) -> None:
+    """Set the PostgreSQL RLS tenant only for the active transaction."""
+    validated_tenant_id = UUID(str(tenant_id))
+    bind = session.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    if not session.in_transaction():
+        raise RuntimeError("Tenant context requires an active database transaction")
+    await session.execute(text(f"SET LOCAL app.tenant_id = '{validated_tenant_id}'"))
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:

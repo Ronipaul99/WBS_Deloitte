@@ -8,25 +8,27 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import {
-  getJobStatus,
-  JobStatusResponse,
-  StepStatus,
-} from '../services/wbsService';
+  cancelJob,
+  getJob,
+} from '../services/jobsApi';
+import { pollResource } from '../services/polling';
+import { presentGenerationJob } from '../services/workflowPresentation';
+import type { JobStatusResponse, StepStatus } from '../services/workflowTypes';
 import './AnalyzingProjectScreen.css';
 
-const MAX_NETWORK_RETRIES = 4;
-const BASE_POLL_INTERVAL_MS = 1500;
-const MAX_BACKOFF_INTERVAL_MS = 5000;
-
 interface AnalyzingProjectScreenProps {
+  tenantId: string;
   jobId: string;
-  onAnalysisComplete?: () => void;
+  projectName: string;
+  onAnalysisComplete?: (wbsVersionId: string) => void;
   onError?: (errorDetails: string) => void;
   onCancel?: () => void;
 }
 
 export default function AnalyzingProjectScreen({
+  tenantId,
   jobId,
+  projectName,
   onAnalysisComplete,
   onError,
   onCancel,
@@ -54,102 +56,56 @@ export default function AnalyzingProjectScreen({
       return;
     }
 
-    const currentJobId = jobId;
-    let isActive = true;
-    let timerId: ReturnType<typeof setTimeout> | null = null;
-    let consecutiveErrors = 0;
-    let isFetching = false;
-
-    const clearTimer = () => {
-      if (timerId) {
-        clearTimeout(timerId);
-        timerId = null;
-      }
-    };
-
-    const poll = async () => {
-      if (!isActive || currentJobId !== jobId || isFetching) {
-        return;
-      }
-
-      isFetching = true;
-
+    const controller = new AbortController();
+    const run = async () => {
       try {
-        const response = await getJobStatus(currentJobId);
-
-        if (!isActive || currentJobId !== jobId) {
-          return;
-        }
-
-        consecutiveErrors = 0;
-        setJobData(response);
-
-        if (response.overallStatus === 'COMPLETED') {
-          clearTimer();
-          isActive = false;
-          if (onAnalysisCompleteRef.current) {
-            onAnalysisCompleteRef.current();
+        const job = await pollResource({
+          signal: controller.signal,
+          request: async (signal) => {
+            const nextJob = await getJob(tenantId, jobId, signal);
+            setJobData(presentGenerationJob(nextJob, projectName));
+            return nextJob;
+          },
+          isTerminal: (value) => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(value.status),
+        });
+        if (controller.signal.aborted) return;
+        if (job.status === 'COMPLETED') {
+          const versionId = job.result_payload.wbs_version_id;
+          if (typeof versionId !== 'string' || !versionId) {
+            throw new Error('Generation completed without a WBS version identifier.');
           }
+          onAnalysisCompleteRef.current?.(versionId);
           return;
         }
-
-        if (response.overallStatus === 'FAILED') {
-          clearTimer();
-          isActive = false;
-          const failureReason = response.errorMessage || 
-            'AI analysis pipeline failed while decomposing project specifications.';
-          setIsFatalError(true);
-          setErrorMessage(failureReason);
-          if (onErrorRef.current) {
-            onErrorRef.current(failureReason);
-          }
-          return;
-        }
-
-        timerId = setTimeout(poll, BASE_POLL_INTERVAL_MS);
+        const reason = job.error_message || 'WBS generation was cancelled or failed.';
+        setIsFatalError(true);
+        setErrorMessage(reason);
+        onErrorRef.current?.(reason);
       } catch (err: unknown) {
-        if (!isActive || currentJobId !== jobId) {
-          return;
-        }
-
-        consecutiveErrors += 1;
-
-        if (consecutiveErrors >= MAX_NETWORK_RETRIES) {
-          clearTimer();
-          isActive = false;
-          const networkFailure = err instanceof Error 
-            ? err.message 
-            : 'Lost connectivity to analysis engine. Please verify network access and retry.';
-          setIsFatalError(true);
-          setErrorMessage(networkFailure);
-          if (onErrorRef.current) {
-            onErrorRef.current(networkFailure);
-          }
-          return;
-        }
-
-        const backoffMs = Math.min(
-          BASE_POLL_INTERVAL_MS * Math.pow(1.5, consecutiveErrors), 
-          MAX_BACKOFF_INTERVAL_MS
-        );
-        timerId = setTimeout(poll, backoffMs);
-      } finally {
-        isFetching = false;
+        if (controller.signal.aborted) return;
+        const reason = err instanceof Error ? err.message : 'Lost connectivity to the analysis engine.';
+        setIsFatalError(true);
+        setErrorMessage(reason);
+        onErrorRef.current?.(reason);
       }
     };
-
-    poll();
-
-    return () => {
-      isActive = false;
-      clearTimer();
-    };
-  }, [jobId, retryTrigger, isMissingJobId]);
+    void run();
+    return () => controller.abort();
+  }, [isMissingJobId, jobId, projectName, retryTrigger, tenantId]);
 
   const handleManualRetry = () => {
     setIsFatalError(false);
     setErrorMessage(null);
     setRetryTrigger((prev) => prev + 1);
+  };
+
+  const handleCancel = async () => {
+    try {
+      await cancelJob(tenantId, jobId);
+    } catch {
+      // The workspace is still cleared if the server job already became terminal.
+    }
+    onCancel?.();
   };
 
   const renderIndicator = (status: StepStatus) => {
@@ -197,7 +153,7 @@ export default function AnalyzingProjectScreen({
         {onCancel && (
           <button
             type="button"
-            onClick={onCancel}
+            onClick={handleCancel}
             className="wbs-btn-primary"
           >
             Back to Document Upload
@@ -224,7 +180,7 @@ export default function AnalyzingProjectScreen({
           {onCancel && (
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleCancel}
               className="wbs-btn-secondary"
             >
               Cancel & Return
@@ -273,7 +229,7 @@ export default function AnalyzingProjectScreen({
           {onCancel && (
             <button
               type="button"
-              onClick={onCancel}
+              onClick={handleCancel}
               className="wbs-cancel-btn"
             >
               <ArrowLeft size={14} /> Cancel Analysis

@@ -1,0 +1,130 @@
+name: wbs-services
+
+x-service: &service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+x-app: &app
+  <<: *service
+  env_file:
+    - path: ./worker.env
+      format: raw
+    - path: ./worker-runtime.env
+      format: raw
+  environment:
+    TASKS_EAGER: "false"
+    AUTO_CREATE_TABLES: "false"
+    DOCUMENT_RETENTION_ENABLED: "false"
+    DOCUMENT_ORPHAN_CLEANUP_ENABLED: "false"
+    DOCUMENT_RECONCILIATION_REPAIRS_ENABLED: "false"
+    CLAMAV_HOST: clamav
+    CLAMAV_PORT: "3310"
+    PYTHONUNBUFFERED: "1"
+  init: true
+  stop_grace_period: 60s
+  volumes:
+    - worker-state:/home/wbs/state
+  depends_on:
+    redis:
+      condition: service_healthy
+    worker-state-init:
+      condition: service_completed_successfully
+
+services:
+  redis:
+    <<: *service
+    image: redis:7.4-alpine@sha256:d9436322172a5b482c187bf1f363d3c4fea086fcca6b9c8a94de8f0f39ed3193
+    command: [redis-server, /usr/local/etc/redis/redis.conf]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    mem_limit: 384m
+    healthcheck:
+      test: [CMD-SHELL, "REDISCLI_AUTH=$$(cat /usr/local/etc/redis/password) redis-cli ping | grep -qx PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    secrets:
+      - source: redis-password
+        target: /usr/local/etc/redis/password
+
+  clamav:
+    <<: *service
+    image: wbs-clamav:ubuntu24.04-arm64
+    build:
+      context: ./clamav
+    ports:
+      - "127.0.0.1:3310:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+    mem_limit: 3g
+    healthcheck:
+      test: [CMD-SHELL, "printf 'zPING\\0' | nc -w 5 127.0.0.1 3310 | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10m
+      retries: 5
+
+  worker-state-init:
+    image: wbs-background:local
+    user: root
+    entrypoint: [sh, -c, "chown wbs:wbs /home/wbs/state && chmod 700 /home/wbs/state"]
+    volumes:
+      - worker-state:/home/wbs/state
+    restart: "no"
+    healthcheck:
+      disable: true
+
+  worker:
+    <<: *app
+    image: wbs-ingestion-worker:local
+    env_file:
+      - path: ./worker.env
+        format: raw
+      - path: ./worker-runtime.env
+        format: raw
+    command: [celery, -A, app.worker.celery_app, worker, --loglevel=INFO, --concurrency=1, --hostname=worker@%h]
+    mem_limit: 2304m
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    volumes:
+      - worker-state:/home/wbs/state
+      - worker-processing:/var/lib/wbs/processing
+    healthcheck:
+      test: [CMD-SHELL, "celery -A app.worker.celery_app inspect ping --destination worker@$$(hostname) --timeout 5 | grep -q pong"]
+      interval: 60s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
+
+  scheduler:
+    <<: *app
+    image: wbs-background:local
+    build:
+      context: ../../backend
+      target: runtime
+    command: [celery, -A, app.worker.celery_app, beat, --loglevel=INFO, --schedule=/home/wbs/state/celerybeat-schedule, --pidfile=/home/wbs/state/celerybeat.pid]
+    mem_limit: 384m
+    healthcheck:
+      test: [CMD-SHELL, "test -s /home/wbs/state/celerybeat.pid && kill -0 $$(cat /home/wbs/state/celerybeat.pid)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  redis-data:
+  clamav-data:
+  worker-state:
+  worker-processing:
+
+secrets:
+  redis-password:
+    file: ./redis.password

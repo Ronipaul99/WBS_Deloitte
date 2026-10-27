@@ -64,6 +64,17 @@ services:
       redis:
         condition: service_started
 
+  maintenance:
+    build: .
+    command: python -m app.cli run-maintenance
+    environment: *backend_environment
+    volumes:
+      - uploads:/data/uploads
+    profiles: [maintenance]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   postgres_data:
   uploads:

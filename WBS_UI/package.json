@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:e2e": "playwright test",
+    "test:e2e:fullstack": "node scripts/run-fullstack.mjs",
+    "test:e2e:fullstack:smoke": "node scripts/run-fullstack.mjs --sqlite-smoke",
     "preview": "vite preview"
   },
   "dependencies": {

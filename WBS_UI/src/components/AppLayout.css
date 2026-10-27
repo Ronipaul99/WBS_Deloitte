@@ -64,6 +64,10 @@
   position: relative;
 }
 
+.app-profile-control {
+  position: relative;
+}
+
 /* Header Help Action */
 .app-help-btn {
   background: none;
@@ -91,12 +95,22 @@
   padding: 3px 10px 3px 4px;
   border-radius: 9999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   transition: background-color 0.15s ease;
 }
 
 .app-profile-pill:hover {
   background-color: rgba(255, 255, 255, 0.12);
+}
+
+.app-profile-pill:focus-visible,
+.app-help-btn:focus-visible,
+.app-profile-item-btn:focus-visible,
+.app-profile-signout-btn:focus-visible {
+  outline: 2px solid #86b9a5;
+  outline-offset: 2px;
 }
 
 .app-profile-avatar {

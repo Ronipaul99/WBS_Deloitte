@@ -1,0 +1,63 @@
+import { expect, test } from '@playwright/test';
+import {
+  EDITOR_PERMISSIONS,
+  VIEWER_PERMISSIONS,
+  mockAuthenticatedUser,
+} from './auth-mocks';
+import { createProjectAndOpenWbs, mockWorkflowApi } from './workflow-mocks';
+
+test('viewer sees read-only navigation without create or settings commands', async ({ page }) => {
+  await mockAuthenticatedUser(page, { role: 'VIEWER', permissions: VIEWER_PERMISSIONS });
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'My Projects' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Templates' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Exports' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create WBS' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create project' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Process Document' })).toHaveCount(0);
+});
+
+test('editor can create a WBS but does not see administrative settings', async ({ page }) => {
+  await mockAuthenticatedUser(page, { role: 'EDITOR', permissions: EDITOR_PERMISSIONS });
+  await mockWorkflowApi(page);
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
+  await createProjectAndOpenWbs(page);
+  await expect(page.getByRole('button', { name: 'Process Document' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
+});
+
+test('a forced identity 403 fails safely back to the login screen', async ({ page }) => {
+  await page.route('**/api/v1/auth/refresh', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ access_token: 'expired-membership-token', token_type: 'bearer', expires_in: 900 }),
+  }));
+  await page.route('**/api/v1/me', (route) => route.fulfill({
+    status: 403,
+    contentType: 'application/json',
+    body: JSON.stringify({ detail: 'Access denied.' }),
+  }));
+
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Process Document' })).toHaveCount(0);
+});
+
+test('WBS generation permission does not authorize document ingestion', async ({ page }) => {
+  await mockAuthenticatedUser(page, {
+    role: 'EDITOR',
+    permissions: EDITOR_PERMISSIONS.filter((permission) => permission !== 'document:process'),
+  });
+  await mockWorkflowApi(page);
+  await page.goto('/');
+
+  await expect(page.getByRole('button', { name: 'Create project', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await page.getByLabel('Project name').fill('Read-only ingestion');
+  await page.getByRole('button', { name: 'Create project', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Create new WBS' })).toHaveCount(0);
+});

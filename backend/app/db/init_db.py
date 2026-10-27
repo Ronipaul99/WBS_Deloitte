@@ -1,8 +1,10 @@
 from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.core.passwords import hash_password
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
+from app.models.auth import AuthIdentity
 from app.models.domain import MembershipRole, Tenant, TenantMembership, User
 
 
@@ -12,7 +14,7 @@ async def initialize_database() -> None:
         async with engine.begin() as connection:
             await connection.run_sync(Base.metadata.create_all)
 
-    if settings.auth_mode != "development":
+    if settings.app_env not in {"development", "test"} or not settings.bootstrap_development_data:
         return
 
     async with SessionLocal() as session:
@@ -49,5 +51,22 @@ async def initialize_database() -> None:
                     role=MembershipRole.ADMIN,
                 )
             )
+
+        if settings.dev_user_password:
+            identity = await session.scalar(
+                select(AuthIdentity).where(
+                    AuthIdentity.provider == "local",
+                    AuthIdentity.subject == user.email.casefold(),
+                )
+            )
+            if identity is None:
+                session.add(
+                    AuthIdentity(
+                        user_id=user.id,
+                        provider="local",
+                        subject=user.email.casefold(),
+                        password_hash=hash_password(settings.dev_user_password),
+                    )
+                )
 
         await session.commit()

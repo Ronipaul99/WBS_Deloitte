@@ -17,24 +17,36 @@ import {
   FileSpreadsheet,
   FileCode,
   Share2,
+  ArrowLeft,
 } from 'lucide-react';
-import {
-  getWbsResult,
-  updateWbsTree,
-  WbsResultPayload,
-  WbsNode,
+import { downloadExport, getExport, startExport } from '../services/exportsApi';
+import { pollResource } from '../services/polling';
+import { getLatestWbs, getWbsVersion, updateWbs } from '../services/wbsApi';
+import { presentWbs } from '../services/workflowPresentation';
+import type {
+  ExportFormat,
+  ProjectResponse,
+  TemplateResponse,
   UnmappedRequirement,
-} from '../services/wbsService';
+  WbsNode,
+  WbsResultPayload,
+} from '../services/workflowTypes';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS } from '../auth/permissions';
 import './WbsResultScreen.css';
 
 export type WbsScreenTab = 'structure' | 'coverage' | 'insights' | 'unmapped' | 'hierarchy' | 'scope';
 
 interface WbsResultScreenProps {
-  jobId: string;
+  tenantId: string;
+  project: ProjectResponse;
+  template: TemplateResponse | null;
+  versionId?: string;
   initialTab?: WbsScreenTab;
-  onNavigateToValidation?: () => void;
-  onProceedToValidation?: () => void;
-  onRegenerate?: () => void;
+  onBack?: () => void;
+  onNavigateToValidation?: () => void | Promise<void>;
+  onProceedToValidation?: () => void | Promise<void>;
+  onRegenerate?: () => void | Promise<void>;
 }
 
 function findNodeRecursive(nodes: WbsNode[], id: string): WbsNode | null {
@@ -122,15 +134,6 @@ function reindexTreeRecursive(nodes: WbsNode[], parentCode: string = ''): WbsNod
     }
     return updatedNode;
   });
-}
-
-function escapeXml(unsafe: string = ''): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
 }
 
 interface AccessibleModalProps {
@@ -238,12 +241,21 @@ const AccessibleModal: FC<AccessibleModalProps> = ({
 };
 
 export const WbsResultScreen: FC<WbsResultScreenProps> = ({
-  jobId,
+  tenantId,
+  project,
+  template,
+  versionId,
   initialTab = 'structure',
+  onBack,
   onNavigateToValidation,
   onProceedToValidation,
   onRegenerate,
 }) => {
+  const { can } = useAuth();
+  const canUpdateWbs = can(PERMISSIONS.WBS_UPDATE);
+  const canGenerateWbs = can(PERMISSIONS.WBS_GENERATE);
+  const canRunValidation = can(PERMISSIONS.VALIDATION_RUN);
+  const canCreateExport = can(PERMISSIONS.EXPORT_CREATE);
   const handleValidate = onNavigateToValidation || onProceedToValidation;
 
   const resolveTab = useCallback((tab: WbsScreenTab): 'structure' | 'coverage' | 'insights' | 'unmapped' => {
@@ -267,11 +279,14 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [isStartingAction, setIsStartingAction] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState<boolean>(false);
   const [reloadNonce, setReloadNonce] = useState<number>(0);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const exportControllerRef = useRef<AbortController | null>(null);
 
   // Modals
   const [editingNode, setEditingNode] = useState<WbsNode | null>(null);
@@ -288,7 +303,10 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
       setIsLoading(true);
       setLoadError(null);
       try {
-        const res = await getWbsResult(jobId);
+        const version = versionId
+          ? await getWbsVersion(tenantId, versionId)
+          : await getLatestWbs(tenantId, project.id);
+        const res = presentWbs(version, project, template);
         if (!isMounted) return;
 
         setData(res);
@@ -329,7 +347,9 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [jobId, reloadNonce]);
+  }, [project, reloadNonce, template, tenantId, versionId]);
+
+  useEffect(() => () => exportControllerRef.current?.abort(), []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -385,97 +405,57 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     return Math.min(100, Math.round(confidenceVal));
   };
 
-  const handleExportJson = () => {
-    if (!data) return;
-    const blob = new Blob([JSON.stringify(data.wbsTree, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${data.projectName.replace(/\s+/g, '_')}_WBS.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = async (format: ExportFormat) => {
+    if (!data || isExporting) return;
     setShowExportMenu(false);
+    setActionError(null);
+    setIsExporting(true);
+    const controller = new AbortController();
+    exportControllerRef.current = controller;
+    try {
+      const started = await startExport(tenantId, data.versionId, format, controller.signal);
+      const completed = await pollResource({
+        signal: controller.signal,
+        request: (signal) => getExport(tenantId, started.id, signal),
+        isTerminal: (value) => ['COMPLETED', 'FAILED', 'CANCELLED'].includes(value.status),
+      });
+      if (completed.status !== 'COMPLETED' || !completed.download_url) {
+        throw new Error('The server could not prepare this export.');
+      }
+      const { blob, fileName } = await downloadExport(
+        completed.download_url,
+        format,
+        completed.file_name ?? `wbs-export.${format === 'p6_xml' ? 'xml' : format}`,
+        controller.signal,
+      );
+      if (blob.size === 0) throw new Error('The exported file was empty.');
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
+      if (!controller.signal.aborted) {
+        setActionError(err instanceof Error ? err.message : 'Unable to download the requested export.');
+      }
+    } finally {
+      if (exportControllerRef.current === controller) exportControllerRef.current = null;
+      setIsExporting(false);
+    }
   };
 
-  const handleExportExcel = () => {
-    if (!data) return;
-    const rows: Array<{ code: string; name: string; type: string; parent: string; confidence: string; description: string }> = [];
-    const extract = (nodes: WbsNode[], parent = '') => {
-      for (const n of nodes) {
-        const conf = `${getDisplayConfidence(n.confidence)}%`;
-        rows.push({
-          code: n.code,
-          name: n.name.replace(/"/g, '""'),
-          type: n.type,
-          parent: parent.replace(/"/g, '""'),
-          confidence: conf,
-          description: (n.description || '').replace(/"/g, '""'),
-        });
-        if (n.children) extract(n.children, `${n.code} ${n.name}`);
-      }
-    };
-    extract(data.wbsTree);
-
-    const csvContent =
-      'WBS Code,Deliverable Name,Type,Parent Node,Confidence Score,Scope Description\n' +
-      rows.map((r) => `"${r.code}","${r.name}","${r.type}","${r.parent}","${r.confidence}","${r.description}"`).join('\n');
-
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${data.projectName.replace(/\s+/g, '_')}_WBS_Export.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
-  };
-
-  const handleExportP6Xml = () => {
-    if (!data) return;
-
-    let objectIdCounter = 1000;
-    const p6Nodes: string[] = [];
-
-    const generateP6XmlNodes = (nodes: WbsNode[], parentObjectId: string | null = null) => {
-      for (const node of nodes) {
-        const currentObjectId = String(objectIdCounter++);
-        p6Nodes.push(`
-      <WBS>
-        <ObjectId>${currentObjectId}</ObjectId>
-        <ProjectObjectId>1</ProjectObjectId>
-        <ParentObjectId>${parentObjectId ?? ''}</ParentObjectId>
-        <Code>${escapeXml(node.code)}</Code>
-        <Name>${escapeXml(node.name)}</Name>
-        <SequenceNumber>${currentObjectId}</SequenceNumber>
-      </WBS>`);
-
-        if (node.children && node.children.length > 0) {
-          generateP6XmlNodes(node.children, currentObjectId);
-        }
-      }
-    };
-
-    generateP6XmlNodes(data.wbsTree, null);
-
-    const xmlContent = `<?xml version="1.0" encoding="UTF-8"?>
-<APIBusinessObjects xmlns="http://xmlns.oracle.com/Primavera/P6/V22/API/BusinessObjects">
-  <Project>
-    <ObjectId>1</ObjectId>
-    <Id>${escapeXml(data.projectId || 'PRJ-AI-WBS')}</Id>
-    <Name>${escapeXml(data.projectName)}</Name>
-    <WBSList>${p6Nodes.join('')}
-    </WBSList>
-  </Project>
-</APIBusinessObjects>`;
-
-    const blob = new Blob([xmlContent], { type: 'application/xml;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${data.projectName.replace(/\s+/g, '_')}_Primavera_P6.xml`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setShowExportMenu(false);
+  const runWorkflowAction = async (action: (() => void | Promise<void>) | undefined) => {
+    if (!action || isStartingAction) return;
+    setActionError(null);
+    setIsStartingAction(true);
+    try {
+      await action();
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'The workflow action could not be started.');
+    } finally {
+      setIsStartingAction(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -489,7 +469,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     setEditingNode(null);
 
     try {
-      await updateWbsTree(jobId, updatedTree);
+      await updateWbs(tenantId, data.versionId, updatedTree);
     } catch {
       setData((curr) => (curr ? { ...curr, wbsTree: prevTree } : null));
       setActionError('Failed to save deliverable edits. Changes were rolled back.');
@@ -514,7 +494,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     setNodePendingDelete(null);
 
     try {
-      await updateWbsTree(jobId, reindexedTree);
+      await updateWbs(tenantId, data.versionId, reindexedTree);
     } catch {
       setData((curr) => (curr ? { ...curr, wbsTree: prevTree } : null));
       setSelectedNodeId(nodePendingDelete.id);
@@ -545,7 +525,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     setTargetParentId('');
 
     try {
-      await updateWbsTree(jobId, reindexed);
+      await updateWbs(tenantId, data.versionId, reindexed);
     } catch {
       setData((curr) => (curr ? { ...curr, wbsTree: prevTree } : null));
       setActionError('Failed to move deliverable. Relocation was rolled back.');
@@ -614,7 +594,10 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
     setTargetParentId('');
 
     try {
-      await updateWbsTree(jobId, reindexed, updatedUnmapped, updatedCoverage);
+      await updateWbs(tenantId, data.versionId, reindexed, {
+        ...updatedCoverage,
+        unmappedRequirements: updatedUnmapped,
+      });
     } catch {
       setData((curr) =>
         curr
@@ -723,6 +706,12 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
   return (
     <div className="wbs-result-container">
+      {onBack && (
+        <button type="button" className="project-back-button" onClick={onBack}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          Back to Project
+        </button>
+      )}
       {actionError && (
         <div className="wbs-action-error-banner">
           <span>{actionError}</span>
@@ -753,11 +742,11 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
         {/* Action Buttons */}
         <div className="wbs-header-actions">
-          {onRegenerate && (
+          {onRegenerate && canGenerateWbs && (
             <button
               type="button"
-              disabled={isSaving}
-              onClick={onRegenerate}
+              disabled={isSaving || isExporting || isStartingAction}
+              onClick={() => void runWorkflowAction(onRegenerate)}
               className="wbs-btn-regenerate"
             >
               <RotateCcw size={13} />
@@ -765,11 +754,11 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
             </button>
           )}
 
-          {handleValidate && (
+          {handleValidate && canRunValidation && (
             <button
               type="button"
-              disabled={isSaving}
-              onClick={handleValidate}
+              disabled={isSaving || isExporting || isStartingAction}
+              onClick={() => void runWorkflowAction(handleValidate)}
               className="wbs-btn-validate"
             >
               <CheckSquare size={13} color="#FFFFFF" />
@@ -778,10 +767,10 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
           )}
 
           {/* Export Dropdown */}
-          <div className="wbs-export-dropdown-wrapper" ref={exportMenuRef}>
+          {canCreateExport && <div className="wbs-export-dropdown-wrapper" ref={exportMenuRef}>
             <button
               type="button"
-              disabled={isSaving}
+              disabled={isSaving || isExporting || isStartingAction}
               onClick={() => setShowExportMenu(!showExportMenu)}
               className="wbs-btn-export"
             >
@@ -794,7 +783,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
               <div className="wbs-export-menu">
                 <button
                   type="button"
-                  onClick={handleExportExcel}
+                  onClick={() => void handleExport('csv')}
                   className="wbs-export-item"
                 >
                   <FileSpreadsheet size={15} color="#16A34A" />
@@ -803,7 +792,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleExportJson}
+                  onClick={() => void handleExport('json')}
                   className="wbs-export-item"
                 >
                   <FileCode size={15} color="#1A73E8" />
@@ -812,7 +801,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleExportP6Xml}
+                  onClick={() => void handleExport('p6_xml')}
                   className="wbs-export-item wbs-export-item-divider"
                 >
                   <Share2 size={15} color="#059669" />
@@ -820,7 +809,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 </button>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -967,7 +956,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
               </div>
 
               {/* Node Operations */}
-              <div className="wbs-node-ops-row">
+              {canUpdateWbs && <div className="wbs-node-ops-row">
                 <button
                   type="button"
                   disabled={isSaving}
@@ -1000,7 +989,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                 >
                   <Trash2 size={13} /> Remove
                 </button>
-              </div>
+              </div>}
             </div>
           ) : (
             <div className="wbs-inspector-placeholder">
@@ -1096,7 +1085,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                   </p>
                 </div>
 
-                <button
+                {canUpdateWbs && <button
                   type="button"
                   disabled={isSaving}
                   onClick={() => {
@@ -1106,7 +1095,7 @@ export const WbsResultScreen: FC<WbsResultScreenProps> = ({
                   className="wbs-map-btn"
                 >
                   Map to WBS
-                </button>
+                </button>}
               </div>
             ))}
           </div>

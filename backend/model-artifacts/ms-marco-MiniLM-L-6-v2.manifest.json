@@ -1,0 +1,25 @@
+{
+  "model_name": "Xenova/ms-marco-MiniLM-L-6-v2",
+  "revision": "a09144355adeed5f58c8ed011d209bf8ee5a1fec",
+  "purpose": "cross-encoder relevance reranking; logits are not confidence probabilities",
+  "files": [
+    {
+      "path": "config.json",
+      "source_url": "https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/resolve/a09144355adeed5f58c8ed011d209bf8ee5a1fec/config.json",
+      "size": 824,
+      "sha256": "d827779a72d27ae68cf878a6fc2e954542663fe21ca515d9f4783fc96be2d37e"
+    },
+    {
+      "path": "tokenizer.json",
+      "source_url": "https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/resolve/a09144355adeed5f58c8ed011d209bf8ee5a1fec/tokenizer.json",
+      "size": 711396,
+      "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66"
+    },
+    {
+      "path": "model.onnx",
+      "source_url": "https://huggingface.co/Xenova/ms-marco-MiniLM-L-6-v2/resolve/a09144355adeed5f58c8ed011d209bf8ee5a1fec/onnx/model_quantized.onnx",
+      "size": 23143499,
+      "sha256": "e9d8ebf845c413e981c175bfe49a3bfa9b3dcce2a3ba54875ee5df5a58639fbe"
+    }
+  ]
+}
