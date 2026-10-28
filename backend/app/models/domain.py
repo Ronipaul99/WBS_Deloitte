@@ -415,6 +415,16 @@ class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_summaries"
     __table_args__ = (
         UniqueConstraint("id", "tenant_id", "document_id", name="uq_summary_document_scope"),
+        ForeignKeyConstraint(
+            ["source_request_id", "tenant_id", "document_id"],
+            [
+                "summary_api_requests.id",
+                "summary_api_requests.tenant_id",
+                "summary_api_requests.document_id",
+            ],
+            name="fk_summary_external_source",
+            use_alter=True,
+        ),
     )
 
     tenant_id: Mapped[UUID] = mapped_column(ForeignKey("tenants.id"), index=True)
@@ -425,6 +435,10 @@ class DocumentSummary(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
+    source_request_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    structured_summary: Mapped[dict | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True, deferred=True
+    )
 
 
 class WbsTemplate(UUIDPrimaryKeyMixin, TimestampMixin, Base):

@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, CircleAlert, FileText, FolderOpen, History, Loader2, RefreshCw } from 'lucide-react';
 import { getWorkflow } from '../services/documentWorkflowsApi';
 import { sessionFromState } from '../services/workflowApi';
 import { startIngestion } from '../services/ingestionApi';
-import { startSummary } from '../services/summariesApi';
+import { isExternalSubmission, startSummary } from '../services/summariesApi';
 import { startGeneration } from '../services/generationsApi';
 import { startValidation } from '../services/validationsApi';
 import { retryJob } from '../services/jobsApi';
 import { pollResource } from '../services/polling';
-import type { WorkflowSession, WorkflowState } from '../services/workflowTypes';
+import type { ExternalSummarySubmission, WorkflowSession, WorkflowState } from '../services/workflowTypes';
+import ExternalSummaryProgress from './ExternalSummaryProgress';
+import { useAuth } from '../auth/authContext';
+import { PERMISSIONS } from '../auth/permissions';
 import WorkflowDialog from '../components/WorkflowDialog';
 import WorkflowStatusBadge from '../components/WorkflowStatusBadge';
 import { workflowFileSize } from '../components/workflowUi';
@@ -61,8 +64,14 @@ interface Props {
 export default function WorkflowCheckpointScreen({ tenantId, state, onResumed, onViewWbs, onBack }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submission, setSubmission] = useState<ExternalSummarySubmission | null>(null);
+  const [submissionUncertain, setSubmissionUncertain] = useState(false);
+  const { can } = useAuth();
+  const actionPending = useRef(false);
+  const actionController = useRef<AbortController | null>(null);
+  useEffect(() => () => actionController.current?.abort(), []);
   useEffect(() => {
-    if (state.stage !== 'SUMMARIZING') return;
+    if (state.stage !== 'SUMMARIZING' || state.external_summary || submission) return;
     const controller = new AbortController();
     void pollResource({
       signal: controller.signal,
@@ -75,16 +84,28 @@ export default function WorkflowCheckpointScreen({ tenantId, state, onResumed, o
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : 'Status is temporarily unavailable.');
     });
     return () => controller.abort();
-  }, [onResumed, state.stage, state.workflow_id, tenantId]);
+  }, [onResumed, state.external_summary, state.stage, state.workflow_id, submission, tenantId]);
 
   const act = async (action: string) => {
+    if (actionPending.current || (action === 'start_summary' && (submissionUncertain || !can(PERMISSIONS.SUMMARY_UPDATE)))) return;
+    actionPending.current = true;
+    const controller = new AbortController();
+    actionController.current = controller;
     setBusy(true);
     setError(null);
     try {
       if (action === 'start_ingestion' || (action === 'retry' && state.failed_stage === 'ingestion')) {
         await startIngestion(tenantId, state.document_id);
       } else if (action === 'start_summary') {
-        await startSummary(tenantId, state.document_id, undefined, state.workflow_id);
+        const result = await startSummary(tenantId, state.document_id, controller.signal, state.workflow_id);
+        if (controller.signal.aborted) return;
+        if (isExternalSubmission(result)) {
+          if (result.document_id !== state.document_id || result.job_type !== 'DOCUMENT_SUMMERIZATION') {
+            throw new Error('Summary submission scope mismatch.');
+          }
+          setSubmission(result);
+          return;
+        }
       } else if (action === 'start_generation' && state.summary_id) {
         await startGeneration(tenantId, state.project_id, {
           documentId: state.document_id, summaryId: state.summary_id, templateId: state.template?.id ?? null,
@@ -95,20 +116,30 @@ export default function WorkflowCheckpointScreen({ tenantId, state, onResumed, o
       } else if (action === 'retry' && state.job) {
         await retryJob(tenantId, state.job.id);
       }
-      const next = await getWorkflow(tenantId, state.workflow_id);
-      onResumed(await sessionFromState(tenantId, next));
+      const next = await getWorkflow(tenantId, state.workflow_id, controller.signal);
+      const session = await sessionFromState(tenantId, next, controller.signal);
+      if (!controller.signal.aborted) onResumed(session);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'The saved workflow could not be continued.');
+      if (controller.signal.aborted) return;
+      if (action === 'start_summary') {
+        setSubmissionUncertain(true);
+        setError('Summary submission could not be confirmed. Check saved status before trying again; generation may already have started.');
+      } else setError(reason instanceof Error ? reason.message : 'The saved workflow could not be continued.');
     } finally {
-      setBusy(false);
+      actionPending.current = false;
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
+  const external = state.external_summary ?? submission;
+  if (external) return <ExternalSummaryProgress key={`${tenantId}:${state.document_id}:${external.request_id}`}
+    tenantId={tenantId} state={state} initial={external} onBack={onBack} onResumed={onResumed} />;
   const labels: Record<string, string> = {
     start_ingestion: 'Start document processing', start_summary: 'Generate summary',
     start_generation: 'Generate WBS', retry: 'Retry failed step',
   };
   const complete = state.stage === 'INGESTED' && !state.source_requires_processing;
-  const actions = state.allowed_actions.filter((action) => labels[action]);
+  const actions = state.allowed_actions.filter((action) => labels[action]
+    && (action !== 'start_summary' || (!submissionUncertain && can(PERMISSIONS.SUMMARY_UPDATE))));
   const nextCopy: Record<string, [string, string]> = {
     start_ingestion: ['Prepare your document', 'Process this document to extract its content and prepare it for the next step.'],
     start_summary: ['Your next step: generate a summary', 'Create a summary from the processed document, then review it before generating your WBS.'],
@@ -140,6 +171,8 @@ export default function WorkflowCheckpointScreen({ tenantId, state, onResumed, o
     icon={<CheckCircle2 size={27} strokeWidth={1.7} />} tone="success" busy={busy} onClose={onBack}
     footer={<>
       <button type="button" className="workflow-button workflow-button-secondary" disabled={busy} onClick={onBack}>Back to project</button>
+      {submissionUncertain && <button type="button" className="workflow-button workflow-button-secondary" disabled={busy}
+        onClick={() => void act('refresh')}>Check saved status</button>}
       {actionButtons}
     </>}>
     <div className="workflow-success-document"><DocumentContext state={state} /><WorkflowProgress state={state} /></div>

@@ -9,6 +9,9 @@ from app.services.document_maintenance import (
     reconcile_document_lifecycle,
     recover_document_deletion_dispatches,
 )
+from app.services.external_summary_import import reconcile_imports
+from app.services.external_summary_submission import process_submission, reconcile_submissions
+from app.services.external_summary_tracking import reconcile_tracking
 from app.services.ingestion.orchestrator import build_release_orchestrator
 from app.services.ingestion.reconciliation import reconcile_ingestion_dispatches
 from app.services.workflows import (
@@ -44,6 +47,40 @@ celery_app.conf.beat_schedule = {
         "schedule": 60.0,
     },
 }
+
+if settings.external_summary_enabled:
+    celery_app.conf.beat_schedule["reconcile-external-summary-submissions"] = {
+        "task": "wbs.reconcile_external_summary_submissions",
+        "schedule": 60.0,
+    }
+    celery_app.conf.beat_schedule["reconcile-external-summary-tracking"] = {
+        "task": "wbs.reconcile_external_summary_tracking",
+        "schedule": 60.0,
+    }
+    celery_app.conf.beat_schedule["reconcile-external-summary-imports"] = {
+        "task": "wbs.reconcile_external_summary_imports",
+        "schedule": 60.0,
+    }
+
+
+@celery_app.task(name="wbs.reconcile_external_summary_imports")
+def reconcile_external_summary_imports_task() -> None:
+    asyncio.run(reconcile_imports())
+
+
+@celery_app.task(name="wbs.reconcile_external_summary_tracking")
+def reconcile_external_summary_tracking_task() -> None:
+    asyncio.run(reconcile_tracking())
+
+
+@celery_app.task(name="wbs.submit_external_summary", acks_late=True, reject_on_worker_lost=True)
+def submit_external_summary_task(tenant_id: str, request_id: str) -> None:
+    asyncio.run(process_submission(UUID(tenant_id), UUID(request_id)))
+
+
+@celery_app.task(name="wbs.reconcile_external_summary_submissions")
+def reconcile_external_summary_submissions_task() -> None:
+    asyncio.run(reconcile_submissions(settings=settings))
 
 
 @celery_app.task(

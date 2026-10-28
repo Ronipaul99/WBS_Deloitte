@@ -31,6 +31,15 @@ class Settings(BaseSettings):
     database_pool_recycle_seconds: int = 300
     redis_url: str = "redis://localhost:6379/0"
     tasks_eager: bool = True
+    external_summary_enabled: bool = False
+    external_summary_base_url: str = ""
+    external_summary_api_key: SecretStr | None = Field(default=None, exclude=True, repr=False)
+    external_summary_connect_timeout_seconds: float = Field(default=5, ge=1, le=15)
+    external_summary_submit_timeout_seconds: float = Field(default=20, ge=1, le=60)
+    external_summary_max_response_bytes: int = Field(default=16384, ge=1024, le=65536)
+    external_summary_job_visibility_grace_seconds: int = Field(default=60, ge=1, le=600)
+    external_summary_max_result_bytes: int = Field(default=1_048_576, ge=1024, le=2_097_152)
+    external_summary_import_grace_seconds: int = Field(default=300, ge=1, le=900)
     auto_create_tables: bool = True
     bootstrap_development_data: bool = True
     upload_root: Path = Path(".data/uploads")

@@ -135,6 +135,16 @@
 .workflow-saved-loading { padding: 18px 0 24px; display: flex; gap: 9px; align-items: center; color: #667085; font-size: 12px; }
 .workflow-saved .workflow-alert { margin-bottom: 15px; }
 .workflow-spin { animation: workflow-rotate 1s linear infinite; }
+.summary-progress-content h2 { font-size: 19px; margin: 9px 0; color: #24324a; }
+.summary-progress-label { display: flex; justify-content: space-between; gap: 16px; margin: 25px 0 10px; color: #52647a; font-size: 12px; }
+.summary-progress-label strong { color: #2458b8; font-size: 16px; }
+.summary-progress-track { height: 8px; border-radius: 8px; overflow: hidden; background: #edf1f8; }
+.summary-progress-track span { display: block; height: 100%; background: #2563d9; border-radius: inherit; }
+.summary-current-step { font-size: 12px; color: #52647a; overflow-wrap: anywhere; margin: 14px 0 22px; }
+.summary-progress-details { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px 24px; border-top: 1px solid #e8ecf2; margin: 24px 0 0; padding-top: 22px; }
+.summary-progress-details div { min-width: 0; }
+.summary-progress-details dt { font-size: 10px; font-weight: 600; color: #667085; margin-bottom: 5px; }
+.summary-progress-details dd { font-size: 12px; color: #24324a; margin: 0; overflow-wrap: anywhere; line-height: 1.6; }
 @keyframes workflow-rotate { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .workflow-spin { animation: none; } }
 @media (max-width: 640px) {

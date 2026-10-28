@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   Check,
   Sparkles,
@@ -11,13 +11,20 @@ import {
 } from 'lucide-react';
 import {
   approveSummary,
+  approveStructuredSummary,
+  assertImportedSummary,
+  isStructuredSummary,
   getSummary,
   updateSummary,
 } from '../services/summariesApi';
+import { ApiError } from '../services/apiClient';
+import { getWorkflow } from '../services/documentWorkflowsApi';
+import WorkflowDialog from '../components/WorkflowDialog';
 import { startGeneration } from '../services/generationsApi';
 import { presentSummary, summaryUpdateFromSections } from '../services/workflowPresentation';
 import type {
   DocumentResponse,
+  ExternalSummaryStatus,
   ProjectResponse,
   ProjectSummaryResponse,
   SummarySectionItem,
@@ -33,11 +40,11 @@ export type ReviewProjectSummaryScreenProps = {
   document: DocumentResponse;
   template: TemplateResponse | null;
   workflowId?: string;
+  expectedExternal?: ExternalSummaryStatus | null;
+  navigationGuardRef?: RefObject<((proceed: () => void) => void) | null>;
   onProceedToAnalyze?: (generationJobId: string, summaryId: string) => void;
   onDiscard?: () => void;
 };
-
-const MAX_SECTION_CHARS = 2000;
 
 const WORKFLOW_STAGES = [
   { key: 'create', label: 'Upload', stepNum: 1 },
@@ -72,6 +79,8 @@ export default function ReviewProjectSummaryScreen({
   document,
   template,
   workflowId,
+  expectedExternal,
+  navigationGuardRef,
   onProceedToAnalyze,
   onDiscard,
 }: ReviewProjectSummaryScreenProps) {
@@ -79,7 +88,7 @@ export default function ReviewProjectSummaryScreen({
   const canUpdateSummary = can(PERMISSIONS.SUMMARY_UPDATE);
   const canGenerateWbs = can(PERMISSIONS.SUMMARY_APPROVE) && can(PERMISSIONS.WBS_GENERATE);
   const [data, setData] = useState<ProjectSummaryResponse | null>(null);
-  const [activeSectionId, setActiveSectionId] = useState<number>(1);
+  const [activeSectionId, setActiveSectionId] = useState<number | string>(1);
   const [editableSections, setEditableSections] = useState<SummarySectionItem[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isProceeding, setIsProceeding] = useState(false);
@@ -87,17 +96,58 @@ export default function ReviewProjectSummaryScreen({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [confirm, setConfirm] = useState<'discard' | 'refresh' | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const controller = useRef<AbortController | null>(null);
+  const mutationPending = useRef(false);
+  const pendingNavigation = useRef<(() => void) | null>(null);
+  const dirty = !!data && editableSections.some((s) => s.content !== data.sections.find((saved) => saved.id === s.id)?.content);
+  useEffect(() => {
+    if (!navigationGuardRef) return;
+    navigationGuardRef.current = (proceed) => {
+      if (!dirty) { proceed(); return; }
+      pendingNavigation.current = proceed;
+      setConfirm('discard');
+    };
+    return () => { navigationGuardRef.current = null; };
+  }, [dirty, navigationGuardRef]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   useEffect(() => {
     let isActive = true;
+    const loading = new AbortController();
+    controller.current = loading;
 
     async function load() {
       try {
         setLoadError(null);
-        const summary = await getSummary(tenantId, document.id);
+        const summary = await getSummary(tenantId, document.id, loading.signal);
+        if (isStructuredSummary(summary) && !workflowId) throw new Error('The imported summary workflow is unavailable.');
+        if (workflowId && (isStructuredSummary(summary) || expectedExternal)) {
+          const current = await getWorkflow(tenantId, workflowId, loading.signal);
+          if (isStructuredSummary(summary) || current.external_summary) {
+            if (!isStructuredSummary(summary) || !current.external_summary || current.resume_screen !== 'doc_summary'
+              || current.document_id !== document.id || current.project_id !== project.id
+              || (expectedExternal && (current.external_summary.request_id !== expectedExternal.request_id
+                || current.external_summary.job_id !== expectedExternal.job_id))
+              || current.summary_id !== summary.id || current.summary_revision !== summary.revision
+              || summary.structured_summary.generated_result.data.project_id !== project.id) {
+              throw new Error('The imported summary is stale or unavailable. Refresh saved status.');
+            }
+            assertImportedSummary(summary, current.external_summary);
+          }
+        }
         if (!isActive) return;
         const res = presentSummary(summary, project, document);
         setData(res);
+        setConflict(false);
+        setSaveError(null);
+        setSaveSuccess(false);
         setEditableSections(res.sections || []);
         if (res.sections && res.sections.length > 0) {
           setActiveSectionId(res.sections[0].id);
@@ -114,8 +164,10 @@ export default function ReviewProjectSummaryScreen({
 
     return () => {
       isActive = false;
+      loading.abort();
+      controller.current?.abort();
     };
-  }, [document, project, retryNonce, tenantId]);
+  }, [document, project, retryNonce, tenantId, workflowId, expectedExternal]);
 
   if (loadError) {
     return (
@@ -157,7 +209,7 @@ export default function ReviewProjectSummaryScreen({
   const currentSection =
     editableSections.find((s) => s.id === activeSectionId) ||
     editableSections[0] || {
-      id: 1,
+      id: 1, order: 1, maxLength: 2000,
       title: 'Summary Details',
       content: '',
       pages: [],
@@ -171,28 +223,66 @@ export default function ReviewProjectSummaryScreen({
     );
   };
 
+  const structured = isStructuredSummary(data.summary) ? data.summary : null;
+  const overLimit = structured !== null && editableSections.some((s) => Array.from(s.content).length > s.maxLength);
+  const savedState = (summary: typeof data.summary) => {
+    const next = presentSummary(summary, project, document);
+    setData(next);
+    setEditableSections(next.sections);
+    setConflict(false);
+    setSaveSuccess(true);
+  };
   const handleSaveDraft = async () => {
-    if (!canUpdateSummary) return;
+    if (!canUpdateSummary || mutationPending.current || overLimit) return;
+    mutationPending.current = true;
     setIsSaving(true);
     setSaveError(null);
+    const signal = controller.current?.signal;
     try {
-      const summary = await updateSummary(
-        tenantId,
-        document.id,
-        summaryUpdateFromSections(data.summary, editableSections),
-      );
-      setData((current) => current ? { ...current, summary } : current);
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2500);
+      const payload = structured ? {
+        format: 'external_summary_v1' as const, expected_revision: structured.revision,
+        sections: editableSections.filter((s) => s.content !== data.sections.find((saved) => saved.id === s.id)?.content)
+          .map((s) => ({ id: String(s.id), key: s.key!, content: s.content })),
+      } : summaryUpdateFromSections(data.summary, editableSections);
+      const summary = await updateSummary(tenantId, document.id, payload, signal);
+      if (signal?.aborted) return;
+      if (summary.id !== data.summary.id || (structured && (!isStructuredSummary(summary)
+        || summary.provenance.request_id !== structured.provenance.request_id
+        || summary.provenance.job_id !== structured.provenance.job_id
+        || summary.provenance.processing_run_id !== structured.provenance.processing_run_id
+        || ![structured.revision, structured.revision + 1].includes(summary.revision)))) throw new Error('The saved summary identity changed. Refresh and review.');
+      savedState(summary);
     } catch (err: unknown) {
+      if (signal?.aborted) return;
+      setConflict(err instanceof ApiError && err.status === 409);
       setSaveError(err instanceof Error ? err.message : 'Failed to save summary draft changes.');
     } finally {
-      setIsSaving(false);
+      mutationPending.current = false;
+      if (!signal?.aborted) setIsSaving(false);
+    }
+  };
+  const handleApprove = async () => {
+    if (!structured || dirty || mutationPending.current || !can(PERMISSIONS.SUMMARY_APPROVE)) return;
+    mutationPending.current = true;
+    setIsProceeding(true); setSaveError(null);
+    const signal = controller.current?.signal;
+    try {
+      const summary = await approveStructuredSummary(tenantId, document.id, structured.revision, signal);
+      if (signal?.aborted) return;
+      if (!isStructuredSummary(summary) || summary.id !== structured.id || summary.revision !== structured.revision
+        || summary.provenance.request_id !== structured.provenance.request_id) throw new Error('Approval response does not match the reviewed revision.');
+      savedState(summary);
+    } catch (err: unknown) {
+      if (signal?.aborted) return;
+      setConflict(err instanceof ApiError && err.status === 409); setSaveError(err instanceof Error ? err.message : 'Unable to approve this revision.');
+    } finally {
+      mutationPending.current = false;
+      if (!signal?.aborted) setIsProceeding(false);
     }
   };
 
   const handleProceed = async () => {
-    if (!canGenerateWbs || isProceeding) return;
+    if (structured || !canGenerateWbs || isProceeding) return;
     setIsProceeding(true);
     setSaveError(null);
     try {
@@ -225,7 +315,7 @@ export default function ReviewProjectSummaryScreen({
       <header className="wbs-rev-header">
         <h1 className="wbs-rev-title">Review Project Summary</h1>
         <p className="wbs-rev-subtitle">
-          Review and edit the extracted summary before generating the WBS.
+          {structured ? 'Review the source-linked draft. Human approval is separate from factual verification.' : 'Review and edit the extracted summary before generating the WBS.'}
         </p>
       </header>
 
@@ -274,12 +364,14 @@ export default function ReviewProjectSummaryScreen({
       </div>
 
       {saveError && (
-        <div className="wbs-error-banner" style={{ marginBottom: 16 }}>
+        <div className="wbs-error-banner" role="alert" style={{ marginBottom: 16 }}>
           <AlertTriangle size={16} />
           <span>{saveError}</span>
         </div>
       )}
 
+      {conflict && <p className="wbs-rev-review-notice">Your local text has been retained. <button type="button" className="wbs-rev-btn-save" onClick={() => setConfirm('refresh')}>Refresh and review saved version</button></p>}
+      {structured && <p className="wbs-rev-review-notice" role="status">Revision {structured.revision} · {structured.is_approved ? 'Human-approved' : 'Awaiting human review'}{dirty ? ' · Unsaved changes' : ''}</p>}
       {/* 2-Column Content */}
       <div className="wbs-rev-body-grid">
         <div className="wbs-rev-sections-card">
@@ -290,6 +382,7 @@ export default function ReviewProjectSummaryScreen({
               <button
                 type="button"
                 key={sec.id}
+                aria-current={isActive ? 'true' : undefined}
                 onClick={() => setActiveSectionId(sec.id)}
                 className={`wbs-rev-section-btn ${isActive ? 'wbs-rev-section-btn-active' : ''}`}
               >
@@ -299,7 +392,7 @@ export default function ReviewProjectSummaryScreen({
                       isActive ? 'wbs-rev-num-bubble-active' : ''
                     }`}
                   >
-                    {sec.id}
+                    {sec.order}
                   </span>
                   <span className="wbs-rev-section-name">{sec.title}</span>
                 </div>
@@ -311,30 +404,38 @@ export default function ReviewProjectSummaryScreen({
 
         <div className="wbs-rev-editor-card">
           <div className="wbs-rev-editor-top">
-            <h2 className="wbs-rev-editor-title">{currentSection.title}</h2>
+            <h2 id="summary-section-heading" className="wbs-rev-editor-title">{currentSection.title}</h2>
             <span className="wbs-rev-badge-ai">
               <Sparkles size={11} /> AI Draft
             </span>
           </div>
-          <p className="wbs-rev-editor-desc">Editable AI-generated summary</p>
+          <p className="wbs-rev-editor-desc">{structured ? 'Editable draft · original evidence preserved' : 'Editable AI-generated summary'}</p>
+          {structured && <div className="wbs-rev-review-notice">
+            <p>{currentSection.answerStatus === 'answered' ? 'Answered in generated draft' : 'Insufficient evidence in generated draft'}</p>
+            {currentSection.truncated && <p>Evidence context was limited. Review the original evidence carefully.</p>}
+            {currentSection.content !== currentSection.originalContent && <p>{structured.is_approved ? 'Human-edited content.' : 'Edited content requires review.'} Original citations do not establish support for edited claims.</p>}
+          </div>}
 
           <textarea
             rows={10}
-            maxLength={MAX_SECTION_CHARS}
+            maxLength={structured ? undefined : currentSection.maxLength}
+            aria-labelledby="summary-section-heading"
+            aria-describedby="summary-character-count"
+            aria-invalid={Array.from(currentSection.content).length > currentSection.maxLength}
             className="wbs-rev-textarea"
             value={currentSection.content}
-            disabled={!canUpdateSummary}
+            readOnly={!canUpdateSummary || isSaving || isProceeding}
             onChange={(e) => handleContentChange(e.target.value)}
             placeholder="No content extracted for this section."
           />
-          <div className="wbs-rev-char-count">
-            {currentSection.content.length}/{MAX_SECTION_CHARS}
+          <div id="summary-character-count" className="wbs-rev-char-count">
+            {Array.from(currentSection.content).length}/{currentSection.maxLength}
           </div>
 
           <div className="wbs-rev-ref-box">
             <div className="wbs-rev-ref-title">Source References</div>
             <p className="wbs-rev-ref-desc">
-              Content extracted from the following pages in your document:
+              {currentSection.referencesLabel ?? 'Content extracted from the following pages in your document:'}
             </p>
             <div>
               {currentSection.pages && currentSection.pages.length > 0 ? (
@@ -348,6 +449,21 @@ export default function ReviewProjectSummaryScreen({
               )}
             </div>
           </div>
+
+          {structured && <div className="wbs-rev-citations">
+            <h3>Original generated evidence</h3>
+            <p>Physical pages describe chunk coverage, not exact quote positions. Citation numbering is local to this section.</p>
+            <p className="wbs-rev-citation-preview">{currentSection.content.split(/(\[\d+\])/g).map((part, index) => {
+              const match = /^\[(\d+)\]$/.exec(part);
+              const citation = match && currentSection.citations?.find((c) => c.citation_number === Number(match[1]));
+              return citation ? <a key={index} href={`#citation-${currentSection.order}-${citation.citation_number}`}>{part}</a> : <span key={index}>{part}</span>;
+            })}</p>
+            {Array.from(currentSection.content.matchAll(/\[(\d+)\]/g)).some((m) => !currentSection.citations?.some((c) => c.citation_number === Number(m[1]))) && <p role="status">Unresolved citation markers remain plain text; no matching original evidence is recorded.</p>}
+            {currentSection.citations?.map((citation) => <details key={citation.citation_number} id={`citation-${currentSection.order}-${citation.citation_number}`}>
+              <summary>Citation [{citation.citation_number}] · Physical pages {citation.pages.join(', ')}</summary>
+              <blockquote>{citation.quote}</blockquote>
+            </details>)}
+          </div>}
 
           <div className="wbs-rev-meta-box">
             <div className="wbs-rev-meta-left">
@@ -363,32 +479,39 @@ export default function ReviewProjectSummaryScreen({
             <div className="wbs-rev-confidence-right">
               <div className="wbs-rev-confidence-label-row">
                 <span>Extraction Confidence</span>
-                <span>{data.confidenceScore}%</span>
+                <span>{data.confidenceScore === null ? 'Not recorded' : `${data.confidenceScore}%`}</span>
               </div>
-              <div className="wbs-rev-confidence-track">
+              <div className="wbs-rev-confidence-track" hidden={data.confidenceScore === null}>
                 <div
                   className="wbs-rev-confidence-fill"
-                  style={{ width: `${data.confidenceScore}%` }}
+                  style={{ width: `${data.confidenceScore ?? 0}%` }}
                 />
               </div>
               <span className="wbs-rev-confidence-subtext">
-                {getConfidenceSubtext(data.confidenceScore)}
+                {structured ? 'Extraction confidence is not summary accuracy or human approval.' : getConfidenceSubtext(data.confidenceScore ?? 0)}
               </span>
             </div>
           </div>
         </div>
       </div>
 
+      {structured && <div className="wbs-rev-provenance">
+        <p>Model: {structured.structured_summary.generated_result.data.llm_model} · Question set: {structured.structured_summary.generated_result.data.question_set_id}</p>
+        <p>Processing run: {structured.provenance.processing_run_id}</p>
+        <p>{structured.structured_summary.generated_result.data.document_information.confidence_status}</p>
+        <p>WBS generation is unavailable: this summary has no supported requirements register.</p>
+      </div>}
+      {overLimit && <p role="alert">A section exceeds its saved character limit. Text is preserved; shorten it before saving.</p>}
       <div className="wbs-rev-actions-row">
         {onDiscard && (
-          <button type="button" onClick={onDiscard} className="wbs-rev-btn-discard">
+          <button type="button" onClick={() => dirty ? setConfirm('discard') : onDiscard?.()} className="wbs-rev-btn-discard">
             Discard Changes
           </button>
         )}
         {canUpdateSummary && (
           <button
             type="button"
-            disabled={isSaving || isProceeding}
+            disabled={isSaving || isProceeding || overLimit || conflict}
             onClick={handleSaveDraft}
             className={`wbs-rev-btn-save ${saveSuccess ? 'wbs-rev-btn-save-success' : ''}`}
           >
@@ -403,12 +526,18 @@ export default function ReviewProjectSummaryScreen({
             )}
           </button>
         )}
-        {onProceedToAnalyze && canGenerateWbs && (
+        {structured && <>
+          {can(PERMISSIONS.SUMMARY_APPROVE) && <button type="button" className="wbs-rev-btn-save" disabled={dirty || isSaving || isProceeding || conflict || structured.is_approved} onClick={() => void handleApprove()}>{structured.is_approved ? 'Approved' : 'Approve summary'}</button>}
+          <button type="button" className="wbs-rev-btn-generate" disabled title="No supported requirements register is available.">Generate WBS</button>
+        </>}
+        {!structured && onProceedToAnalyze && canGenerateWbs && (
           <button type="button" disabled={isSaving || isProceeding} onClick={handleProceed} className="wbs-rev-btn-generate">
             {isProceeding ? <><Loader2 size={14} className="wbs-spinner" /><span>Starting...</span></> : <><span>Generate WBS</span> <ArrowRight size={14} /></>}
           </button>
         )}
       </div>
+      {confirm && <WorkflowDialog eyebrow="Unsaved draft" icon={<AlertTriangle size={25} />} children={<p>Choose Keep editing to preserve your local text.</p>} title={confirm === 'refresh' ? 'Review saved version?' : 'Discard unsaved changes?'} description="Your unsaved text will be discarded. Original generated evidence remains saved." onClose={() => { setConfirm(null); pendingNavigation.current = null; }}
+        footer={<><button type="button" className="workflow-button workflow-button-secondary" onClick={() => { setConfirm(null); pendingNavigation.current = null; }}>Keep editing</button><button type="button" className="workflow-button workflow-button-primary" onClick={() => { const action = confirm; setConfirm(null); if (action === 'refresh') setRetryNonce((n) => n + 1); else { const proceed = pendingNavigation.current; pendingNavigation.current = null; if (proceed) proceed(); else onDiscard?.(); } }}>Discard changes</button></>} />}
     </div>
   );
 }

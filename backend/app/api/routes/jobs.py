@@ -19,6 +19,7 @@ from app.schemas.domain import JobResponse
 from app.services.dispatcher import dispatch_generation, dispatch_summary
 from app.services.document_workflow_dispatch import enqueue_dispatch, publish_dispatch
 from app.services.document_workflow_resume import scoped_document
+from app.services.external_summary_tracking import reject_generic_external_access
 
 router = APIRouter(
     prefix="/tenants/{tenant_id}/jobs", tags=["jobs"], responses=TENANT_AUTH_RESPONSES
@@ -31,6 +32,7 @@ async def get_job(
     context: TenantContext = Depends(require_permission(Permission.JOB_READ)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
+    await reject_generic_external_access(db, context.tenant.id, job_id)
     return await get_tenant_job(db, context.tenant.id, job_id)
 
 
@@ -40,6 +42,7 @@ async def cancel_job(
     context: TenantContext = Depends(require_permission(Permission.JOB_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
+    await reject_generic_external_access(db, context.tenant.id, job_id)
     job = await get_tenant_job(db, context.tenant.id, job_id)
     await db.refresh(job, with_for_update=True)
     if job.job_type == JobType.DOCUMENT_INGESTION:
@@ -68,6 +71,7 @@ async def retry_job(
     context: TenantContext = Depends(require_permission(Permission.JOB_MANAGE)),
     db: AsyncSession = Depends(get_db),
 ) -> Job:
+    await reject_generic_external_access(db, context.tenant.id, job_id)
     job = await get_tenant_job(db, context.tenant.id, job_id)
     if job.status not in {ProcessingStatus.FAILED, ProcessingStatus.CANCELLED}:
         raise HTTPException(status_code=409, detail="Only failed or cancelled jobs can be retried.")
@@ -136,6 +140,9 @@ async def job_events(
     job_id: UUID,
     context: TenantContext = Depends(require_permission(Permission.JOB_READ)),
 ) -> StreamingResponse:
+    async with SessionLocal() as db:
+        await reject_generic_external_access(db, context.tenant.id, job_id)
+
     async def event_stream() -> AsyncIterator[str]:
         last_signature = ""
         for _ in range(60):

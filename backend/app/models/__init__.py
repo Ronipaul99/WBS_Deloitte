@@ -34,6 +34,12 @@ from app.models.domain import (
     WbsTemplate,
     WbsVersion,
 )
+from app.models.external_summary import (  # noqa: F401
+    SummaryApiRequest,
+    SummaryResultImport,
+    SummarySubmissionKey,
+    SummaryWorkflowBinding,
+)
 
 __all__ = [
     "ACTIVE_DOCUMENT_PROCESSING_STATUSES",

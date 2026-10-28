@@ -77,6 +77,9 @@ class DocumentWorkflow(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "document_workflows"
     __table_args__ = (
         UniqueConstraint("id", "tenant_id", "project_id", name="uq_workflow_project_scope"),
+        UniqueConstraint(
+            "id", "tenant_id", "project_id", "document_id", name="uq_workflow_document_binding"
+        ),
         UniqueConstraint("id", "tenant_id", name="uq_workflow_tenant_scope"),
         ForeignKeyConstraint(
             ["document_id", "tenant_id", "project_id"],

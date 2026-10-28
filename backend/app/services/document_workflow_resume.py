@@ -287,7 +287,51 @@ async def resume_state(
             )
         )
         ingestion_compatible = chunk_count == run.chunk_count
-    summary_job = await _linked_job(db, workflow, workflow.summary_job_id, JobType.DOCUMENT_SUMMARY)
+    external = None
+    # Keep disabled legacy deployments independent of the new tables. An already
+    # external job pointer still fails closed rather than loading a generic payload.
+    linked_type = None
+    if workflow.summary_job_id:
+        linked_type = await db.scalar(
+            select(Job.job_type).where(
+                Job.id == workflow.summary_job_id,
+                Job.tenant_id == tenant_id,
+                Job.project_id == workflow.project_id,
+            )
+        )
+    if get_settings().external_summary_enabled or linked_type == "DOCUMENT_SUMMERIZATION":
+        from app.models.external_summary import SummaryApiRequest, SummaryWorkflowBinding
+        from app.services.external_summary_tracking import read_status
+
+        request_id = await db.scalar(
+            select(SummaryWorkflowBinding.request_id).where(
+                SummaryWorkflowBinding.tenant_id == tenant_id,
+                SummaryWorkflowBinding.project_id == workflow.project_id,
+                SummaryWorkflowBinding.document_id == document.id,
+                SummaryWorkflowBinding.workflow_id == workflow.id,
+            )
+        )
+        if request_id is None:
+            request_id = await db.scalar(
+                select(SummaryApiRequest.id).where(
+                    SummaryApiRequest.tenant_id == tenant_id,
+                    SummaryApiRequest.document_id == document.id,
+                    SummaryApiRequest.project_id == workflow.project_id,
+                    SummaryApiRequest.workflow_id == workflow.id,
+                    SummaryApiRequest.processing_run_id == (run.id if run else None),
+                )
+            )
+        if request_id:
+            external = await read_status(
+                db, tenant_id, document.id, request_id, permissions, workflow_id=workflow.id
+            )
+        elif linked_type == "DOCUMENT_SUMMERIZATION":
+            raise inconsistent()
+    summary_job = (
+        None
+        if external is not None
+        else await _linked_job(db, workflow, workflow.summary_job_id, JobType.DOCUMENT_SUMMARY)
+    )
     generation = await _linked_job(db, workflow, workflow.generation_job_id, JobType.WBS_GENERATION)
     version = None
     if workflow.wbs_version_id:
@@ -392,6 +436,33 @@ async def resume_state(
         actions.append("edit_wbs")
     if version and Permission.VALIDATION_RUN in permissions:
         actions.append("start_validation")
+    external_review_ready = bool(
+        external
+        and external.result_state == "IMPORTED"
+        and external.binding_state == "VERIFIED"
+        and summary
+        and summary.id == external.summary_id
+        and summary.revision == external.summary_revision
+        and summary.source_request_id == external.request_id
+        and workflow.summary_id == summary.id
+        and workflow.summary_revision == summary.revision
+        and workflow.summary_job_id == external.job_id
+        and workflow.processing_run_id == document.current_processing_run_id
+        and ingestion_compatible
+    )
+    if external is not None and generation is None:
+        actions = [action for action in actions if action not in {"start_generation", "retry"}]
+    external_blocks_review = (
+        external is not None and generation is None and not external_review_ready
+    )
+    if external_blocks_review:
+        stage, screen, active_job = "SUMMARIZING", "checkpoint", None
+        failed_stage = None
+        if external.status in {"FAILED", "CANCELLED", "UNAVAILABLE"}:
+            stage = "CANCELLED" if external.status == "CANCELLED" else "FAILED"
+            failed_stage = "summary"
+        # No retry, generation or old-summary review before the matching import exists.
+        actions = [action for action in actions if action in {"view_wbs", "edit_wbs"}]
     RESUME_EVENTS.labels(stage).inc()
     return WorkflowState(
         workflow_id=workflow.id,
@@ -405,9 +476,10 @@ async def resume_state(
         template=TemplateResponse.model_validate(template) if template else None,
         processing_run_id=run.id if run else None,
         ingestion_job_id=run.job_id if run else None,
-        summary_id=summary.id if summary else None,
-        summary_revision=summary.revision if summary else None,
+        summary_id=summary.id if summary and not external_blocks_review else None,
+        summary_revision=summary.revision if summary and not external_blocks_review else None,
         summary_job_id=workflow.summary_job_id,
+        external_summary=external,
         generation_job_id=workflow.generation_job_id,
         wbs_version_id=workflow.wbs_version_id,
         validation_id=workflow.validation_id,

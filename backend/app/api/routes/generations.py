@@ -61,6 +61,12 @@ async def create_generation(
     await require_ready_active_run(db, context.tenant.id, document)
     if summary is None:
         raise HTTPException(status_code=404, detail="Approved summary not found.")
+    if summary.source_request_id is not None:
+        raise HTTPException(
+            409,
+            detail="Structured review and a supported requirements register "
+            "are required before WBS generation.",
+        )
     if summary.document_id != document.id or not summary.is_approved:
         raise HTTPException(status_code=409, detail="The document summary must be approved first.")
 

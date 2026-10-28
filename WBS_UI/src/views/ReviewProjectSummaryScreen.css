@@ -475,3 +475,24 @@
 .wbs-rev-btn-generate:focus-visible {
   box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.4);
 }
+/* Structured review extends the existing review surface. */
+.wbs-rev-review-notice, .wbs-rev-provenance { padding: 12px 16px; border: 1px solid #dbeafe; border-radius: 8px; background: #f8fafc; color: #475569; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.wbs-rev-citations { margin: 18px 0; font-size: 12px; color: #475569; }
+.wbs-rev-citations h3 { font-size: 13px; color: #1e293b; }
+.wbs-rev-citations details { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 8px; }
+.wbs-rev-citations summary { cursor: pointer; font-weight: 600; }
+.wbs-rev-citations blockquote, .wbs-rev-citation-preview { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.wbs-rev-citations a { color: #2563eb; text-underline-offset: 3px; }
+.wbs-rev-actions-row button:disabled { opacity: .55; cursor: not-allowed; }
+.wbs-rev-editor-card, .wbs-rev-sections-card { min-width: 0; }
+.wbs-rev-confidence-track[hidden] { display: none; }
+@media (max-width: 760px) {
+  .wbs-rev-body-grid { grid-template-columns: minmax(0, 1fr); }
+  .wbs-rev-actions-row { flex-wrap: wrap; }
+  .wbs-rev-flow-stepper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 16px; gap: 16px 10px; overflow: visible; }
+  .wbs-rev-flow-node { min-width: 0; gap: 6px; }
+  .wbs-rev-flow-text-main { white-space: normal; font-size: 11px; }
+  .wbs-rev-flow-divider { display: none; }
+  .wbs-rev-meta-box { flex-direction: column; align-items: stretch; gap: 16px; }
+  .wbs-rev-confidence-right { width: 100%; }
+}

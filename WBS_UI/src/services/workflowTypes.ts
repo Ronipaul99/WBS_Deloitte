@@ -116,7 +116,8 @@ export interface RequirementRecord {
   [key: string]: unknown;
 }
 
-export interface SummaryResponse {
+export interface LegacySummaryResponse {
+  representation?: 'legacy';
   id: string;
   tenant_id: string;
   document_id: string;
@@ -127,6 +128,44 @@ export interface SummaryResponse {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type SummarySectionKey = 'project_overview' | 'project_scope' | 'key_deliverables'
+  | 'assumptions' | 'constraints' | 'exclusions' | 'milestones_timeline';
+export interface SummaryCitation {
+  chunk_id: string; quote: string; citation_number: number; pages: number[];
+}
+export interface ExternalSummarySection {
+  id: string; key: SummarySectionKey; order: number; title: string;
+  content: string; max_length: number; badge: 'AI Draft'; subtitle: string;
+  source_references: { label: string; pages: number[] };
+  question_id: string; answer_status: 'answered' | 'insufficient_evidence';
+  evidence_context_truncated: boolean; evidence_citations: SummaryCitation[];
+}
+export interface StructuredSummaryResponse extends Omit<LegacySummaryResponse, 'representation'> {
+  representation: 'external-summary-v1'; revision: number;
+  structured_summary: {
+    schema_version: 'external-summary-v1';
+    content_state: 'generated_unreviewed' | 'edited_review_required';
+    edit_schema_version: 'section-edits-v1';
+    current_sections: Array<{ id: string; key: SummarySectionKey; content: string }>;
+    canonical_validation: 'exact_quotes_chunk_page_coverage';
+    generated_result: { status: 'success'; message: string; data: {
+      project_id: string; document_id: string; processing_run_id: string;
+      question_set_id: string; llm_model: string; summary_sections: ExternalSummarySection[];
+      document_information: { filename: string; file_size: string; file_type: 'PDF';
+        extraction_confidence: number | null; confidence_status: string };
+    } };
+  };
+  provenance: { request_id: string; job_id: string; processing_run_id: string;
+    result_digest: string; imported_revision: number };
+  capabilities: { structured_review_available: true; can_generate_wbs: false;
+    reason: 'REQUIREMENTS_CONTRACT_UNAVAILABLE' };
+}
+export type SummaryResponse = LegacySummaryResponse | StructuredSummaryResponse;
+export interface StructuredSummaryPatch {
+  format: 'external_summary_v1'; expected_revision: number;
+  sections: Array<{ id: string; key: SummarySectionKey; content: string }>;
 }
 
 export interface WbsVersionResponse {
@@ -208,9 +247,52 @@ export interface WorkflowState {
   input_compatibility: 'CURRENT' | 'CHANGED' | 'UNKNOWN';
   source_requires_processing?: boolean;
   job: JobResponse | null;
+  external_summary?: ExternalSummaryStatus | null;
   failed_stage: 'ingestion' | 'summary' | 'generation' | 'validation' | null;
   allowed_actions: string[];
 }
+
+// Application request identity is distinct from the externally owned job identity.
+export interface ExternalSummarySubmission {
+  execution_backend: 'external_summary';
+  request_id: string;
+  job_id: string | null;
+  document_id: string;
+  job_type: 'DOCUMENT_SUMMERIZATION';
+  submission_state: string;
+  status: 'QUEUED' | 'UNAVAILABLE';
+  provider_status: 'RUNNING' | null;
+  progress: number;
+  current_step: string;
+  result_state: 'NOT_READY';
+  summary_id: null;
+}
+
+export interface ExternalSummaryStatus {
+  execution_backend: 'external_summary';
+  request_id: string;
+  job_id: string | null;
+  document_id: string;
+  workflow_id: string;
+  job_type: 'DOCUMENT_SUMMERIZATION';
+  submission_state: string;
+  binding_state: 'PENDING' | 'WAITING_FOR_JOB' | 'VERIFIED' | 'UNAVAILABLE' | 'STALE';
+  status: 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'CANCELLED' | 'UNAVAILABLE';
+  provider_status: string | null;
+  progress: number;
+  current_step: string | null;
+  attempt_count: number;
+  updated_at: string;
+  result_state: 'NOT_READY' | 'IMPORT_PENDING' | 'IMPORTED' | 'INVALID' | 'STALE';
+  summary_id: string | null;
+  summary_revision: number | null;
+  error_code: string | null;
+  error_message: string | null;
+  can_retry: false;
+  can_cancel: false;
+}
+
+export type SummarySubmissionResponse = JobResponse | ExternalSummarySubmission;
 
 export interface WorkflowCandidate {
   workflow_id: string | null;
@@ -281,7 +363,15 @@ export interface ProcessingDocStatusResponse {
 }
 
 export interface SummarySectionItem {
-  id: number;
+  id: number | string;
+  order: number;
+  key?: SummarySectionKey;
+  originalContent?: string;
+  maxLength: number;
+  referencesLabel?: string;
+  answerStatus?: 'answered' | 'insufficient_evidence';
+  truncated?: boolean;
+  citations?: SummaryCitation[];
   title: string;
   content: string;
   pages: string[];
@@ -291,7 +381,7 @@ export interface ProjectSummaryResponse {
   summary: SummaryResponse;
   projectName: string;
   document: DocumentFileInfo;
-  confidenceScore: number;
+  confidenceScore: number | null;
   sections: SummarySectionItem[];
 }
 

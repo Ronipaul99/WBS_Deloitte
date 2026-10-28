@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.domain import DocumentResponse, JobResponse, ProjectResponse, TemplateResponse
+from app.schemas.external_summary_tracking import ExternalSummaryStatus
 
 
 class ResolveDocument(BaseModel):
@@ -62,6 +63,7 @@ class WorkflowState(BaseModel):
     summary_id: UUID | None = None
     summary_revision: int | None = None
     summary_job_id: UUID | None = None
+    external_summary: ExternalSummaryStatus | None = None
     generation_job_id: UUID | None = None
     wbs_version_id: UUID | None = None
     validation_id: UUID | None = None

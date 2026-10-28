@@ -282,6 +282,7 @@ function WorkspaceApp({
   >('list');
   const [selectedProject, setSelectedProject] = useState<ProjectResponse | null>(null);
   const [selectedWbsVersionId, setSelectedWbsVersionId] = useState<string | null>(null);
+  const reviewNavigationGuard = useRef<((proceed: () => void) => void) | null>(null);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('create');
   const [workflow, setWorkflow] = useState<WorkflowSession | null>(null);
   const [settingsSection, setSettingsSection] = useState<AccountSettingsSection>(
@@ -696,12 +697,14 @@ function WorkspaceApp({
 
       if (currentScreen === 'doc_summary') {
         return (
-          <ReviewProjectSummaryScreen
+          <ReviewProjectSummaryScreen key={`${activeTenant.id}:${workflow.document.id}:${workflow.workflowId ?? 'legacy'}`}
             tenantId={activeTenant.id}
             project={workflow.project}
             document={workflow.document}
             template={workflow.template}
             workflowId={workflow.workflowId}
+            navigationGuardRef={reviewNavigationGuard}
+            expectedExternal={workflow.recovery?.external_summary}
             onProceedToAnalyze={handleProceedToAnalyze}
             onDiscard={handleBackToUpload}
           />
@@ -709,7 +712,8 @@ function WorkspaceApp({
       }
 
       if (currentScreen === 'checkpoint' && workflow.recovery) {
-        return <WorkflowCheckpointScreen tenantId={activeTenant.id} state={workflow.recovery}
+        return <WorkflowCheckpointScreen key={`${activeTenant.id}:${workflow.document.id}:${workflow.recovery.workflow_id}`}
+          tenantId={activeTenant.id} state={workflow.recovery}
           onResumed={handleWorkflowStarted} onBack={handleBackToProject}
           onViewWbs={() => setCurrentScreen('results')} />;
       }
@@ -777,7 +781,7 @@ function WorkspaceApp({
   return (
     <AppLayout
       activeTab={activeTab}
-      onNavClick={handleNavClick}
+      onNavClick={(tab) => { if (reviewNavigationGuard.current) reviewNavigationGuard.current(() => handleNavClick(tab)); else handleNavClick(tab); }}
       can={can}
       currentUser={{
         name: user.display_name,
@@ -793,7 +797,7 @@ function WorkspaceApp({
         clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);
         void onSignOut();
       }}
-      onProfileDetails={handleProfileDetails}
+      onProfileDetails={() => { if (reviewNavigationGuard.current) reviewNavigationGuard.current(handleProfileDetails); else handleProfileDetails(); }}
       canSwitchWorkspace={canSwitchWorkspace}
       onSwitchWorkspace={() => {
         clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);

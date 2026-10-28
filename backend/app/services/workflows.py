@@ -63,12 +63,20 @@ async def process_document_summary(job_id: UUID, document_id: UUID) -> None:
             )
             await db.commit()
 
+            # A queued legacy attempt must never overwrite a committed external draft.
+            from app.services.document_workflow_resume import scoped_document
+
+            document = await scoped_document(db, job.tenant_id, document_id, lock=True)
             summary = await db.scalar(
-                select(DocumentSummary).where(
+                select(DocumentSummary)
+                .where(
                     DocumentSummary.document_id == document.id,
                     DocumentSummary.tenant_id == job.tenant_id,
                 )
+                .with_for_update()
             )
+            if summary is not None and summary.source_request_id is not None:
+                raise RuntimeError("Legacy summary cannot replace an external draft")
             await db.refresh(job, with_for_update=True)
             if job.status != ProcessingStatus.IN_PROGRESS:
                 await db.rollback()

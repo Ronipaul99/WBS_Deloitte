@@ -1,0 +1,9 @@
+# Step 5 decisions
+
+The entry checkout stores only the immutable generated result in structured_summary. Current edits need a separate bounded, versioned overlay keyed by the original section ID and category. Extend that JSON contract compatibly: absent overlays mean original content; original import validation and generated_result remain unchanged. No database migration is required. Approval and authoritative revision stay on DocumentSummary; committed import identity stays immutable.
+
+Review reads and mutations check the current canonical source/run against the pinned submission fingerprint, independently of secret provisioning. Mutations follow document guard -> sorted compatible workflow rows -> summary lock, in one short tenant-scoped transaction. The document guard serializes with import/deletion and legacy writers. Only matching summary/job/run associations without generated history are advanced. Partial saves compare expected revision first; no-op saves preserve revision/approval. Approval requires the current revision, does not advance content revision, and repeated approval is a no-op.
+
+Current edited text is plain text and need not satisfy original generated citation-marker rules. Original evidence is preserved; unresolved markers and edited support receive warnings, never verification claims. Character limits use Unicode code points on both server and client. Projection remains bounded at 50,000 characters with no truncation. Structured review becomes available; WBS remains unavailable because there is no supported requirements register.
+
+Imported navigation must refresh workflow metadata and fetch the exact persisted summary, checking request/job/document/summary/revision scope. Completion alone remains insufficient. All tests use synthetic inputs; PostgreSQL, live upstream and deployed-worker qualification remain separate pending gates.

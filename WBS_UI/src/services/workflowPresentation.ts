@@ -256,15 +256,29 @@ export function presentSummary(
   project: ProjectResponse,
   document: DocumentResponse,
 ): ProjectSummaryResponse {
+  if (summary.representation === 'external-summary-v1') {
+    const stored = summary.structured_summary;
+    return { summary, projectName: project.name, document: documentInfo(document),
+      confidenceScore: stored.generated_result.data.document_information.extraction_confidence,
+      sections: [...stored.generated_result.data.summary_sections].sort((a, b) => a.order - b.order).map((section) => ({
+        id: section.id, key: section.key, order: section.order, title: section.title,
+        content: stored.current_sections.find((edit) => edit.id === section.id)?.content ?? section.content,
+        originalContent: section.content, maxLength: section.max_length,
+        pages: section.source_references.pages.map(String), referencesLabel: section.source_references.label,
+        answerStatus: section.answer_status, truncated: section.evidence_context_truncated,
+        citations: section.evidence_citations,
+      })),
+    };
+  }
   return {
     summary,
     projectName: project.name,
     document: documentInfo(document),
     confidenceScore: 85,
     sections: [
-      { id: 1, title: 'Project Overview', content: summary.summary_text, pages: [] },
-      { id: 2, title: 'Key Points', content: summary.key_points.join('\n'), pages: [] },
-      { id: 3, title: 'Requirements', content: requirementsText(summary.requirements), pages: [] },
+      { id: 1, order: 1, maxLength: 2000, title: 'Project Overview', content: summary.summary_text, pages: [] },
+      { id: 2, order: 2, maxLength: 2000, title: 'Key Points', content: summary.key_points.join('\n'), pages: [] },
+      { id: 3, order: 3, maxLength: 2000, title: 'Requirements', content: requirementsText(summary.requirements), pages: [] },
     ],
   };
 }
@@ -273,6 +287,7 @@ export function summaryUpdateFromSections(
   current: SummaryResponse,
   sections: SummarySectionItem[],
 ): { summary_text: string; key_points: string[]; requirements: RequirementRecord[] } {
+  if (current.representation === 'external-summary-v1') throw new Error('Use the stable structured section patch contract.');
   const content = (id: number) => sections.find((section) => section.id === id)?.content.trim() ?? '';
   const lines = (id: number) => content(id).split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   return {
