@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertTriangle, ArrowLeft, LoaderCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from './auth/authContext';
 import type { CurrentUser, TenantMembership } from './auth/authContext';
@@ -291,6 +291,7 @@ function WorkspaceApp({
     'structure' | 'coverage' | 'insights' | 'unmapped'
   >('structure');
   const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const restoreController = useRef<AbortController | null>(null);
   const [isRestoringWorkflow, setIsRestoringWorkflow] = useState(
     () => readWorkflowContext(activeTenant.id) !== null,
   );
@@ -303,6 +304,7 @@ function WorkspaceApp({
     const stored = readWorkflowContext(activeTenant.id);
     if (!stored) return;
     const controller = new AbortController();
+    restoreController.current = controller;
     restoreWorkflow(activeTenant.id, stored, controller.signal)
       .then((session) => {
         if (controller.signal.aborted) return;
@@ -330,6 +332,9 @@ function WorkspaceApp({
   }, [activeTenant.id, restoreAttempt]);
 
   const resetWbsFlow = (clearStored = true) => {
+    restoreController.current?.abort();
+    setIsRestoringWorkflow(false);
+    setRestoreError(null);
     if (clearStored) {
       clearWorkflowContext(activeTenant.id, workflow?.project.id ?? selectedProject?.id);
     }
@@ -355,31 +360,15 @@ function WorkspaceApp({
   };
 
   const openProject = (project: ProjectResponse) => {
-    const stored = readWorkflowContext(activeTenant.id);
     resetWbsFlow(false);
     setSelectedProject(project);
     setActiveTab('projects');
-    if (stored?.projectId === project.id) {
-      setProjectScreen('wbs');
-      setCurrentScreen('doc_processing');
-      setIsRestoringWorkflow(true);
-      setRestoreAttempt((value) => value + 1);
-    } else {
-      setProjectScreen('workspace');
-    }
+    setProjectScreen('workspace');
   };
 
   const showWbsUpload = () => {
     if (!selectedProject || !canCreateWbs) return;
-    const stored = readWorkflowContext(activeTenant.id);
-    if (stored?.projectId === selectedProject.id) {
-      setProjectScreen('wbs');
-      setCurrentScreen('doc_processing');
-      setIsRestoringWorkflow(true);
-      setRestoreAttempt((value) => value + 1);
-      return;
-    }
-    resetWbsFlow();
+    resetWbsFlow(false);
     setProjectScreen('wbs');
   };
 
@@ -399,14 +388,18 @@ function WorkspaceApp({
     setCurrentScreen(session.recovery?.resume_screen ?? 'doc_processing');
   };
 
-  const handleLoadSavedWorkflow = async (workflowId: string) => {
+  const handleLoadSavedWorkflow = async (workflowId: string, signal?: AbortSignal) => {
     try {
-      const session = await resumeWorkflow(activeTenant.id, workflowId);
+      const session = await resumeWorkflow(activeTenant.id, workflowId, signal);
+      if (signal?.aborted) return false;
       handleWorkflowStarted(session);
       setActiveTab('projects');
       setProjectScreen('wbs');
+      return true;
     } catch (reason) {
-      setRestoreError(reason instanceof Error ? reason.message : 'The saved workflow is unavailable.');
+      if (signal?.aborted) return false;
+      if (!signal) setRestoreError(reason instanceof Error ? reason.message : 'The saved workflow is unavailable.');
+      return false;
     }
   };
 
@@ -440,14 +433,6 @@ function WorkspaceApp({
   const handleLeaveProcessing = (completed: boolean) => {
     resetWbsFlow(completed);
     setProjectScreen(selectedProject ? 'workspace' : 'list');
-  };
-
-  const handleResumeIngestion = () => {
-    if (!selectedProject) return;
-    setProjectScreen('wbs');
-    setCurrentScreen('doc_processing');
-    setIsRestoringWorkflow(true);
-    setRestoreAttempt((value) => value + 1);
   };
 
   const handleRegenerate = async () => {
@@ -643,12 +628,10 @@ function WorkspaceApp({
             project={selectedProject}
             canCreateWbs={canCreateWbs}
             canDeleteDocument={can(PERMISSIONS.DOCUMENT_UPLOAD)}
-            hasActiveIngestion={readWorkflowContext(activeTenant.id)?.projectId === selectedProject.id}
             onBack={showProjectList}
             onCreateWbs={showWbsUpload}
-            onResumeIngestion={handleResumeIngestion}
             onOpenWbs={openExistingWbs}
-            onResumeWorkflow={(id) => void handleLoadSavedWorkflow(id)}
+            onResumeWorkflow={handleLoadSavedWorkflow}
           />
         );
       }

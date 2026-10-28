@@ -42,6 +42,18 @@ async def set_local_tenant_context(session: AsyncSession, tenant_id: UUID | str)
     await session.execute(text(f"SET LOCAL app.tenant_id = '{validated_tenant_id}'"))
 
 
+async def ensure_tenant_transaction(session: AsyncSession, tenant_id: UUID | str) -> None:
+    """Join a caller transaction or begin one, then apply transaction-local scope.
+
+    The caller still owns commit/rollback. Never use this to span external I/O.
+    Keep set_local_tenant_context strict for callers that own explicit transactions.
+    """
+    validated_tenant_id = UUID(str(tenant_id))
+    if not session.in_transaction():
+        await session.begin()
+    await set_local_tenant_context(session, validated_tenant_id)
+
+
 async def get_db() -> AsyncIterator[AsyncSession]:
     async with SessionLocal() as session:
         yield session

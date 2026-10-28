@@ -66,3 +66,17 @@ export function configureWorkflowTemplate(tenantId: string, state: WorkflowState
 export function projectWorkflows(tenantId: string, projectId: string, signal?: AbortSignal): Promise<WorkflowState[]> {
   return apiRequest(`/tenants/${tenantId}/document-workflows/projects/${projectId}`, { signal });
 }
+
+export async function documentWorkflows(tenantId: string, projectId: string, documentId: string,
+  signal?: AbortSignal): Promise<WorkflowState[]> {
+  const states = await apiRequest<WorkflowState[]>(
+    `/tenants/${tenantId}/document-workflows/documents/${documentId}`, { signal },
+  );
+  if (states.some((state) => state.project_id !== projectId || state.document_id !== documentId
+    || state.document.id !== documentId || state.document.tenant_id !== tenantId
+    || state.document.project_id !== projectId || state.project.id !== projectId
+    || state.project.tenant_id !== tenantId)) {
+    throw new Error('The saved workflow does not belong to this document.');
+  }
+  return states;
+}

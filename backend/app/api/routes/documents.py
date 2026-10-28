@@ -1,5 +1,7 @@
 import logging
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -22,10 +24,12 @@ from app.schemas.domain import DocumentDeletionStatusResponse, DocumentResponse,
 from app.services.dispatcher import publish_deletion_dispatch
 from app.services.document_content import upload_or_reuse
 from app.services.document_lifecycle import request_document_deletion
+from app.services.ingestion.errors import DocumentInputError
 from app.services.storage import (
     ObjectStorageUnavailableError,
     UploadObjectStorage,
     get_upload_storage,
+    validate_document_storage_key,
 )
 
 router = APIRouter(
@@ -252,6 +256,53 @@ async def get_document(
     db: AsyncSession = Depends(get_db),
 ) -> Document:
     return await get_tenant_document(db, context.tenant.id, document_id)
+
+
+@router.get("/documents/{document_id}/file")
+async def read_document_file(
+    document_id: UUID,
+    context: TenantContext = Depends(require_permission(Permission.DOCUMENT_READ)),
+    db: AsyncSession = Depends(get_db),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
+    settings: Settings = Depends(get_settings),
+) -> Response:
+    document = await get_tenant_document(db, context.tenant.id, document_id)
+    if document.lifecycle_status != DocumentLifecycleStatus.ACTIVE.value:
+        raise HTTPException(409, detail="This document is no longer available.")
+    try:
+        key = validate_document_storage_key(
+            document.storage_key, tenant_id=context.tenant.id, project_id=document.project_id
+        )
+    except ValueError:
+        raise HTTPException(409, detail="The document file could not be verified.") from None
+    size, digest, name = document.size_bytes, document.upload_sha256, document.file_name
+    suffix = Path(key).suffix.lower()
+    if not 0 < size <= settings.max_upload_bytes:
+        raise HTTPException(413, detail="The document exceeds the file viewing limit.")
+    # End the read transaction before object-storage I/O; this route performs no mutations.
+    await db.rollback()
+    try:
+        with TemporaryDirectory(prefix="wbs-document-view-") as directory:
+            destination = Path(directory) / "original"
+            result = await storage.download_to_path(key, destination, maximum_bytes=size)
+            if result.byte_count != size or (digest and result.sha256 != digest):
+                raise HTTPException(409, detail="The document file could not be verified.")
+            content = destination.read_bytes()
+    except (ObjectStorageUnavailableError, DocumentInputError, OSError):
+        raise HTTPException(503, detail="The document file is temporarily unavailable.") from None
+    # Never render uploaded HTML or office content as active web content.
+    media_type = {".pdf": "application/pdf", ".csv": "text/plain"}.get(
+        suffix, "application/octet-stream"
+    )
+    return Response(
+        content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(name, safe='')}",
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.delete(

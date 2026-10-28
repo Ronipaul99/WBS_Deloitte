@@ -18,7 +18,7 @@ from starlette.datastructures import UploadFile
 
 from app.core.config import Settings
 from app.core.permissions import Permission, permissions_for_role
-from app.db.session import set_local_tenant_context
+from app.db.session import ensure_tenant_transaction
 from app.models.document_workflows import (
     DocumentContentClaim,
     DocumentContentRejection,
@@ -59,6 +59,7 @@ def insert_for(db: AsyncSession, model):
 
 
 async def _check_destination(db, context, project_id):
+    await ensure_tenant_transaction(db, context.tenant.id)
     project = await db.scalar(
         select(Project)
         .where(
@@ -136,7 +137,7 @@ async def _resolve_content(
     selected_project_id: UUID,
     permissions,
 ) -> ResolveResponse:
-    await set_local_tenant_context(db, tenant_id)
+    await ensure_tenant_transaction(db, tenant_id)
     if await db.get(DocumentContentRejection, (tenant_id, sha256)):
         return ResolveResponse(disposition="TEMPORARILY_UNAVAILABLE")
     docs = await matching_documents(db, tenant_id, sha256)
@@ -203,7 +204,7 @@ async def _renew(factory, tenant_id: UUID, sha256: str, token: UUID, seconds: in
     while True:
         await asyncio.sleep(seconds / 3)
         async with factory() as db:
-            await set_local_tenant_context(db, tenant_id)
+            await ensure_tenant_transaction(db, tenant_id)
             now = await database_now(db)
             result = await db.execute(
                 update(DocumentContentClaim)
@@ -230,9 +231,34 @@ async def _abandon(
     token: UUID,
 ) -> None:
     await db.rollback()
-    await set_local_tenant_context(db, tenant_id)
-    attempt = await db.get(DocumentUploadAttempt, token)
+    await ensure_tenant_transaction(db, tenant_id)
+    attempt = await db.scalar(
+        select(DocumentUploadAttempt)
+        .where(
+            DocumentUploadAttempt.id == token,
+            DocumentUploadAttempt.tenant_id == tenant_id,
+            DocumentUploadAttempt.storage_key == prepared.storage_key,
+            DocumentUploadAttempt.sha256 == prepared.sha256,
+        )
+        .with_for_update()
+    )
     if attempt is None or attempt.state == "COMMITTED":
+        await db.rollback()
+        return
+    referenced = await db.scalar(
+        select(Document.id).where(
+            Document.tenant_id == tenant_id, Document.storage_key == prepared.storage_key
+        )
+    )
+    other_owner = await db.scalar(
+        select(DocumentContentClaim.tenant_id).where(
+            DocumentContentClaim.tenant_id == tenant_id,
+            DocumentContentClaim.pending_storage_key == prepared.storage_key,
+            DocumentContentClaim.owner_token != token,
+        )
+    )
+    if referenced or other_owner:
+        await db.rollback()
         return
     attempt.state = "ABANDONED"
     await db.execute(
@@ -252,11 +278,13 @@ async def _abandon(
         CONTENT_EVENTS.labels("cleanup_pending").inc()
         logger.warning("Document upload cleanup deferred to ownership reconciliation")
     else:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         await db.execute(
             update(DocumentUploadAttempt)
             .where(
                 DocumentUploadAttempt.id == token,
+                DocumentUploadAttempt.tenant_id == tenant_id,
+                DocumentUploadAttempt.storage_key == prepared.storage_key,
                 DocumentUploadAttempt.state == "ABANDONED",
             )
             .values(state="CLEANED")
@@ -290,7 +318,7 @@ async def upload_or_reuse(
             },
         )
     tenant_id = context.tenant.id
-    await set_local_tenant_context(db, tenant_id)
+    await ensure_tenant_transaction(db, tenant_id)
     if idempotency_key:
         if len(idempotency_key) > 200:
             raise HTTPException(422, detail="Invalid idempotency key.")
@@ -397,7 +425,7 @@ async def upload_or_reuse(
         if taken.rowcount != 1:
             await db.rollback()
             # The winner may have published after our lookup; resolve before asking to retry.
-            return await _after_conflict(db, context, project_id, prepared)
+            return await _after_conflict(db, tenant_id, context.permissions, project_id, prepared)
         await db.execute(
             update(DocumentUploadAttempt)
             .where(
@@ -446,7 +474,10 @@ async def upload_or_reuse(
         )
         if storage_key != prepared.storage_key or size != prepared.size_bytes:
             raise RuntimeError("Storage publication did not match the verified upload")
-        await set_local_tenant_context(db, tenant_id)
+        if heartbeat.done():
+            # A failed renewer or lost lease cannot be treated as healthy ownership.
+            raise conflict("UPLOAD_LEASE_LOST", "The upload expired. Check existing work again.")
+        await ensure_tenant_transaction(db, tenant_id)
         await _check_destination(db, context, project_id)
         now = await database_now(db)
         # Lock/renew only if this request still owns an unexpired lease.
@@ -505,22 +536,38 @@ async def upload_or_reuse(
         return "CREATED", document, workflow.id, None
     except BaseException:
         if not committed:
-            await asyncio.shield(_abandon(db, storage, tenant_id, prepared, token))
+            # Retain the task and finish it before the request session can close,
+            # including cancellation during compensation. Preserve the primary error.
+            cleanup = asyncio.create_task(_abandon(db, storage, tenant_id, prepared, token))
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                try:
+                    await cleanup
+                except (Exception, asyncio.CancelledError):
+                    CONTENT_EVENTS.labels("cleanup_pending").inc()
+                    logger.warning("Document upload cleanup interrupted; reconciliation required")
+            except Exception:
+                CONTENT_EVENTS.labels("cleanup_pending").inc()
+                logger.warning("Document upload cleanup failed; ownership reconciliation required")
         raise
     finally:
+        if heartbeat.done() and not heartbeat.cancelled() and heartbeat.exception() is not None:
+            CONTENT_EVENTS.labels("heartbeat_failed").inc()
+            logger.warning("Document upload lease renewal failed; ownership requires revalidation")
         heartbeat.cancel()
         with suppress(asyncio.CancelledError, Exception):
             await heartbeat
 
 
-async def _after_conflict(db, context, project_id, prepared):
+async def _after_conflict(db, tenant_id, permissions, project_id, prepared):
     resolved = await resolve_content(
         db,
-        tenant_id=context.tenant.id,
+        tenant_id=tenant_id,
         sha256=prepared.sha256,
         size_bytes=prepared.size_bytes,
         selected_project_id=project_id,
-        permissions=context.permissions,
+        permissions=permissions,
     )
     if len(resolved.candidates) == 1 and resolved.candidates[0].project_id == project_id:
         candidate = resolved.candidates[0]

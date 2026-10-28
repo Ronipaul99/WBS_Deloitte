@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings, get_settings
 from app.core.observability import record_document_deletion
-from app.db.session import SessionLocal, set_local_tenant_context
+from app.db.session import SessionLocal, ensure_tenant_transaction, set_local_tenant_context
 from app.models.domain import (
     ACTIVE_DOCUMENT_PROCESSING_STATUSES,
     DeletionStage,
@@ -83,7 +83,7 @@ async def request_document_deletion(
     requested_by: UUID,
 ) -> tuple[Job, DocumentDeletionOutbox | None]:
     now = datetime.now(UTC)
-    await set_local_tenant_context(db, tenant_id)
+    await ensure_tenant_transaction(db, tenant_id)
     document = await db.scalar(
         select(Document)
         .where(Document.id == document_id, Document.tenant_id == tenant_id)

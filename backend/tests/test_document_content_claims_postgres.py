@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from starlette.datastructures import Headers, UploadFile
@@ -36,6 +37,9 @@ CONTENT = b"Task,Description\n1,Concurrency verification\n"
 async def postgres(tmp_path):
     schema = "dedup_test_" + uuid4().hex
     url = Settings._as_async_sqlalchemy_url(URL)
+    database = make_url(url).database or ""
+    if not (database.startswith("wbs_upload_test_") or database == "wbs_fullstack"):
+        pytest.fail("PostgreSQL verification requires an explicitly named disposable test database")
     admin = create_async_engine(url, hide_parameters=True)
     async with admin.begin() as connection:
         await connection.execute(text('CREATE SCHEMA "' + schema + '"'))
@@ -186,6 +190,10 @@ async def test_runtime_rls_requires_matching_tenant_context(postgres):
     try:
         async with runtime.connect() as connection:
             role = await connection.scalar(text("SELECT current_user"))
+            unsafe = await connection.scalar(
+                text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            )
+            assert unsafe is False, "RLS verification requires a restricted runtime role"
         quote = postgres.engine.dialect.identifier_preparer.quote
         async with postgres.engine.begin() as connection:
             await connection.execute(
@@ -208,6 +216,7 @@ async def test_runtime_rls_requires_matching_tenant_context(postgres):
                 text(f"GRANT SELECT ON document_content_claims TO {quote(role)}")
             )
         async with postgres.factory() as db:
+            await db.begin()
             await set_local_tenant_context(db, postgres.context.tenant.id)
             db.add(
                 DocumentContentClaim(

@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import delete, func, select
 
 from app.core.config import Settings
-from app.db.session import SessionLocal, set_local_tenant_context
+from app.db.session import SessionLocal, ensure_tenant_transaction
 from app.models.document_workflows import (
     DocumentContentClaim,
     DocumentUploadAttempt,
@@ -182,7 +182,7 @@ async def backfill_workflows(
         "next_cursor": None,
     }
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         query = (
             select(Document)
             .join(Project)
@@ -246,7 +246,7 @@ async def backfill_workflows(
             report["integrity_failures"] += 1
             continue
         async with session_factory() as db:
-            await set_local_tenant_context(db, tenant_id)
+            await ensure_tenant_transaction(db, tenant_id)
             document = await db.scalar(
                 select(Document)
                 .where(
@@ -300,7 +300,7 @@ async def backfill_workflows(
                 await db.commit()
             report["verified"] += 1
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         report["remaining_unverified"] = await db.scalar(
             select(func.count())
             .select_from(Document)
@@ -351,7 +351,7 @@ async def reconcile_uploads(
         raise ValueError("Cleanup needs a grace period of at least 300 seconds and a bounded batch")
     report = {"mode": "apply" if apply else "dry_run", "eligible": 0, "cleaned": 0, "deferred": 0}
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         now = await database_now(db)
         attempts = list(
             await db.scalars(
@@ -368,7 +368,7 @@ async def reconcile_uploads(
         candidates = [(a.id, a.sha256, a.storage_key) for a in attempts]
     for token, sha256, key in candidates:
         async with session_factory() as db:
-            await set_local_tenant_context(db, tenant_id)
+            await ensure_tenant_transaction(db, tenant_id)
             now = await database_now(db)
             attempt = await db.get(DocumentUploadAttempt, token)
             claim = await db.get(DocumentContentClaim, (tenant_id, sha256), with_for_update=True)
@@ -399,7 +399,7 @@ async def reconcile_uploads(
             report["deferred"] += 1
             continue
         async with session_factory() as db:
-            await set_local_tenant_context(db, tenant_id)
+            await ensure_tenant_transaction(db, tenant_id)
             attempt = await db.get(DocumentUploadAttempt, token)
             if attempt.state == "ABANDONED":
                 attempt.state = "CLEANED"

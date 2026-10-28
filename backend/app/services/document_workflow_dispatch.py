@@ -8,7 +8,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy import or_, select
 
 from app.core.config import get_settings
-from app.db.session import SessionLocal, set_local_tenant_context
+from app.db.session import SessionLocal, ensure_tenant_transaction
 from app.models.document_workflows import WorkflowDispatch
 from app.services.document_content import database_now, utc
 
@@ -49,7 +49,7 @@ async def publish_dispatch(
     )
 
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         record = await db.scalar(
             select(WorkflowDispatch)
             .where(
@@ -94,7 +94,7 @@ async def publish_dispatch(
         logger.warning("Workflow task publication deferred to dispatch reconciliation")
         return False
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         record = await db.get(WorkflowDispatch, dispatch_id, with_for_update=True)
         if record and record.attempts == attempt_number:
             record.status, record.lease_expires_at = "PUBLISHED", None
@@ -108,7 +108,7 @@ async def reconcile_dispatches(
     if not 1 <= limit <= 1000:
         raise ValueError("Dispatch limit must be between 1 and 1000")
     async with session_factory() as db:
-        await set_local_tenant_context(db, tenant_id)
+        await ensure_tenant_transaction(db, tenant_id)
         now = await database_now(db)
         ids = list(
             await db.scalars(

@@ -579,6 +579,23 @@
   font-size: 9.5px;
 }
 
+.project-document-open {
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.project-document-open:hover:not(:disabled) strong { color: #2563d9; }
+.project-document-open:focus-visible { outline: 3px solid #93b7ff; outline-offset: 4px; }
+.project-document-open:disabled { cursor: default; opacity: .65; }
+.document-workflow-select { display: grid; gap: 8px; margin-top: 18px; font-size: 12px; color: #52647a; }
+.document-workflow-select select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #d0d8e3; border-radius: 7px; font: inherit; background: #fff; }
+.document-file-preview { margin-top: 20px; }
+.document-file-preview iframe { display: block; width: 100%; height: min(420px, 45dvh); border: 1px solid #dfe5ee; border-radius: 8px; background: #f8fafc; }
+
 .project-document-status {
   justify-self: end;
   padding: 4px 7px;

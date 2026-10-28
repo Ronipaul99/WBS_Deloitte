@@ -7,10 +7,11 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  writeFileSync,
 } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const uiDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rootDir = resolve(uiDir, '..');
@@ -283,6 +284,12 @@ try {
   if (!existsSync(statePath)) throw new Error('Full-stack seed did not produce its state manifest.');
   JSON.parse(readFileSync(statePath, 'utf8'));
 
+  // Keep the test dependency cache independent of a running developer Vite server.
+  const testViteConfig = join(runtimeDir, 'vite.config.mts');
+  writeFileSync(testViteConfig,
+    `import config from ${JSON.stringify(pathToFileURL(join(uiDir, 'vite.config.ts')).href)};\n`
+    + `export default { ...config, cacheDir: ${JSON.stringify(join(runtimeDir, 'vite-cache'))} };\n`);
+
   start(
     pythonCommand,
     ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(apiPort)],
@@ -293,6 +300,8 @@ try {
     process.execPath,
     [
       viteEntry,
+      '--config',
+      testViteConfig,
       '--configLoader',
       'runner',
       '--mode',

@@ -28,6 +28,7 @@ import type {
 } from '../services/workflowTypes';
 import './ProjectScreens.css';
 import SavedDocumentWorkflows from '../components/SavedDocumentWorkflows';
+import DocumentActionsDialog from '../components/DocumentActionsDialog';
 
 interface CreateProjectScreenProps {
   tenantId: string;
@@ -47,12 +48,10 @@ interface ProjectWorkspaceScreenProps {
   project: ProjectResponse;
   canCreateWbs: boolean;
   canDeleteDocument: boolean;
-  hasActiveIngestion?: boolean;
   onBack: () => void;
   onCreateWbs: () => void;
-  onResumeIngestion?: () => void;
   onOpenWbs: (versionId: string) => void;
-  onResumeWorkflow?: (workflowId: string) => void;
+  onResumeWorkflow?: (workflowId: string, signal?: AbortSignal) => Promise<boolean>;
 }
 
 function countWbsItems(nodes: Array<Record<string, unknown>>): number {
@@ -298,11 +297,9 @@ export function ProjectWorkspaceScreen({
   project,
   canCreateWbs,
   canDeleteDocument,
-  hasActiveIngestion = false,
   onResumeWorkflow,
   onBack,
   onCreateWbs,
-  onResumeIngestion,
   onOpenWbs,
 }: ProjectWorkspaceScreenProps) {
   const [versions, setVersions] = useState<WbsVersionResponse[]>([]);
@@ -318,6 +315,7 @@ export function ProjectWorkspaceScreen({
     Record<string, DocumentDeletionStatusResponse>
   >({});
   const [reloadKey, setReloadKey] = useState(0);
+  const [selectedDocument, setSelectedDocument] = useState<DocumentResponse | null>(null);
   const initials = useMemo(
     () => project.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'P',
     [project.name],
@@ -448,7 +446,6 @@ export function ProjectWorkspaceScreen({
       </header>
 
       <section className="project-workspace-summary" aria-label="Project details">
-        {onResumeWorkflow && <SavedDocumentWorkflows tenantId={tenantId} projectId={project.id} onContinue={onResumeWorkflow} />}
         <div>
           <CalendarDays size={17} aria-hidden="true" />
           <span><small>Created</small><strong>{formatDate(project.created_at)}</strong></span>
@@ -468,6 +465,8 @@ export function ProjectWorkspaceScreen({
           </span>
         </div>
       </section>
+
+      {onResumeWorkflow && <SavedDocumentWorkflows tenantId={tenantId} projectId={project.id} onContinue={onResumeWorkflow} />}
 
       <section className="project-document-history" aria-labelledby="project-documents-title">
         <div className="project-document-heading">
@@ -503,13 +502,16 @@ export function ProjectWorkspaceScreen({
               return (
                 <div className="project-document-row" key={document.id}>
                   <span className="project-document-icon"><FileText size={16} aria-hidden="true" /></span>
-                  <span className="project-document-copy">
+                  <button type="button" className="project-document-copy project-document-open"
+                    aria-label={`Open document ${document.file_name}`}
+                    disabled={document.lifecycle_status !== 'ACTIVE'}
+                    onClick={() => setSelectedDocument(document)}>
                     <strong title={document.file_name}>{document.file_name}</strong>
                     <small>
                       {Math.max(1, Math.ceil(document.size_bytes / 1024)).toLocaleString()} KB
                       {' · '}Uploaded {formatDate(document.created_at)}
                     </small>
-                  </span>
+                  </button>
                   <span
                     className={`project-document-status${deletionFailed ? ' is-failed' : ''}`}
                     role={isDeleting ? 'status' : undefined}
@@ -570,11 +572,7 @@ export function ProjectWorkspaceScreen({
             <h2 id="project-wbs-title">Work breakdown structures</h2>
             <p>Review every generated version or start a new WBS from another project scope document.</p>
           </div>
-          {hasActiveIngestion && onResumeIngestion ? (
-            <button type="button" className="project-primary-button" onClick={onResumeIngestion}>
-              <RefreshCw size={16} aria-hidden="true" /> Resume document processing
-            </button>
-          ) : canCreateWbs && (
+          {canCreateWbs && (
             <button type="button" className="project-primary-button" onClick={onCreateWbs}>
               <Plus size={16} aria-hidden="true" /> Create new WBS
             </button>
@@ -631,6 +629,8 @@ export function ProjectWorkspaceScreen({
           </div>
         )}
       </section>
+      {selectedDocument && <DocumentActionsDialog key={selectedDocument.id} tenantId={tenantId}
+        document={selectedDocument} onClose={() => setSelectedDocument(null)} onResume={onResumeWorkflow} />}
     </div>
   );
 }

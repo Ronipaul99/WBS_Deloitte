@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.permissions import Permission
-from app.db.session import set_local_tenant_context
+from app.db.session import ensure_tenant_transaction
 from app.models.document_workflows import DocumentWorkflow
 from app.models.domain import (
     Document,
@@ -67,7 +67,7 @@ async def scoped_document(
     lock: bool = False,
     read_lock: bool = False,
 ) -> Document:
-    await set_local_tenant_context(db, tenant_id)
+    await ensure_tenant_transaction(db, tenant_id)
     query = select(Document).where(Document.id == document_id, Document.tenant_id == tenant_id)
     if lock or read_lock:
         query = query.with_for_update(read=read_lock)
@@ -129,7 +129,7 @@ async def ensure_workflow(db: AsyncSession, document: Document) -> DocumentWorkf
 async def load_workflow(
     db: AsyncSession, tenant_id: UUID, workflow_id: UUID, *, lock: bool = False
 ) -> tuple[DocumentWorkflow, Document]:
-    await set_local_tenant_context(db, tenant_id)
+    await ensure_tenant_transaction(db, tenant_id)
     workflow = await db.scalar(
         select(DocumentWorkflow).where(
             DocumentWorkflow.id == workflow_id,

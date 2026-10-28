@@ -18,6 +18,7 @@ import { ApiError } from '../services/apiClient';
 import type { ProjectResponse, WorkflowCandidate, WorkflowSession } from '../services/workflowTypes';
 import { useAuth } from '../auth/authContext';
 import { PERMISSIONS } from '../auth/permissions';
+import DuplicateDocumentDialog from '../components/DuplicateDocumentDialog';
 import './CreateWbsScreen.css';
 
 interface CreateWbsScreenProps {
@@ -88,6 +89,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
   const [fingerprintFallback, setFingerprintFallback] = useState(false);
 
   const projectInputRef = useRef<HTMLInputElement | null>(null);
+  const processButtonRef = useRef<HTMLButtonElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
   const requestKeyRef = useRef(createWorkflowRequestKey());
@@ -259,7 +261,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
         </p>
       </header>
 
-      {submissionError && (
+      {submissionError && candidates.length === 0 && (
         <div className="wbs-error-banner">
           <ShieldAlert size={18} />
           <span>{submissionError}</span>
@@ -269,25 +271,11 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
       {fingerprintFallback && <p role="status">Browser fingerprinting is unavailable. The server will check the uploaded content before saving it.</p>}
       {checkingContent && <p role="status">Checking existing documents…</p>}
       {candidates.length > 0 && (
-        <section className="app-missing-job-card" aria-labelledby="duplicate-document-heading">
-          <h2 id="duplicate-document-heading">This document already exists. Continue previous work?</h2>
-          <p>The existing document and saved work will be reused.</p>
-          {templateFile && <p>Continuing keeps the saved template. Choose a new generation to use your selected template.</p>}
-          {candidates.map((candidate) => (
-            <div key={candidate.workflow_id ?? candidate.document_id} className="wbs-proc-file-card">
-              <p><strong>{candidate.file_name}</strong> · {candidate.project_name} · {candidate.stage.replaceAll('_', ' ').toLowerCase()}</p>
-              <p>Saved {new Date(candidate.updated_at).toLocaleString()}</p>
-              {candidate.requires_project_switch && <p>Continuing opens the original project.</p>}
-              <button type="button" className="app-missing-job-btn" disabled={isSubmitting || !candidate.workflow_id}
-                onClick={() => void continueExisting(candidate, false)}>Continue previous work</button>
-              {templateFile && can(PERMISSIONS.WBS_GENERATE) && (
-                <button type="button" disabled={isSubmitting || !candidate.workflow_id}
-                  onClick={() => void continueExisting(candidate, true)}>Use selected template for new generation</button>
-              )}
-            </div>
-          ))}
-          <button type="button" disabled={isSubmitting} onClick={() => setCandidates([])}>Cancel</button>
-        </section>
+        <DuplicateDocumentDialog candidates={candidates} busy={isSubmitting} error={submissionError}
+          returnFocusRef={processButtonRef}
+          hasTemplate={Boolean(templateFile)} canUseTemplate={can(PERMISSIONS.WBS_GENERATE)}
+          onContinue={(candidate, useTemplate) => void continueExisting(candidate, useTemplate)}
+          onClose={() => setCandidates([])} />
       )}
 
       {/* Upload Columns */}
@@ -456,6 +444,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
       {/* Primary Action Button */}
       <div className="wbs-action-row">
         <button
+          ref={processButtonRef}
           type="button"
           disabled={!isFormValid || isSubmitting}
           onClick={handleGenerateClick}

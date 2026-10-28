@@ -1,9 +1,15 @@
-import { apiRequest } from './apiClient';
+import { apiDownload, apiRequest } from './apiClient';
 import type {
   DocumentDeletionStatusResponse,
   DocumentResponse,
   JobResponse,
 } from './workflowTypes';
+
+export function readDocumentFile(tenantId: string, document: DocumentResponse, signal?: AbortSignal) {
+  const base = (import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000/api/v1').replace(/\/$/, '');
+  return apiDownload(`${base}/tenants/${tenantId}/documents/${document.id}/file`,
+    ['application/pdf', 'text/plain', 'application/octet-stream'], { signal }, true, document.file_name);
+}
 
 export function uploadProjectDocument(
   tenantId: string,
