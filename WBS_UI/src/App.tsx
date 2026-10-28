@@ -18,16 +18,21 @@ import InvitationAcceptanceScreen from './views/InvitationAcceptanceScreen';
 import SsoCompletionScreen from './views/SsoCompletionScreen';
 import AccountSettingsScreen from './views/AccountSettingsScreen';
 import HomeScreen from './views/HomeScreen';
+import { MyProjectsScreen } from './views/MyProjectsScreen';
+import { ProjectDetailScreen } from './views/ProjectDetailScreen';
+import { SourceEvidenceViewerScreen } from './views/SourceEvidenceViewerScreen';
+import TemplateLibraryScreen from './views/TemplateLibraryScreen';
+import ExportHistoryScreen from './views/ExportHistoryScreen';
 import {
   CreateProjectScreen,
-  ProjectsScreen,
   ProjectWorkspaceScreen,
 } from './views/ProjectScreens';
 import type { AccountSettingsSection } from './views/AccountSettingsScreen';
 import TenantSelectionScreen from './views/TenantSelectionScreen';
 import { acceptTenantInvitation } from './services/memberAdministration';
-import { enterpriseSignInUrl } from './services/apiClient';
+import { enterpriseSignInUrl, apiRequest } from './services/apiClient';
 import { ApiError } from './services/apiClient';
+import { listProjects } from './services/projectsApi';
 import { startGeneration } from './services/generationsApi';
 import { startValidation } from './services/validationsApi';
 import { restoreWorkflow } from './services/workflowApi';
@@ -276,9 +281,10 @@ function WorkspaceApp({
   const directMemberRoute = window.location.pathname === '/settings/members';
   const [activeTab, setActiveTab] = useState<string>(directMemberRoute ? 'settings' : 'home');
   const [projectScreen, setProjectScreen] = useState<
-    'list' | 'create' | 'workspace' | 'wbs' | 'result'
+    'list' | 'create' | 'workspace' | 'wbs' | 'result' | 'detail' | 'source-evidence'
   >('list');
   const [selectedProject, setSelectedProject] = useState<ProjectResponse | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null);
   const [selectedWbsVersionId, setSelectedWbsVersionId] = useState<string | null>(null);
   const [currentScreen, setCurrentScreen] = useState<ScreenType>('create');
   const [workflow, setWorkflow] = useState<WorkflowSession | null>(null);
@@ -362,12 +368,37 @@ function WorkspaceApp({
       setIsRestoringWorkflow(true);
       setRestoreAttempt((value) => value + 1);
     } else {
-      setProjectScreen('workspace');
+      setProjectScreen('detail');
+    }
+  };
+
+  const handleSubNavigation = (view: string, meta?: { projectId?: string; documentId?: string }) => {
+    if (view === 'my-projects') {
+      showProjectList();
+    } else if (view === 'project-detail' && meta?.projectId) {
+      listProjects(activeTenant.id).then((projects) => {
+        const targetProj = projects.find((p: ProjectResponse) => p.id === meta.projectId);
+        if (targetProj) {
+          openProject(targetProj);
+        }
+      });
+    } else if (view === 'create-wbs') {
+      if (selectedProject) {
+        showWbsUpload();
+      } else {
+        showCreateProject();
+      }
+    } else if (view === 'source-evidence') {
+      if (meta?.documentId) setSelectedDocumentId(meta.documentId);
+      setProjectScreen('source-evidence');
     }
   };
 
   const showWbsUpload = () => {
-    if (!selectedProject || !canCreateWbs) return;
+    if (!selectedProject || !canCreateWbs) {
+      showCreateProject();
+      return;
+    }
     const stored = readWorkflowContext(activeTenant.id);
     if (stored?.projectId === selectedProject.id) {
       setProjectScreen('wbs');
@@ -380,15 +411,32 @@ function WorkspaceApp({
     setProjectScreen('wbs');
   };
 
-  const openExistingWbs = (versionId: string) => {
+  const openExistingWbs = async () => {
     if (!selectedProject) return;
     setWorkflow(null);
-    setSelectedWbsVersionId(versionId);
+    
+    let validVersionId = selectedWbsVersionId;
+    if (!validVersionId || !validVersionId.includes('-')) {
+      try {
+        const gens = await apiRequest(`/tenants/${activeTenant.id}/projects/${selectedProject.id}/generations`).catch(() => []);
+        const gensArray = Array.isArray(gens) ? gens : ((gens as { items?: Array<{ id: string }> })?.items || []);
+        if (gensArray.length > 0 && gensArray[0]) {
+          validVersionId = gensArray[0].id;
+        }
+      } catch (err) {
+        console.error('Failed to fetch valid WBS version ID:', err);
+      }
+    }
+
+    if (!validVersionId || !validVersionId.includes('-')) {
+      validVersionId = '00000000-0000-0000-0000-000000000000';
+    }
+
+    setSelectedWbsVersionId(validVersionId);
     setTargetResultTab('structure');
     setProjectScreen('result');
   };
 
-  // 1. Step 1 (Upload) -> Step 2 (Document Processing Stepper)
   const handleWorkflowStarted = (session: WorkflowSession) => {
     saveWorkflowContext(activeTenant.id, session);
     setSelectedProject(session.project);
@@ -396,13 +444,11 @@ function WorkspaceApp({
     setCurrentScreen('doc_processing');
   };
 
-  // 3. Step 3 (Review Summary) -> Step 4 (Decomposition Pipeline Analysis)
   const handleProceedToAnalyze = (generationJobId: string, summaryId: string) => {
     setWorkflow((current) => current ? { ...current, generationJobId, summaryId } : current);
     setCurrentScreen('analyzing');
   };
 
-  // 4. Step 4 (Pipeline Analysis Complete) -> Step 5 (WBS Result Screen)
   const handleAnalysisComplete = (wbsVersionId: string) => {
     setWorkflow((current) => current ? { ...current, wbsVersionId } : current);
     setTargetResultTab('structure');
@@ -416,12 +462,12 @@ function WorkspaceApp({
 
   const handleBackToProject = () => {
     resetWbsFlow();
-    setProjectScreen(selectedProject ? 'workspace' : 'list');
+    setProjectScreen(selectedProject ? 'detail' : 'list');
   };
 
   const handleLeaveProcessing = (completed: boolean) => {
     resetWbsFlow(completed);
-    setProjectScreen(selectedProject ? 'workspace' : 'list');
+    setProjectScreen(selectedProject ? 'detail' : 'list');
   };
 
   const handleResumeIngestion = () => {
@@ -601,6 +647,27 @@ function WorkspaceApp({
       );
     }
 
+    if (activeTab === 'templates') {
+      return (
+        <TemplateLibraryScreen
+          tenantId={activeTenant.id}
+          onUseTemplate={(template) => {
+            console.log('Use template:', template);
+          }}
+          onNavigateToUpload={showCreateProject}
+        />
+      );
+    }
+
+    if (activeTab === 'exports') {
+      return (
+        <ExportHistoryScreen
+          tenantId={activeTenant.id}
+          onBackToProjects={showProjectList}
+        />
+      );
+    }
+
     if (activeTab === 'projects') {
       if (projectScreen === 'create') {
         return (
@@ -608,6 +675,42 @@ function WorkspaceApp({
             tenantId={activeTenant.id}
             onCreated={openProject}
             onCancel={showProjectList}
+          />
+        );
+      }
+
+      if (projectScreen === 'detail' && selectedProject) {
+        return (
+          <ProjectDetailScreen
+            tenantId={activeTenant.id}
+            projectId={selectedProject.id}
+            onBackToProjects={showProjectList}
+            onOpenWbsView={(pId) => {
+              listProjects(activeTenant.id).then((projects) => {
+                const targetProj = projects.find((p: ProjectResponse) => p.id === pId);
+                if (targetProj) {
+                  setSelectedProject(targetProj);
+                  openExistingWbs();
+                }
+              });
+            }}
+            onOpenEvidenceViewer={(_pId, docId) => {
+              if (docId) setSelectedDocumentId(docId);
+              setProjectScreen('source-evidence');
+            }}
+            onGenerateNewWbs={showWbsUpload}
+          />
+        );
+      }
+
+      if (projectScreen === 'source-evidence' && selectedProject) {
+        return (
+          <SourceEvidenceViewerScreen
+            tenantId={activeTenant.id}
+            projectId={selectedProject.id}
+            documentId={selectedDocumentId || undefined}
+            onBackToProject={() => setProjectScreen('detail')}
+            onOpenWbsView={() => openExistingWbs()}
           />
         );
       }
@@ -623,7 +726,7 @@ function WorkspaceApp({
             onBack={showProjectList}
             onCreateWbs={showWbsUpload}
             onResumeIngestion={handleResumeIngestion}
-            onOpenWbs={openExistingWbs}
+            onOpenWbs={() => openExistingWbs()}
           />
         );
       }
@@ -643,11 +746,9 @@ function WorkspaceApp({
 
       if (projectScreen === 'list') {
         return (
-          <ProjectsScreen
+          <MyProjectsScreen
             tenantId={activeTenant.id}
-            canCreateProject={canCreateProject}
-            onCreateProject={showCreateProject}
-            onOpenProject={openProject}
+            onNavigate={handleSubNavigation}
           />
         );
       }
@@ -737,16 +838,9 @@ function WorkspaceApp({
       );
     }
 
-    const placeholderTitles: Record<string, string> = {
-      templates: 'Templates',
-      exports: 'Exports',
-    };
-
     return (
       <div className="app-placeholder-box">
-        <h2 className="app-placeholder-title">
-          {placeholderTitles[activeTab] || 'Section Under Development'}
-        </h2>
+        <h2 className="app-placeholder-title">Section Under Development</h2>
         <p className="app-placeholder-desc">
           This section is currently being configured and will be available soon.
         </p>
@@ -761,7 +855,7 @@ function WorkspaceApp({
       can={can}
       currentUser={{
         name: user.display_name,
-        role: `${activeTenant.name} - ${activeTenant.role?.toLowerCase() ?? 'member'}`,
+        role: `${activeTenant.name}\n${activeTenant.role?.toLowerCase() ?? 'member'}`,
         initials: user.display_name
           .split(/\s+/)
           .filter(Boolean)

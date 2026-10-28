@@ -1,0 +1,343 @@
+.settings-page-container {
+  padding: 24px 32px 56px;
+  max-width: 1440px;
+  margin: 0 auto;
+  color: #0F172A;
+}
+
+.settings-loading-state {
+  padding: 64px 24px;
+  text-align: center;
+  color: #64748B;
+  font-size: 14px;
+}
+
+.settings-header {
+  margin-bottom: 24px;
+}
+
+.settings-page-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+  color: #0F172A;
+}
+
+.settings-page-subtitle {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+}
+
+.settings-notification-banner {
+  background: #ECFDF5;
+  border: 1px solid #A7F3D0;
+  color: #065F46;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* Card Section Panel */
+.settings-card-panel {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.settings-card-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-card-icon-wrap.blue { background: #EFF6FF; color: #2563EB; }
+.settings-card-icon-wrap.purple { background: #FAF5FF; color: #8B5CF6; }
+.settings-card-icon-wrap.green { background: #ECFDF5; color: #10B981; }
+
+.settings-card-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 2px 0;
+  color: #0F172A;
+}
+
+.settings-card-desc {
+  font-size: 13px;
+  color: #64748B;
+  margin: 0;
+}
+
+/* Form Layout */
+.settings-form-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-form-row.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+.settings-form-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.field-label-row label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.info-tooltip-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.info-tooltip-btn:hover {
+  color: #2563EB;
+}
+
+.tooltip-popover {
+  position: absolute;
+  left: 20px;
+  top: -10px;
+  background: #0F172A;
+  color: #FFFFFF;
+  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  width: 220px;
+  z-index: 50;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.settings-select-input {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1E293B;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.settings-select-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.settings-text-input {
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #1E293B;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.settings-text-input:focus {
+  border-color: #2563EB;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Toggle Switch Widget */
+.toggle-switch-cluster {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+}
+
+.switch-toggle-widget {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch-toggle-widget input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider-round {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #CBD5E1;
+  transition: 0.25s;
+  border-radius: 24px;
+}
+
+.slider-round:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.switch-toggle-widget input:checked + .slider-round {
+  background-color: #2563EB;
+}
+
+.switch-toggle-widget input:checked + .slider-round:before {
+  transform: translateX(20px);
+}
+
+.toggle-sub-label {
+  font-size: 12px;
+  color: #64748B;
+}
+
+/* File Format Tags */
+.format-tags-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-toggle-tag {
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.format-toggle-tag.pdf.selected {
+  background: #FEF2F2;
+  color: #DC2626;
+  border-color: #FECACA;
+}
+
+.format-toggle-tag.docx.selected {
+  background: #EFF6FF;
+  color: #2563EB;
+  border-color: #BFDBFE;
+}
+
+.format-toggle-tag.xlsx.selected {
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
+}
+
+.format-toggle-tag.disabled {
+  background: #F8FAFC;
+  color: #94A3B8;
+  border-color: #E2E8F0;
+  text-decoration: line-through;
+}
+
+.format-summary-sub {
+  font-size: 12px;
+  color: #94A3B8;
+  margin-left: 6px;
+}
+
+/* Bottom Action Row */
+.settings-bottom-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.btn-settings-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  color: #334155;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-settings-reset:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+}
+
+.btn-settings-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #2563EB;
+  border: none;
+  color: #FFFFFF;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn-settings-save:hover {
+  background: #1D4ED8;
+}
+
+.btn-settings-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

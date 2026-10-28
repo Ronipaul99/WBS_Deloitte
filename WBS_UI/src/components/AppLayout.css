@@ -162,6 +162,7 @@
   font-size: 10.5px;
   color: #64748b;
   margin: 0;
+  white-space: pre-line;
 }
 
 .app-profile-item-btn {
@@ -260,21 +261,26 @@
   color: #1e293b;
 }
 
+/* Expanded Main Content Area */
 .app-main-content {
   flex: 1;
-  padding: 24px clamp(16px, 3vw, 36px);
+  padding: 24px 28px;
   overflow-y: auto;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   box-sizing: border-box;
+  width: calc(100% - 210px);
   max-width: 100%;
   overflow-x: hidden;
 }
 
 .app-content-wrapper {
   width: 100%;
-  max-width: 980px;
+  max-width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 /* Mobile & Tablet Responsiveness */
@@ -298,6 +304,11 @@
   .app-nav-button {
     white-space: nowrap !important;
     width: auto !important;
+  }
+
+  .app-main-content {
+    width: 100% !important;
+    padding: 16px;
   }
 }
 
