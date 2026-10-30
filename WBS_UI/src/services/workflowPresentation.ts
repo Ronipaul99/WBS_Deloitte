@@ -11,6 +11,7 @@ import type {
   RequirementRecord,
   ScopeCoverageData,
   SummaryResponse,
+  SummaryCitation,
   SummarySectionItem,
   TemplateResponse,
   ValidationCheckItem,
@@ -251,6 +252,12 @@ function requirementsText(requirements: RequirementRecord[]): string {
     .join('\n');
 }
 
+function summaryTextWithoutCitations(content: string, citations: SummaryCitation[]): string {
+  const numbers = new Set(citations.map((citation) => citation.citation_number));
+  return content.replace(/[ \t]*\[(\d+)\]/g, (marker, number: string) =>
+    numbers.has(Number(number)) ? '' : marker);
+}
+
 export function presentSummary(
   summary: SummaryResponse,
   project: ProjectResponse,
@@ -262,8 +269,12 @@ export function presentSummary(
       confidenceScore: stored.generated_result.data.document_information.extraction_confidence,
       sections: [...stored.generated_result.data.summary_sections].sort((a, b) => a.order - b.order).map((section) => ({
         id: section.id, key: section.key, order: section.order, title: section.title,
-        content: stored.current_sections.find((edit) => edit.id === section.id)?.content ?? section.content,
-        originalContent: section.content, maxLength: section.max_length,
+        content: summaryTextWithoutCitations(
+          stored.current_sections.find((edit) => edit.id === section.id)?.content ?? section.content,
+          section.evidence_citations,
+        ),
+        originalContent: summaryTextWithoutCitations(section.content, section.evidence_citations),
+        maxLength: section.max_length,
         pages: section.source_references.pages.map(String), referencesLabel: section.source_references.label,
         answerStatus: section.answer_status, truncated: section.evidence_context_truncated,
         citations: section.evidence_citations,

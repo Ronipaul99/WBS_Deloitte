@@ -1,7 +1,6 @@
 """Synthetic Step 4; isolated --noconftest plugin only. No live DB or HTTP."""
 
 import copy
-import hashlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -12,10 +11,18 @@ from sqlalchemy import event, select
 from app.core.config import get_settings
 from app.db.session import SessionLocal, engine, ensure_tenant_transaction
 from app.models.document_workflows import DocumentWorkflow
-from app.models.domain import Document, DocumentChunk, DocumentSummary, Job, TenantMembership
+from app.models.domain import (
+    Document,
+    DocumentChunk,
+    DocumentProcessingRun,
+    DocumentSummary,
+    Job,
+    TenantMembership,
+)
 from app.models.external_summary import SummaryApiRequest, SummaryResultImport
 from app.schemas.external_summary_result import KEYS, ExternalSummaryResult
 from app.services import external_summary_import as service
+from app.services.ingestion.chunking import canonical_chunk_sha256
 from tests.test_document_deduplication_api import get_state
 from tests.test_document_deduplication_api import workspace as workspace  # noqa: F401
 from tests.test_external_summary_submission import fake_broker as fake_broker  # noqa: F401
@@ -88,8 +95,36 @@ async def complete(client, workspace, acknowledged):
         chunk = await db.scalar(
             select(DocumentChunk).where(DocumentChunk.document_id == UUID(created["document_id"]))
         )
-        chunk.content, chunk.content_sha256 = TEXT, hashlib.sha256(TEXT.encode()).hexdigest()
-        chunk.page_number, chunk.source_metadata = 1, {"page_numbers": [1]}
+        run = await db.get(DocumentProcessingRun, request.processing_run_id)
+        chunk.content, chunk.block_type, chunk.heading_path = TEXT, "canonical_chunk", ["Scope"]
+        chunk.page_number, chunk.source_metadata = (
+            1,
+            {
+                "schema_version": 1,
+                "page_numbers": [1],
+                "source_references": [
+                    {
+                        "block_ordinal": 0,
+                        "role": "primary",
+                        "page_number": 1,
+                        "sheet_name": None,
+                        "row_start": None,
+                        "row_end": None,
+                        "extraction_method": "native",
+                    }
+                ],
+            },
+        )
+        chunk.content_sha256 = canonical_chunk_sha256(
+            content=TEXT,
+            heading_path=chunk.heading_path,
+            source_references=chunk.source_metadata["source_references"],
+            chunker_version=run.chunker_version,
+            tokenizer_name=run.embedding_model,
+            tokenizer_revision=run.embedding_model_revision,
+            source_content_sha256=run.document_content_sha256,
+            confirmed_format="csv",
+        )
         payload = result_payload(created, request.processing_run_id, chunk.id)
         await db.commit()
     await external_job(
@@ -145,6 +180,63 @@ async def test_valid_import_is_atomic_lossless_unapproved_and_readable(client, w
         ).status_code
         == 409
     )
+
+
+async def test_wrapped_quotes_resolve_to_exact_source_without_changing_provider_result(
+    client, workspace, complete
+):
+    created, request_id, job_id, payload = complete
+    for section in payload["data"]["summary_sections"]:
+        for citation in section["evidence_citations"]:
+            citation["quote"] = citation["quote"].replace("\n", " ")
+    await alter_job(job_id, result_payload=payload)
+    summary_id = await service.process_import(UUID(workspace), request_id)
+    assert summary_id
+    response = client.get(f"/api/v1/tenants/{workspace}/documents/{created['document_id']}/summary")
+    assert response.status_code == 200
+    stored = response.json()["structured_summary"]["generated_result"]
+    for section in stored["data"]["summary_sections"]:
+        for citation in section["evidence_citations"]:
+            assert citation["quote"] in TEXT
+            assert "\n" in citation["quote"]
+    async with SessionLocal() as db:
+        assert (await db.get(Job, job_id)).result_payload == payload
+    assert (await read_import(workspace, request_id)).result_digest == service.digest(payload)
+
+
+@pytest.mark.parametrize(
+    "quote", ["capacity is 13 MW.", "CAPACITY IS 12 MW.", "capacity is 12 MW!"]
+)
+def test_quote_resolution_does_not_accept_changed_facts_case_or_punctuation(quote):
+    with pytest.raises(service.ImportFailure, match="SUMMARY_CITATION_QUOTE_INVALID"):
+        service.canonical_quote(TEXT, quote)
+
+
+def test_quote_resolution_rejects_ambiguous_wrapping():
+    with pytest.raises(service.ImportFailure, match="SUMMARY_CITATION_QUOTE_INVALID"):
+        service.canonical_quote("same\nquote then same\tquote", "same quote")
+
+
+@pytest.mark.parametrize("field", ["content", "heading_path", "source_references"])
+async def test_canonical_identity_detects_content_and_provenance_tampering(
+    client, workspace, complete, field
+):
+    created, request_id, _, _ = complete
+    async with SessionLocal() as db:
+        chunk = await db.scalar(
+            select(DocumentChunk).where(DocumentChunk.document_id == UUID(created["document_id"]))
+        )
+        if field == "content":
+            chunk.content += " changed"
+        elif field == "heading_path":
+            chunk.heading_path = ["Changed heading"]
+        else:
+            metadata = copy.deepcopy(chunk.source_metadata)
+            metadata["source_references"][0]["block_ordinal"] = 999
+            chunk.source_metadata = metadata
+        await db.commit()
+    assert await service.process_import(UUID(workspace), request_id) is None
+    assert (await read_import(workspace, request_id)).error_code == "SUMMARY_CANONICAL_HASH_INVALID"
 
 
 async def test_duplicate_import_preserves_later_edits_and_approval(client, workspace, complete):

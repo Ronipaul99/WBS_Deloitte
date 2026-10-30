@@ -3,7 +3,9 @@
 import hashlib
 import json
 import logging
+import re
 from datetime import timedelta
+from pathlib import PurePosixPath
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -14,7 +16,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import get_settings
 from app.db.session import SessionLocal, ensure_tenant_transaction
 from app.models.document_workflows import DocumentWorkflow
-from app.models.domain import DocumentChunk, DocumentSummary, Job, Tenant
+from app.models.domain import (
+    Document,
+    DocumentChunk,
+    DocumentProcessingRun,
+    DocumentSummary,
+    Job,
+    Tenant,
+)
 from app.models.external_summary import (
     SummaryApiRequest,
     SummaryResultImport,
@@ -23,6 +32,8 @@ from app.models.external_summary import (
 from app.schemas.external_summary_result import ExternalSummaryResult, StoredExternalSummary
 from app.services.document_content import database_now, utc
 from app.services.external_summary_tracking import READ_PERMISSIONS, job_scope, read_status
+from app.services.ingestion.chunking import canonical_chunk_sha256
+from app.services.ingestion.types import confirmed_format_from_suffix
 
 logger = logging.getLogger(__name__)
 
@@ -99,11 +110,52 @@ def validate_result(payload, record):
     return result, projection
 
 
+def canonical_quote(content, quote):
+    """Resolve line-wrap/spacing differences to an exact, unambiguous source quote."""
+    if quote in content:
+        return quote
+    words = quote.split()
+    if words:
+        matches = re.finditer(r"\s+".join(re.escape(word) for word in words), content)
+        match = next(matches, None)
+        if match is not None and next(matches, None) is None and len(match.group()) <= 20_000:
+            return match.group()
+    raise ImportFailure("SUMMARY_CITATION_QUOTE_INVALID")
+
+
 async def canonical_digest(db, record, result):
     citations = [c for section in result.data.summary_sections for c in section.evidence_citations]
     ids = {c.chunk_id for c in citations}
     if len(ids) > 64:
         raise ImportFailure("SUMMARY_CANONICAL_CONTEXT_TOO_LARGE")
+    identity = (
+        await db.execute(
+            select(
+                Document.storage_key,
+                DocumentProcessingRun.chunker_version,
+                DocumentProcessingRun.embedding_model,
+                DocumentProcessingRun.embedding_model_revision,
+                DocumentProcessingRun.document_content_sha256,
+            )
+            .join(DocumentProcessingRun, DocumentProcessingRun.document_id == Document.id)
+            .where(
+                Document.id == record.document_id,
+                Document.tenant_id == record.tenant_id,
+                Document.project_id == record.project_id,
+                DocumentProcessingRun.id == record.processing_run_id,
+                DocumentProcessingRun.tenant_id == record.tenant_id,
+                DocumentProcessingRun.project_id == record.project_id,
+            )
+        )
+    ).first()
+    if identity is None:
+        raise ImportFailure("SUMMARY_CANONICAL_METADATA_UNAVAILABLE")
+    try:
+        confirmed_format = confirmed_format_from_suffix(
+            PurePosixPath(identity.storage_key).suffix.casefold()
+        ).value
+    except ValueError:
+        raise ImportFailure("SUMMARY_CANONICAL_METADATA_UNAVAILABLE") from None
     size = byte_size(db, DocumentChunk.content)
     metadata_size = byte_size(db, DocumentChunk.source_metadata)
     rows = list(
@@ -113,6 +165,14 @@ async def canonical_digest(db, record, result):
                     DocumentChunk.id,
                     case((size <= 100_000, DocumentChunk.content), else_=None).label("content"),
                     DocumentChunk.content_sha256,
+                    DocumentChunk.block_type,
+                    case(
+                        (
+                            byte_size(db, DocumentChunk.heading_path) <= 65_536,
+                            DocumentChunk.heading_path,
+                        ),
+                        else_=None,
+                    ).label("headings"),
                     DocumentChunk.page_number,
                     case(
                         (metadata_size <= 65_536, DocumentChunk.source_metadata), else_=None
@@ -134,7 +194,26 @@ async def canonical_digest(db, record, result):
     for row in rows:
         if row.content is None or row.metadata is None or not isinstance(row.metadata, dict):
             raise ImportFailure("SUMMARY_CANONICAL_METADATA_UNAVAILABLE")
-        if hashlib.sha256(row.content.encode("utf-8")).hexdigest() != row.content_sha256:
+        references = row.metadata.get("source_references")
+        if (
+            row.block_type != "canonical_chunk"
+            or row.metadata.get("schema_version") != 1
+            or not isinstance(row.headings, list)
+            or not isinstance(references, list)
+            or not references
+        ):
+            raise ImportFailure("SUMMARY_CANONICAL_METADATA_UNAVAILABLE")
+        expected_hash = canonical_chunk_sha256(
+            content=row.content,
+            heading_path=row.headings,
+            source_references=references,
+            chunker_version=identity.chunker_version,
+            tokenizer_name=identity.embedding_model,
+            tokenizer_revision=identity.embedding_model_revision,
+            source_content_sha256=identity.document_content_sha256,
+            confirmed_format=confirmed_format,
+        )
+        if expected_hash != row.content_sha256:
             raise ImportFailure("SUMMARY_CANONICAL_HASH_INVALID")
         snapshots.append([str(row.id), row.content_sha256, row.page_number, row.metadata])
     for citation in citations:
@@ -152,8 +231,9 @@ async def canonical_digest(db, record, result):
         # Require the entire chunk page set; subsets would assert unavailable precision.
         if set(citation.pages) != set(pages):
             raise ImportFailure("SUMMARY_CITATION_PAGES_UNSUPPORTED")
-        if citation.quote not in row.content:
-            raise ImportFailure("SUMMARY_CITATION_QUOTE_INVALID")
+        # Save exact canonical text in the review representation. The provider's
+        # raw job payload and its result digest remain untouched for provenance.
+        citation.quote = canonical_quote(row.content, citation.quote)
     return digest(sorted(snapshots, key=lambda row: row[0]))
 
 
@@ -351,6 +431,11 @@ async def accept_result(
         summary.structured_summary = StoredExternalSummary(generated_result=result).model_dump(
             mode="json"
         )
+        if (
+            len(encoded(summary.structured_summary))
+            > get_settings().external_summary_max_result_bytes + 600_000
+        ):
+            raise ImportFailure("SUMMARY_RESULT_TOO_LARGE")
         summary.summary_text, summary.key_points, summary.requirements = projection, [], []
         summary.is_approved, summary.approved_at = False, None
         await db.flush()

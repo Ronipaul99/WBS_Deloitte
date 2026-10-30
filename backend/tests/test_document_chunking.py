@@ -35,6 +35,17 @@ def chunker(**overrides: int) -> DocumentChunker:
     return DocumentChunker(tokenizer=CharacterTokenizer(), policy=policy(**overrides))
 
 
+def test_persisted_hash_contract_remains_compatible_with_existing_chunks() -> None:
+    source = extraction_result(
+        ConfirmedDocumentFormat.PDF,
+        [{"text": "Evidence wraps\nacross lines.", "page_number": 1, "heading_path": ("Scope",)}],
+    )
+    result = DocumentChunker(tokenizer=CharacterTokenizer(), policy=ChunkingPolicy()).chunk(source)
+    assert result.chunks[0].chunk_sha256 == (
+        "5ae9b9793fd7bfd825642cb772b7b173bc68240a9bb67ca220a379b352709c87"
+    )
+
+
 def test_small_blocks_group_and_deterministic_output_is_byte_identical() -> None:
     result = extraction_result(
         ConfirmedDocumentFormat.DOCX,

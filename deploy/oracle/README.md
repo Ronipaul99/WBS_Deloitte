@@ -110,6 +110,35 @@ Environment edits require an API restart. If ingestion returns
 `DOCUMENT_INGESTION_UNREADY`, verify that the SSH tunnel is still connected.
 An SSH listener left behind during a disconnect is not proof of Redis readiness.
 
+## External summary configuration
+
+Apply these settings to the API, worker and scheduler deployment environments:
+
+```dotenv
+EXTERNAL_SUMMARY_ENABLED=true
+EXTERNAL_SUMMARY_BASE_URL=https://caring-doormat-pounce.ngrok-free.dev
+EXTERNAL_SUMMARY_API_KEY=
+TASKS_EAGER=false
+```
+
+Set `EXTERNAL_SUMMARY_API_KEY` to the actual service-issued key in protected
+deployment configuration. The application sends it using `X-API-Key`; the external
+service rejects missing or invalid keys. Never commit or print the key.
+The HTTPS origin must match exactly, without a trailing slash. Changing it requires
+updating the fixed-origin transport policy in application code.
+
+Recreate the API, worker and the existing single scheduler after changing their
+environment. Include the active `compose.release.json` overrides in deployment
+commands: their `environment` entries take precedence over values in env files.
+An environment-only update requires container recreation; `docker compose restart`
+retains the old container environment.
+
+The external service must access the same document and shared `jobs` records.
+Beat schedules submission recovery, tracking and result import every 60 seconds
+when enabled. A completed job becomes reviewable only after its seven-section
+result and canonical citations pass validation and the draft is saved. External
+failures do not fall back to the legacy placeholder summary processor.
+
 The transport is encrypted by [OpenSSH port forwarding](https://man.openbsd.org/ssh.1#L).
 The VM uses [Docker loopback bindings](https://docs.docker.com/engine/network/port-publishing/)
 and requires no public Redis/ClamAV firewall openings.

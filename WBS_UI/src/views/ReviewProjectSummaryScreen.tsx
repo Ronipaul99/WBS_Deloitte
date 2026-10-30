@@ -452,15 +452,10 @@ export default function ReviewProjectSummaryScreen({
 
           {structured && <div className="wbs-rev-citations">
             <h3>Original generated evidence</h3>
-            <p>Physical pages describe chunk coverage, not exact quote positions. Citation numbering is local to this section.</p>
-            <p className="wbs-rev-citation-preview">{currentSection.content.split(/(\[\d+\])/g).map((part, index) => {
-              const match = /^\[(\d+)\]$/.exec(part);
-              const citation = match && currentSection.citations?.find((c) => c.citation_number === Number(match[1]));
-              return citation ? <a key={index} href={`#citation-${currentSection.order}-${citation.citation_number}`}>{part}</a> : <span key={index}>{part}</span>;
-            })}</p>
+            <p>Expand a source to review its original quote. Physical pages describe chunk coverage.</p>
             {Array.from(currentSection.content.matchAll(/\[(\d+)\]/g)).some((m) => !currentSection.citations?.some((c) => c.citation_number === Number(m[1]))) && <p role="status">Unresolved citation markers remain plain text; no matching original evidence is recorded.</p>}
             {currentSection.citations?.map((citation) => <details key={citation.citation_number} id={`citation-${currentSection.order}-${citation.citation_number}`}>
-              <summary>Citation [{citation.citation_number}] · Physical pages {citation.pages.join(', ')}</summary>
+              <summary>Source {citation.citation_number} · Physical pages {citation.pages.join(', ')}</summary>
               <blockquote>{citation.quote}</blockquote>
             </details>)}
           </div>}

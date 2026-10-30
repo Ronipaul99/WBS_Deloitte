@@ -35,6 +35,35 @@ _HASH_DOMAIN = "wbs-canonical-chunk-v1"
 _TABLE_TYPES = frozenset({ExtractedBlockType.TABLE_ROW, ExtractedBlockType.WORKSHEET_ROW})
 
 
+def canonical_chunk_sha256(
+    *,
+    content: str,
+    heading_path: list[str],
+    source_references: list[dict[str, object]],
+    chunker_version: str,
+    tokenizer_name: str,
+    tokenizer_revision: str,
+    source_content_sha256: str,
+    confirmed_format: str,
+) -> str:
+    """The persisted chunk identity shared by ingestion and result verification."""
+    payload = {
+        "domain": _HASH_DOMAIN,
+        "chunker_version": chunker_version,
+        "tokenizer_name": tokenizer_name,
+        "tokenizer_revision": tokenizer_revision,
+        "source_content_sha256": source_content_sha256,
+        "confirmed_format": confirmed_format,
+        "content": content,
+        "heading_path": heading_path,
+        "source_references": source_references,
+    }
+    serialized = json.dumps(
+        payload, ensure_ascii=False, allow_nan=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(serialized).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class _NormalizedBlock:
     block: ExtractedBlock
@@ -581,25 +610,16 @@ class DocumentChunker:
         heading_path: tuple[str, ...],
         extraction: ExtractionResult,
     ) -> str:
-        payload = {
-            "domain": _HASH_DOMAIN,
-            "chunker_version": self.version,
-            "tokenizer_name": self._tokenizer.name,
-            "tokenizer_revision": self._tokenizer.revision,
-            "source_content_sha256": extraction.source_content_sha256,
-            "confirmed_format": extraction.confirmed_format.value,
-            "content": content,
-            "heading_path": list(heading_path),
-            "source_references": [reference.to_jsonable() for reference in references],
-        }
-        serialized = json.dumps(
-            payload,
-            ensure_ascii=False,
-            allow_nan=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        return hashlib.sha256(serialized).hexdigest()
+        return canonical_chunk_sha256(
+            content=content,
+            heading_path=list(heading_path),
+            source_references=[reference.to_jsonable() for reference in references],
+            chunker_version=self.version,
+            tokenizer_name=self._tokenizer.name,
+            tokenizer_revision=self._tokenizer.revision,
+            source_content_sha256=extraction.source_content_sha256,
+            confirmed_format=extraction.confirmed_format.value,
+        )
 
     @staticmethod
     def _render(segments: list[_Segment]) -> str:

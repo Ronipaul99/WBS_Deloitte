@@ -69,6 +69,25 @@ If upstream quotes use undocumented normalization or a citation lacks required c
 
 This is structural/canonical provenance validation, not independent semantic entailment, factual verification or approval. No new LLM calls, embedding downloads or private PDF fetches are needed.
 
+Canonical verification uses the ingestion worker's `wbs-canonical-chunk-v1`
+hash contract, including content, heading path, source references, source-file
+digest, format, chunker version and pinned tokenizer identity. The stored
+`document_chunks.content_sha256` is that canonical identity, not a text-only hash.
+Ingestion and import share the implementation without changing existing hashes.
+
+Quote policy: an exact source substring is accepted unchanged. If only whitespace
+differs, resolve the quote only when there is one unambiguous source match and
+save that exact source substring in the application review representation.
+Changes to words, case, punctuation, numbers, pages or document/run scope remain
+validation failures. The original service `jobs.result_payload` is never changed;
+the import's result digest continues to identify that original payload.
+
+An import already marked `INVALID` remains terminal across refreshes. After a
+verified importer correction, an operator may requeue the specific affected import
+only after validating its existing completed result against the corrected policy.
+Normal import then repeats source, authorization, revision, citation and atomicity
+checks. Recovery does not resubmit generation or update the raw service job.
+
 ## 5. Minimal structured review persistence
 
 Inspect current summary storage first. Preserve the one-row-per-document `DocumentSummary`, its legacy columns and existing review semantics.

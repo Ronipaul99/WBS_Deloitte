@@ -96,11 +96,13 @@ test('seven ordered sections, evidence namespaces, truthful confidence and respo
   await expect(page.getByText('85%')).toHaveCount(0);
   await expect(page.getByText('original-scope.csv', { exact: true })).toBeVisible();
   await expect(page.getByText('upstream-name.pdf', { exact: true })).toHaveCount(0);
-  await page.getByText('Citation [1] · Physical pages 1', { exact: true }).click();
+  await expect(page.getByRole('textbox')).not.toHaveValue(/\[1\]/);
+  await page.getByText('Source 1 · Physical pages 1', { exact: true }).click();
   await expect(page.getByText('Canonical quote for Project Overview', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: '[1]', exact: true })).toHaveAttribute('href', '#citation-1-1');
+  await expect(page.getByRole('link', { name: '[1]', exact: true })).toHaveCount(0);
   await nav.nth(1).click();
-  await expect(page.getByRole('link', { name: '[1]', exact: true })).toHaveAttribute('href', '#citation-2-1');
+  await expect(page.getByRole('textbox')).not.toHaveValue(/\[1\]/);
+  await expect(page.getByText('Source 1 · Physical pages 2', { exact: true })).toBeVisible();
   await nav.nth(3).click();
   await expect(page.getByText('Insufficient evidence in generated draft')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Generate WBS', exact: true })).toBeDisabled();
@@ -255,7 +257,7 @@ test('keyboard section and citation controls preserve safe text rendering', asyn
   await page.locator('.wbs-rev-citations summary').focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText('Canonical quote for Project Scope', { exact: true })).toBeVisible();
-  await expect(page.locator('.wbs-rev-citation-preview')).toContainText('<script>text only</script>');
+  await expect(page.getByRole('textbox')).toHaveValue(/<script>text only<\/script>/);
   expect(await page.locator('.wbs-rev-editor-card script').count()).toBe(0);
 });
 
