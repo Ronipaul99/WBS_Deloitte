@@ -6,14 +6,12 @@ import {
   X, 
   ArrowRight, 
   ShieldAlert, 
-  FileSpreadsheet,
   Loader2,
   ArrowLeft,
 } from 'lucide-react';
-import { resumeWorkflow, sessionFromState, startWorkflow } from '../services/workflowApi';
-import { configureWorkflowTemplate, getWorkflow, resolveDocument, workflowCapabilities } from '../services/documentWorkflowsApi';
+import { resumeWorkflow, startWorkflow } from '../services/workflowApi';
+import { resolveDocument, workflowCapabilities } from '../services/documentWorkflowsApi';
 import { createWorkflowRequestKey, documentFingerprint } from '../services/documentFingerprint';
-import { uploadTemplate } from '../services/templatesApi';
 import { ApiError } from '../services/apiClient';
 import type { ProjectResponse, WorkflowCandidate, WorkflowSession } from '../services/workflowTypes';
 import { useAuth } from '../auth/authContext';
@@ -30,7 +28,6 @@ interface CreateWbsScreenProps {
 const MAX_UPLOAD_SIZE_MB = 25;
 
 const ACCEPTED_PROJECT_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.csv'];
-const ACCEPTED_TEMPLATE_EXTENSIONS = ['.xlsx', '.csv', '.xml'];
 
 const UPLOAD_ERROR_MESSAGES: Record<string, string> = {
   UNSUPPORTED_DOCUMENT_FORMAT: 'Document format is not supported.',
@@ -71,16 +68,12 @@ function submissionErrorMessage(error: unknown): string {
 export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: CreateWbsScreenProps) {
   const { activeTenant, can } = useAuth();
   const canUploadProject = can(PERMISSIONS.DOCUMENT_UPLOAD);
-  const canUploadTemplate = can(PERMISSIONS.TEMPLATE_MANAGE);
   const canProcess = canUploadProject && can(PERMISSIONS.DOCUMENT_PROCESS);
   const [projectFile, setProjectFile] = useState<File | null>(null);
-  const [templateFile, setTemplateFile] = useState<File | null>(null);
 
   const [projectFileError, setProjectFileError] = useState<string | null>(null);
-  const [templateFileError, setTemplateFileError] = useState<string | null>(null);
 
   const [isDraggingProject, setIsDraggingProject] = useState<boolean>(false);
-  const [isDraggingTemplate, setIsDraggingTemplate] = useState<boolean>(false);
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -90,7 +83,6 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
 
   const projectInputRef = useRef<HTMLInputElement | null>(null);
   const processButtonRef = useRef<HTMLButtonElement | null>(null);
-  const templateInputRef = useRef<HTMLInputElement | null>(null);
   const requestControllerRef = useRef<AbortController | null>(null);
   const requestKeyRef = useRef(createWorkflowRequestKey());
 
@@ -122,42 +114,24 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
     if (projectInputRef.current) projectInputRef.current.value = '';
   };
 
-  const handleTemplateSelect = (file: File) => {
-    if (isSubmitting) return;
-    const error = validateFile(file, ACCEPTED_TEMPLATE_EXTENSIONS);
-    if (error) {
-      setTemplateFile(null);
-      setTemplateFileError(error);
-    } else {
-      setTemplateFile(file);
-      setTemplateFileError(null);
-    }
-    if (templateInputRef.current) templateInputRef.current.value = '';
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDraggingProject(true);
   };
 
-  const handleDragOver = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (type === 'project') setIsDraggingProject(true);
-    else setIsDraggingTemplate(true);
+    setIsDraggingProject(false);
   };
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    if (type === 'project') setIsDraggingProject(false);
-    else setIsDraggingTemplate(false);
-  };
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>, type: 'project' | 'template') => {
-    e.preventDefault();
-    if (isSubmitting) return;
-    if ((type === 'project' && !canUploadProject) || (type === 'template' && !canUploadTemplate)) return;
-    if (type === 'project') setIsDraggingProject(false);
-    else setIsDraggingTemplate(false);
+    if (isSubmitting || !canUploadProject) return;
+    setIsDraggingProject(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const file = e.dataTransfer.files[0];
-      if (type === 'project') handleProjectSelect(file);
-      else handleTemplateSelect(file);
+      handleProjectSelect(file);
     }
   };
 
@@ -202,7 +176,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
         activeTenant.id,
         project,
         projectFile,
-        templateFile,
+        null,
         controller.signal,
         sha256,
         requestKeyRef.current,
@@ -219,21 +193,14 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
     }
   };
 
-  const continueExisting = async (candidate: WorkflowCandidate, useSelectedTemplate: boolean) => {
+  const continueExisting = async (candidate: WorkflowCandidate) => {
     if (!activeTenant || !candidate.workflow_id || isSubmitting) return;
     const controller = new AbortController();
     requestControllerRef.current = controller;
     setIsSubmitting(true);
     setSubmissionError(null);
     try {
-      if (useSelectedTemplate && templateFile) {
-        const original = await getWorkflow(activeTenant.id, candidate.workflow_id, controller.signal);
-        const template = await uploadTemplate(activeTenant.id, templateFile, controller.signal);
-        const fork = await configureWorkflowTemplate(activeTenant.id, original, template.id, true, controller.signal);
-        onWorkflowStarted?.(await sessionFromState(activeTenant.id, fork, controller.signal));
-      } else {
-        onWorkflowStarted?.(await resumeWorkflow(activeTenant.id, candidate.workflow_id, controller.signal));
-      }
+      onWorkflowStarted?.(await resumeWorkflow(activeTenant.id, candidate.workflow_id, controller.signal));
     } catch (error) {
       if (!controller.signal.aborted) setSubmissionError(submissionErrorMessage(error));
     } finally {
@@ -257,7 +224,7 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           Create Work Breakdown Structure
         </h1>
         <p className="wbs-create-subtitle">
-          Upload the scope document for <strong>{project.name}</strong> so it can be scanned, read, and prepared securely. Add a reference WBS template when a later generation step should follow an existing hierarchy.
+          Upload the scope document for <strong>{project.name}</strong> so it can be scanned, read, and prepared securely.
         </p>
       </header>
 
@@ -273,18 +240,15 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
       {candidates.length > 0 && (
         <DuplicateDocumentDialog candidates={candidates} busy={isSubmitting} error={submissionError}
           returnFocusRef={processButtonRef}
-          hasTemplate={Boolean(templateFile)} canUseTemplate={can(PERMISSIONS.WBS_GENERATE)}
-          onContinue={(candidate, useTemplate) => void continueExisting(candidate, useTemplate)}
+          hasTemplate={false} canUseTemplate={false}
+          onContinue={(candidate) => void continueExisting(candidate)}
           onClose={() => setCandidates([])} />
       )}
 
-      {/* Upload Columns */}
+      {/* Project Scope Upload */}
       <div className="wbs-upload-grid">
-        
-        {/* Step 1: Project Scope */}
         <div className="wbs-upload-card">
           <div className="wbs-step-header">
-            <span className="wbs-step-badge">1</span>
             <h2 className="wbs-step-title">Project Scope Document</h2>
           </div>
           <p className="wbs-step-description">
@@ -292,9 +256,9 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           </p>
 
           <div 
-            onDragOver={(e) => handleDragOver(e, 'project')}
-            onDragLeave={(e) => handleDragLeave(e, 'project')}
-            onDrop={(e) => handleDrop(e, 'project')}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             onClick={() => canUploadProject && !isSubmitting && projectInputRef.current?.click()}
             onKeyDown={(event) => {
               if (
@@ -356,86 +320,6 @@ export default function CreateWbsScreen({ project, onWorkflowStarted, onBack }: 
           {projectFileError && (
             <div className="wbs-field-error">
               <AlertCircle size={15} /> {projectFileError}
-            </div>
-          )}
-        </div>
-
-        {/* Step 2: Reference Template */}
-        <div className="wbs-upload-card">
-          <div className="wbs-step-header">
-            <span className="wbs-step-badge">2</span>
-            <h2 className="wbs-step-title">Reference WBS Template</h2>
-            <span className="wbs-optional-label">Optional</span>
-          </div>
-          <p className="wbs-step-description">
-            Upload your organization or domain baseline WBS hierarchy.
-          </p>
-
-          <div 
-            onDragOver={(e) => handleDragOver(e, 'template')}
-            onDragLeave={(e) => handleDragLeave(e, 'template')}
-            onDrop={(e) => handleDrop(e, 'template')}
-            onClick={() => canUploadTemplate && !isSubmitting && templateInputRef.current?.click()}
-            onKeyDown={(event) => {
-              if (
-                canUploadTemplate
-                && !isSubmitting
-                && (event.key === 'Enter' || event.key === ' ')
-              ) {
-                event.preventDefault();
-                templateInputRef.current?.click();
-              }
-            }}
-            role="button"
-            tabIndex={canUploadTemplate && !isSubmitting ? 0 : -1}
-            aria-label="Upload reference WBS template"
-            aria-disabled={!canUploadTemplate || isSubmitting}
-            className={`wbs-dropzone ${isDraggingTemplate ? 'wbs-dropzone-active' : ''}`}
-          >
-            <FileSpreadsheet size={34} color="#10B981" className="wbs-dropzone-icon" />
-            <p className="wbs-dropzone-label">
-              Click to upload or drag & drop
-            </p>
-            <span className="wbs-dropzone-hint">
-              XLSX, CSV, XML (Primavera P6) up to {MAX_UPLOAD_SIZE_MB}MB
-            </span>
-            <input 
-              ref={templateInputRef} 
-              type="file" 
-              accept={ACCEPTED_TEMPLATE_EXTENSIONS.join(',')} 
-              className="wbs-file-input-hidden"
-              disabled={!canUploadTemplate || isSubmitting}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                if (e.target.files && e.target.files[0]) handleTemplateSelect(e.target.files[0]);
-              }}
-            />
-          </div>
-
-          {templateFile && (
-            <div className="wbs-file-selected">
-              <div className="wbs-file-info">
-                <CheckCircle size={16} color="#16A34A" />
-                <span className="wbs-file-name">{templateFile.name}</span>
-                <span className="wbs-file-size-tag">({formatBytes(templateFile.size)})</span>
-              </div>
-              <button 
-                type="button" 
-                aria-label="Remove template file"
-                disabled={isSubmitting}
-                onClick={() => { 
-                  setTemplateFile(null); 
-                  if (templateInputRef.current) templateInputRef.current.value = ''; 
-                }} 
-                className="wbs-remove-file-btn"
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-
-          {templateFileError && (
-            <div className="wbs-field-error">
-              <AlertCircle size={15} /> {templateFileError}
             </div>
           )}
         </div>

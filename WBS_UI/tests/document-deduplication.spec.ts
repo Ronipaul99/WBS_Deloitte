@@ -39,14 +39,13 @@ test('cross-project continue opens the original project after confirmation', asy
   expect(calls.uploadRequests).toBe(0);
 });
 
-test('cancel performs no upload, including a selected reference template', async ({ page }) => {
+test('cancel performs no upload', async ({ page }) => {
   const { calls, legacy } = await setupDocumentWorkflow(page);
   await page.goto('/');
   await createProjectAndOpenWbs(page);
   await page.locator('input[type="file"]').first().setInputFiles({ name: 'scope.csv', mimeType: 'text/csv', buffer: bytes });
-  await page.locator('input[type="file"]').nth(1).setInputFiles({ name: 'new-template.csv', mimeType: 'text/csv', buffer: bytes });
   await page.getByRole('button', { name: 'Process Document', exact: true }).click();
-  await expect(page.getByText(/Continuing keeps the saved template/)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'This document already exists. Continue previous work?' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Create Work Breakdown Structure' })).toBeVisible();
   expect(calls.uploadRequests).toBe(0);

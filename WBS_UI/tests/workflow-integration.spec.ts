@@ -6,7 +6,7 @@ import {
   type WorkflowMockState,
 } from './workflow-mocks';
 
-async function uploadProject(page: Page, withTemplate = false) {
+async function uploadProject(page: Page) {
   await createProjectAndOpenWbs(page);
   const inputs = page.locator('input[type="file"]');
   await inputs.first().setInputFiles({
@@ -14,13 +14,6 @@ async function uploadProject(page: Page, withTemplate = false) {
     mimeType: 'application/pdf',
     buffer: Buffer.from('project scope'),
   });
-  if (withTemplate) {
-    await inputs.nth(1).setInputFiles({
-      name: 'reference-template.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      buffer: Buffer.from('template'),
-    });
-  }
   await page.getByRole('button', { name: 'Process Document' }).click();
 }
 
@@ -50,12 +43,21 @@ test('stops the required-document workflow at the processed milestone', async ({
   expect(storageKeys.session).toHaveLength(2);
 });
 
-test('uploads the optional template before starting ingestion', async ({ page }) => {
+test('offers only the project scope upload when creating a WBS', async ({ page }) => {
   const state = await setup(page);
-  await uploadProject(page, true);
+  await createProjectAndOpenWbs(page);
+  await expect(page.getByRole('heading', { name: 'Reference WBS Template' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Upload reference WBS template' })).toHaveCount(0);
+  await expect(page.locator('input[type="file"]')).toHaveCount(1);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'project-scope.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('project scope'),
+  });
+  await page.getByRole('button', { name: 'Process Document' }).click();
   await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
 
-  expect(state.templateUploads).toBe(1);
+  expect(state.templateUploads).toBe(0);
   expect(state.ingestionStarts).toBe(1);
   expect(state.summaryStarts).toBe(0);
 });

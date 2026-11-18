@@ -1,15 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
-  CheckCircle2,
   CircleDot,
-  FileSearch,
-  FileUp,
   FolderKanban,
   LoaderCircle,
   RefreshCw,
-  ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 import type { CurrentUser, TenantMembership } from '../auth/authContext';
 import { listProjects } from '../services/projectsApi';
@@ -25,14 +20,6 @@ interface HomeScreenProps {
   onViewProjects: () => void;
 }
 
-const workflowStages = [
-  { label: 'Upload', detail: 'Project document', icon: FileUp },
-  { label: 'Review', detail: 'Scope summary', icon: FileSearch },
-  { label: 'Generate', detail: 'WBS structure', icon: Sparkles },
-  { label: 'Validate', detail: 'Coverage checks', icon: ShieldCheck },
-  { label: 'Export', detail: 'Planner package', icon: CheckCircle2 },
-];
-
 function formatDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Date unavailable';
@@ -41,11 +28,6 @@ function formatDate(value: string): string {
     month: 'short',
     year: 'numeric',
   }).format(date);
-}
-
-function displayRole(role: string | null): string {
-  if (!role) return 'Member';
-  return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
 }
 
 export default function HomeScreen({
@@ -111,24 +93,6 @@ export default function HomeScreen({
           <span className="home-overview-copy">
             <small>Active projects</small>
             <strong>{loading ? '...' : projects.length}</strong>
-          </span>
-        </div>
-        <div className="home-overview-item">
-          <span className="home-overview-icon home-overview-icon-green">
-            <ShieldCheck size={18} aria-hidden="true" />
-          </span>
-          <span className="home-overview-copy">
-            <small>Workspace role</small>
-            <strong>{displayRole(activeTenant.role)}</strong>
-          </span>
-        </div>
-        <div className="home-overview-item">
-          <span className="home-overview-icon home-overview-icon-amber">
-            <Sparkles size={18} aria-hidden="true" />
-          </span>
-          <span className="home-overview-copy">
-            <small>Generation flow</small>
-            <strong>5 stages</strong>
           </span>
         </div>
       </section>
@@ -202,29 +166,6 @@ export default function HomeScreen({
           )}
         </section>
 
-        <section className="home-flow" aria-labelledby="home-flow-title">
-          <div className="home-section-heading">
-            <div>
-              <p className="home-section-kicker">POC workflow</p>
-              <h2 id="home-flow-title">WBS delivery flow</h2>
-            </div>
-          </div>
-          <ol className="home-flow-list">
-            {workflowStages.map((stage, index) => {
-              const Icon = stage.icon;
-              return (
-                <li key={stage.label}>
-                  <span className="home-flow-icon"><Icon size={16} aria-hidden="true" /></span>
-                  <span className="home-flow-copy">
-                    <strong>{stage.label}</strong>
-                    <small>{stage.detail}</small>
-                  </span>
-                  <span className="home-flow-number">{index + 1}</span>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
       </div>
     </div>
   );

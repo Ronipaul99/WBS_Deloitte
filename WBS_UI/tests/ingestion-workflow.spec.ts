@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { ADMIN_PERMISSIONS, mockAuthenticatedUser } from './auth-mocks';
 import { createProjectAndOpenWbs, mockWorkflowApi } from './workflow-mocks';
 
-async function startDocumentProcessing(page: Page, withTemplate = false) {
+async function startDocumentProcessing(page: Page) {
   await createProjectAndOpenWbs(page);
   const inputs = page.locator('input[type="file"]');
   await inputs.first().setInputFiles({
@@ -10,13 +10,6 @@ async function startDocumentProcessing(page: Page, withTemplate = false) {
     mimeType: 'application/pdf',
     buffer: Buffer.from('synthetic project scope'),
   });
-  if (withTemplate) {
-    await inputs.nth(1).setInputFiles({
-      name: 'reference-template.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      buffer: Buffer.from('synthetic template'),
-    });
-  }
   await page.getByRole('button', { name: 'Process Document' }).click();
 }
 
@@ -27,22 +20,20 @@ async function setup(page: Page, options: Parameters<typeof mockWorkflowApi>[1] 
   return state;
 }
 
-test('uploads in order, starts ingestion once, and never starts summary or cancellation', async ({ page }) => {
+test('uploads the scope, starts ingestion once, and never uploads a template or starts summary or cancellation', async ({ page }) => {
   const state = await setup(page);
-  await startDocumentProcessing(page, true);
+  await startDocumentProcessing(page);
 
   await expect(page.getByRole('heading', { name: 'Document processed successfully' })).toBeVisible();
   expect(state.documentUploads).toBe(1);
-  expect(state.templateUploads).toBe(1);
+  expect(state.templateUploads).toBe(0);
   expect(state.ingestionStarts).toBe(1);
   expect(state.summaryStarts).toBe(0);
   expect(state.cancellationRequests).toBe(0);
   const documentIndex = state.requestPaths.findIndex((path) => path.endsWith('/documents'));
-  const templateIndex = state.requestPaths.findIndex((path) => path.endsWith('/templates'));
   const ingestionIndex = state.requestPaths.findIndex((path) => path.endsWith('/ingestions'));
   expect(documentIndex).toBeGreaterThanOrEqual(0);
-  expect(templateIndex).toBeGreaterThan(documentIndex);
-  expect(ingestionIndex).toBeGreaterThan(templateIndex);
+  expect(ingestionIndex).toBeGreaterThan(documentIndex);
 });
 
 test('never moves displayed progress backward when the next stage reports a lower value', async ({ page }) => {
