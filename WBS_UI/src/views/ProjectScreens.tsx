@@ -5,6 +5,7 @@ import {
   CalendarDays,
   FileText,
   FolderKanban,
+  Eye,
   Layers3,
   LoaderCircle,
   Plus,
@@ -512,6 +513,13 @@ export function ProjectWorkspaceScreen({
                       {' · '}Uploaded {formatDate(document.created_at)}
                     </small>
                   </button>
+                  <span className="project-document-preview-action">
+                    <button type="button" className="project-secondary-button" aria-label={`Preview ${document.file_name}`}
+                      disabled={document.lifecycle_status !== 'ACTIVE'}
+                      onClick={() => setSelectedDocument(document)}>
+                      <Eye size={14} aria-hidden="true" /> Preview
+                    </button>
+                  </span>
                   <span
                     className={`project-document-status${deletionFailed ? ' is-failed' : ''}`}
                     role={isDeleting ? 'status' : undefined}
