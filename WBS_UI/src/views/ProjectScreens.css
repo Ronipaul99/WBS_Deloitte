@@ -537,12 +537,14 @@
 .project-document-row {
   min-height: 64px;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) minmax(110px, auto) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto minmax(110px, auto) auto;
   align-items: center;
   gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid #edf0f4;
 }
+.project-document-preview-action { display: flex; justify-content: flex-end; }
+.project-document-preview-action .project-secondary-button { min-height: 30px; padding: 0 9px; font-size: 10px; }
 
 .project-document-row:last-child {
   border-bottom: 0;
@@ -595,6 +597,9 @@
 .document-workflow-select select { width: 100%; min-width: 0; padding: 10px; border: 1px solid #d0d8e3; border-radius: 7px; font: inherit; background: #fff; }
 .document-file-preview { margin-top: 20px; }
 .document-file-preview iframe { display: block; width: 100%; height: min(420px, 45dvh); border: 1px solid #dfe5ee; border-radius: 8px; background: #f8fafc; }
+.document-text-preview { max-height: min(50dvh, 520px); overflow: auto; margin-top: 18px; padding: 14px; border: 1px solid #dfe5ee; border-radius: 8px; background: #fff; color: #344054; font-size: 12px; line-height: 1.6; }
+.document-text-preview p { margin: 0 0 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.document-text-preview button { margin-top: 8px; padding: 0; border: 0; background: transparent; color: #2458b8; font: inherit; cursor: pointer; }
 
 .project-document-status {
   justify-self: end;
@@ -880,9 +885,11 @@
   }
 
   .project-document-row {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto auto;
     gap: 8px;
   }
+
+  .project-document-preview-action { grid-column: 3; grid-row: 1 / span 2; }
 
   .project-document-status {
     grid-column: 2;
@@ -890,7 +897,7 @@
   }
 
   .project-document-actions {
-    grid-column: 3;
+    grid-column: 4;
     grid-row: 1 / span 2;
   }
 

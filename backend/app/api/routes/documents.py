@@ -3,9 +3,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from urllib.parse import quote
 from uuid import UUID
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +26,9 @@ from app.schemas.domain import DocumentDeletionStatusResponse, DocumentResponse,
 from app.services.dispatcher import publish_deletion_dispatch
 from app.services.document_content import upload_or_reuse
 from app.services.document_lifecycle import request_document_deletion
-from app.services.ingestion.errors import DocumentInputError
+from app.services.ingestion.errors import DocumentInputError, ExtractionError
+from app.services.ingestion.registry import get_release_extractor_registry
+from app.services.ingestion.types import ConfirmedDocumentFormat, ExtractionLimits
 from app.services.storage import (
     ObjectStorageUnavailableError,
     UploadObjectStorage,
@@ -305,6 +309,61 @@ async def read_document_file(
     )
 
 
+@router.get("/documents/{document_id}/preview")
+async def preview_document_text(
+    document_id: UUID,
+    context: TenantContext = Depends(require_permission(Permission.DOCUMENT_READ)),
+    db: AsyncSession = Depends(get_db),
+    storage: UploadObjectStorage = Depends(get_upload_storage),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, object]:
+    """Return safely extracted text for Office and CSV previews."""
+    document = await get_tenant_document(db, context.tenant.id, document_id)
+    if document.lifecycle_status != DocumentLifecycleStatus.ACTIVE.value:
+        raise HTTPException(409, detail="This document is no longer available.")
+    suffix = Path(document.file_name).suffix.lower()
+    if suffix not in {".docx", ".xlsx", ".csv"}:
+        raise HTTPException(415, detail="This file type does not use text preview.")
+    try:
+        key = validate_document_storage_key(
+            document.storage_key, tenant_id=context.tenant.id, project_id=document.project_id
+        )
+    except ValueError:
+        raise HTTPException(409, detail="The document file could not be verified.") from None
+    size, digest = document.size_bytes, document.upload_sha256
+    if not 0 < size <= settings.max_upload_bytes:
+        raise HTTPException(413, detail="The document exceeds the file viewing limit.")
+    await db.rollback()
+    root = Path(settings.document_processing_temp_root)
+    workspace = root / str(uuid4())
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        workspace.mkdir()
+        source = workspace / f"input{suffix}"
+        result = await storage.download_to_path(key, source, maximum_bytes=size)
+        if result.byte_count != size or (digest and result.sha256 != digest):
+            raise HTTPException(409, detail="The document file could not be verified.")
+
+        def extract_preview() -> list[dict[str, object]]:
+            format_name = ConfirmedDocumentFormat(suffix[1:])
+            extractor = get_release_extractor_registry(settings).select(format_name)
+            extracted = extractor.extract(source, ExtractionLimits.from_settings(settings))
+            return [{"text": block.text, "type": block.block_type.value,
+                     "sheet": block.sheet_name, "row": block.row_start}
+                    for block in extracted.blocks]
+
+        blocks = await run_in_threadpool(extract_preview)
+        return {"blocks": blocks}
+    except HTTPException:
+        raise
+    except ExtractionError:
+        raise HTTPException(422, detail="The document does not contain previewable content.") from None
+    except (ObjectStorageUnavailableError, DocumentInputError, OSError, ValueError):
+        raise HTTPException(503, detail="The document preview is temporarily unavailable.") from None
+    finally:
+        if workspace.exists():
+            import shutil
+            shutil.rmtree(workspace, ignore_errors=True)
 @router.delete(
     "/documents/{document_id}",
     response_model=JobResponse,

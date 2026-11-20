@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Eye, FileText, LoaderCircle } from 'lucide-react';
 import { documentWorkflows } from '../services/documentWorkflowsApi';
-import { readDocumentFile } from '../services/documentsApi';
+import { previewDocumentText, readDocumentFile } from '../services/documentsApi';
 import type { DocumentResponse, WorkflowState } from '../services/workflowTypes';
 import WorkflowDialog from './WorkflowDialog';
 import WorkflowStatusBadge from './WorkflowStatusBadge';
@@ -22,6 +22,7 @@ export default function DocumentActionsDialog({ tenantId, document, onClose, onR
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<{ url: string; type: string } | null>(null);
+  const [textPreview, setTextPreview] = useState<Array<{ text: string; type: string; sheet: string | null; row: number | null }> | null>(null);
   const controller = useRef<AbortController | null>(null);
   const objectUrl = useRef<string | null>(null);
 
@@ -45,15 +46,21 @@ export default function DocumentActionsDialog({ tenantId, document, onClose, onR
   }, [tenantId, document.id, document.project_id]);
 
   const viewDocument = async () => {
-    if (preview) return;
+    if (preview || textPreview) return;
     setBusy(true);
     setError(null);
     try {
-      const { blob } = await readDocumentFile(tenantId, document, controller.current?.signal);
-      if (controller.current?.signal.aborted) return;
-      const url = URL.createObjectURL(blob);
-      objectUrl.current = url;
-      setPreview({ url, type: blob.type.split(';')[0] });
+      const suffix = document.file_name.split('.').pop()?.toLowerCase();
+      if (suffix === 'pdf') {
+        const { blob } = await readDocumentFile(tenantId, document, controller.current?.signal);
+        if (controller.current?.signal.aborted) return;
+        const url = URL.createObjectURL(blob);
+        objectUrl.current = url;
+        setPreview({ url, type: 'application/pdf' });
+      } else {
+        const result = await previewDocumentText(tenantId, document.id, controller.current?.signal);
+        if (!controller.current?.signal.aborted) setTextPreview(result.blocks);
+      }
     } catch {
       if (!controller.current?.signal.aborted) setError('The document could not be opened. Please try again.');
     } finally {
@@ -81,7 +88,7 @@ export default function DocumentActionsDialog({ tenantId, document, onClose, onR
     icon={<FileText size={25} />} onClose={onClose} busy={busy}
     footer={<>
       <button type="button" className="workflow-button workflow-button-secondary" data-dialog-focus
-        disabled={busy} onClick={() => void viewDocument()}><Eye size={16} /> View document</button>
+        disabled={busy} onClick={() => void viewDocument()}><Eye size={16} /> {preview || textPreview ? 'Preview loaded' : 'View document'}</button>
       <button type="button" className="workflow-button workflow-button-primary"
         disabled={busy || loading || !selected || !onResume} onClick={() => void goToWorkflow()}>
         {busy ? <LoaderCircle size={16} className="workflow-spin" /> : <ArrowRight size={16} />} Go to workflow
@@ -103,10 +110,21 @@ export default function DocumentActionsDialog({ tenantId, document, onClose, onR
             </label>}
     {error && <p role="alert" className="workflow-alert">{error}</p>}
     {preview && <div className="document-file-preview">
-      {['application/pdf', 'text/plain'].includes(preview.type)
-        ? <iframe src={preview.url} title={`Preview of ${document.file_name}`} />
-        : <p className="workflow-notice">This file format opens in its desktop application.</p>}
+      <iframe src={preview.url} title={`Preview of ${document.file_name}`} />
       <a className="workflow-text-button" href={preview.url} download={document.file_name}>Download original file</a>
+    </div>}
+    {textPreview && <div className="document-text-preview" aria-label={`Preview of ${document.file_name}`}>
+      {textPreview.map((block, index) => <p key={`${block.sheet ?? ''}-${block.row ?? ''}-${index}`}>
+        {block.sheet && <strong>{block.sheet}{block.row ? ` · Row ${block.row}` : ''}: </strong>}{block.text}
+      </p>)}
+      {textPreview.length === 0 && <p className="workflow-notice">No readable content was found in this file.</p>}
+      <button type="button" className="workflow-text-button" onClick={() => {
+        void readDocumentFile(tenantId, document, controller.current?.signal).then(({ blob, fileName }) => {
+          const link = URL.createObjectURL(blob);
+          const anchor = window.document.createElement('a');
+          anchor.href = link; anchor.download = fileName; anchor.click(); URL.revokeObjectURL(link);
+        });
+      }}>Download original file</button>
     </div>}
   </WorkflowDialog>;
 }

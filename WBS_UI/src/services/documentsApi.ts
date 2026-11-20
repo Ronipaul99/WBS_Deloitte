@@ -11,6 +11,12 @@ export function readDocumentFile(tenantId: string, document: DocumentResponse, s
     ['application/pdf', 'text/plain', 'application/octet-stream'], { signal }, true, document.file_name);
 }
 
+export function previewDocumentText(tenantId: string, documentId: string, signal?: AbortSignal) {
+  return apiRequest<{ blocks: Array<{ text: string; type: string; sheet: string | null; row: number | null }> }>(
+    `/tenants/${tenantId}/documents/${documentId}/preview`, { signal },
+  );
+}
+
 export function uploadProjectDocument(
   tenantId: string,
   projectId: string,
